@@ -4,6 +4,26 @@
             <h1>管理後台</h1>
 
             <div class="menu-list">
+                <NuxtLink to="/admin/cats" class="menu-item">
+                    <div class="menu-icon">🐱</div>
+                    <div class="menu-content">
+                        <div class="menu-title">貓咪管理</div>
+                        <div class="menu-desc">新增、編輯、排序貓咪資料</div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
+
+                <NuxtLink to="/admin/notices" class="menu-item">
+                    <div class="menu-icon">📋</div>
+                    <div class="menu-content">
+                        <div class="menu-title">特殊事項管理</div>
+                        <div class="menu-desc">
+                            新增、編輯、排序特殊照護事項
+                        </div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
+
                 <NuxtLink to="/admin/vote-options" class="menu-item">
                     <div class="menu-icon">🗳️</div>
                     <div class="menu-content">
@@ -12,18 +32,6 @@
                     </div>
                     <div class="menu-arrow">→</div>
                 </NuxtLink>
-
-                <!-- 之後可以加更多管理頁面 -->
-                <!--
-                <NuxtLink to="/admin/volunteers" class="menu-item">
-                    <div class="menu-icon">👥</div>
-                    <div class="menu-content">
-                        <div class="menu-title">志工管理</div>
-                        <div class="menu-desc">管理志工資料與權限</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-                -->
             </div>
 
             <NuxtLink to="/" class="back-link">← 返回首頁</NuxtLink>

@@ -34,42 +34,7 @@ useHead({
     title: '貓毛輪值線上表單',
 });
 
-const user = useSupabaseUser();
-const supabase = useSupabaseClient();
-const isAdmin = ref(false);
-
-// 取得 user id（相容不同版本）
-const getUserId = () => user.value?.id || user.value?.sub;
-
-async function checkAdmin() {
-    const userId = getUserId();
-    if (!userId) {
-        isAdmin.value = false;
-        return;
-    }
-
-    const { data } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single();
-
-    isAdmin.value = data?.is_admin || false;
-}
-
-onMounted(() => {
-    if (getUserId()) {
-        checkAdmin();
-    }
-});
-
-watch(user, (newUser) => {
-    if (newUser?.id || newUser?.sub) {
-        checkAdmin();
-    } else {
-        isAdmin.value = false;
-    }
-});
+const { isAdmin } = useProfile();
 </script>
 
 <style lang="scss" scoped>

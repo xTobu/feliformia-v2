@@ -4,6 +4,7 @@ export const useProfile = () => {
 
     const nickname = useState('nickname', () => null)
     const profileLoaded = useState('profileLoaded', () => false)
+    const isAdmin = useState('isAdmin', () => false)
 
     // 取得 user id（相容不同版本）
     const getUserId = () => user.value?.id || user.value?.sub
@@ -13,19 +14,23 @@ export const useProfile = () => {
         return nickname.value || user.value?.email || '使用者'
     })
 
-    const loadProfile = async () => {
+    const loadProfile = async (force = false) => {
+        // 如果已載入且非強制，跳過
+        if (profileLoaded.value && !force) return
+
         const userId = getUserId()
         if (!userId) return
 
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('nickname')
+                .select('nickname, is_admin')
                 .eq('id', userId)
                 .single()
 
             if (!error && data) {
                 nickname.value = data.nickname
+                isAdmin.value = data.is_admin || false
             }
         } catch (err) {
             console.warn('loadProfile failed:', err)
@@ -34,12 +39,12 @@ export const useProfile = () => {
         }
     }
 
-    // 自動監聽 user 變化並載入 profile
-    watch(user, async (newUser) => {
-        if (newUser && !profileLoaded.value) {
-            await loadProfile()
-        }
-    }, { immediate: true })
+    // 清除狀態（登出時用）
+    const clearProfile = () => {
+        nickname.value = null
+        isAdmin.value = false
+        profileLoaded.value = false
+    }
 
-    return { nickname, profileLoaded, displayName, loadProfile, getUserId }
+    return { nickname, profileLoaded, isAdmin, displayName, loadProfile, clearProfile, getUserId }
 }

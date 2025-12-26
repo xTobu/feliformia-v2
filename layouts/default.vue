@@ -20,7 +20,7 @@ import Footer from '~/components/Footer.vue';
 
 const user = useSupabaseUser();
 const supabase = useSupabaseClient();
-const { displayName, loadProfile } = useProfile();
+const { displayName, loadProfile, clearProfile } = useProfile();
 
 onMounted(() => {
     if (user.value) {
@@ -35,6 +35,7 @@ watch(user, (newUser) => {
 });
 
 const signOut = async () => {
+    clearProfile();
     await supabase.auth.signOut();
     window.location.href = '/login';
 };
