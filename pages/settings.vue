@@ -62,143 +62,134 @@
 </template>
 
 <script setup>
-    definePageMeta({
-      middleware: 'auth',
-    })
-    
-    useHead({
-      title: '設定',
-    })
-    
-    const supabase = useSupabaseClient()
-    const user = useSupabaseUser()
-    const { loadProfile: reloadProfile } = useProfile()
-    
-    // 取得 user id
-    const getUserId = () => user.value?.id || user.value?.sub
-    
-    // 名稱
-    const nickname = ref('')
-    const saving = ref(false)
-    const profileSuccess = ref(null)
-    const profileError = ref(null)
-    
-    // 密碼
-    const newPassword = ref('')
-    const confirmPassword = ref('')
-    const updatingPassword = ref(false)
-    const passwordSuccess = ref(null)
-    const passwordError = ref(null)
-    
-    const isNicknameValid = computed(() => {
-      if (!nickname.value) return false
-      const trimmed = nickname.value.replace(/[\s\u3000]/g, '')
-      return trimmed.length > 0
-    })
-    
-    const isPasswordValid = computed(() => {
-      return newPassword.value.length >= 6 && newPassword.value === confirmPassword.value
-    })
-    
-    // 用 watch 等待 user 載入
-    watch(user, async (newUser) => {
-      if (newUser) {
-        await loadProfile()
-      }
-    }, { immediate: true })
-    
-    async function loadProfile() {
-      const userId = getUserId()
-      if (!userId) return
-    
-      try {
-        const { data, error } = await supabase
-          .from('profiles')
-          .select('nickname')
-          .eq('id', userId)
-          .single()
-    
-        if (data) {
-          nickname.value = data.nickname || ''
+definePageMeta({
+    middleware: 'auth',
+});
+
+useHead({
+    title: '設定',
+});
+
+const supabase = useSupabaseClient();
+const {
+    nickname: globalNickname,
+    loadProfile: reloadProfile,
+    getUserId,
+} = useProfile();
+
+// 名稱（本地編輯用）
+const nickname = ref('');
+const saving = ref(false);
+const profileSuccess = ref(null);
+const profileError = ref(null);
+
+// 密碼
+const newPassword = ref('');
+const confirmPassword = ref('');
+const updatingPassword = ref(false);
+const passwordSuccess = ref(null);
+const passwordError = ref(null);
+
+const isNicknameValid = computed(() => {
+    if (!nickname.value) return false;
+    const trimmed = nickname.value.replace(/[\s\u3000]/g, '');
+    return trimmed.length > 0;
+});
+
+const isPasswordValid = computed(() => {
+    return (
+        newPassword.value.length >= 6 &&
+        newPassword.value === confirmPassword.value
+    );
+});
+
+// 用全局 nickname 初始化本地值
+watch(
+    globalNickname,
+    (val) => {
+        if (val && !nickname.value) {
+            nickname.value = val;
         }
-      } catch (err) {
-        console.error('載入 profile 失敗:', err)
-      }
+    },
+    { immediate: true }
+);
+
+async function saveProfile() {
+    if (!isNicknameValid.value) {
+        profileError.value = '請輸入名稱';
+        return;
     }
-    
-    async function saveProfile() {
-      if (!isNicknameValid.value) {
-        profileError.value = '請輸入名稱'
-        return
-      }
-    
-      const userId = getUserId()
-      if (!userId) {
-        profileError.value = '請先登入'
-        return
-      }
-    
-      saving.value = true
-      profileSuccess.value = null
-      profileError.value = null
-    
-      try {
-        const cleanNickname = nickname.value.replace(/^[\s\u3000]+|[\s\u3000]+$/g, '')
-    
+
+    const userId = getUserId();
+    if (!userId) {
+        profileError.value = '請先登入';
+        return;
+    }
+
+    saving.value = true;
+    profileSuccess.value = null;
+    profileError.value = null;
+
+    try {
+        const cleanNickname = nickname.value.replace(
+            /^[\s\u3000]+|[\s\u3000]+$/g,
+            ''
+        );
+
         const { error } = await supabase.from('profiles').upsert({
-          id: userId,
-          nickname: cleanNickname,
-          updated_at: new Date().toISOString(),
-        })
-    
+            id: userId,
+            nickname: cleanNickname,
+            updated_at: new Date().toISOString(),
+        });
+
         if (error) {
-          profileError.value = error.message
+            profileError.value = error.message;
         } else {
-          profileSuccess.value = '名稱已儲存！'
-          await reloadProfile()
+            profileSuccess.value = '名稱已儲存！';
+            await reloadProfile(true); // 強制重新載入全局狀態
         }
-      } catch (err) {
-        profileError.value = '儲存失敗，請稍後再試'
-        console.error(err)
-      } finally {
-        saving.value = false
-      }
+    } catch (err) {
+        profileError.value = '儲存失敗，請稍後再試';
+        console.error(err);
+    } finally {
+        saving.value = false;
     }
-    
-    async function updatePassword() {
-      if (!isPasswordValid.value) {
+}
+
+async function updatePassword() {
+    if (!isPasswordValid.value) {
         if (newPassword.value.length < 6) {
-          passwordError.value = '密碼至少需要 6 個字元'
+            passwordError.value = '密碼至少需要 6 個字元';
         } else {
-          passwordError.value = '兩次輸入的密碼不一致'
+            passwordError.value = '兩次輸入的密碼不一致';
         }
-        return
-      }
-    
-      updatingPassword.value = true
-      passwordSuccess.value = null
-      passwordError.value = null
-    
-      try {
-        const { error } = await supabase.auth.updateUser({
-          password: newPassword.value,
-        })
-    
-        if (error) {
-          passwordError.value = error.message
-        } else {
-          passwordSuccess.value = '密碼已更新成功！'
-          newPassword.value = ''
-          confirmPassword.value = ''
-        }
-      } catch (err) {
-        passwordError.value = '更新失敗，請稍後再試'
-        console.error(err)
-      } finally {
-        updatingPassword.value = false
-      }
+        return;
     }
-    </script>
+
+    updatingPassword.value = true;
+    passwordSuccess.value = null;
+    passwordError.value = null;
+
+    try {
+        const { error } = await supabase.auth.updateUser({
+            password: newPassword.value,
+        });
+
+        if (error) {
+            passwordError.value = error.message;
+        } else {
+            passwordSuccess.value = '密碼已更新成功！';
+            newPassword.value = '';
+            confirmPassword.value = '';
+        }
+    } catch (err) {
+        passwordError.value = '更新失敗，請稍後再試';
+        console.error(err);
+    } finally {
+        updatingPassword.value = false;
+    }
+}
+</script>
 
 <style scoped lang="scss">
 .settings-page {

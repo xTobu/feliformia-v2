@@ -334,7 +334,7 @@ const disabledDate = (time) => {
 };
 
 // Methods
-const autoSave = debounce(UpdateRegular, 1000);
+const autoSave = debounce(UpdateRegular, 300);
 
 function onAutoSave() {
     if (formData.value.recordId) {
@@ -455,59 +455,59 @@ async function UpdateRegular() {
 }
 
 function subscribeToRealtime(recordId) {
-    // 先移除舊的 channel
-    if (realtimeChannel.value) {
-        supabase.removeChannel(realtimeChannel.value);
-    }
+  // 先移除舊的 channel
+  if (realtimeChannel.value) {
+    supabase.removeChannel(realtimeChannel.value)
+  }
 
-    realtimeChannel.value = supabase
-        .channel(`regular-${recordId}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'regulars',
-                filter: `id=eq.${recordId}`,
-            },
-            (payload) => {
-                if (payload.new) {
-                    const newData = {
-                        recordId: payload.new.id,
-                        date: new Date(payload.new.date),
-                        shift: payload.new.shift,
-                        cats:
-                            typeof payload.new.cats === 'string'
-                                ? JSON.parse(payload.new.cats)
-                                : payload.new.cats,
-                        note: payload.new.note,
-                        member: payload.new.member,
-                    };
+  realtimeChannel.value = supabase
+    .channel(`regular-${recordId}`)
+    .on(
+      'postgres_changes',
+      {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'regulars',
+        filter: `id=eq.${recordId}`,
+      },
+      (payload) => {
+        console.log('Realtime update:', payload) 
+        if (payload.new) {
+          const newData = {
+            recordId: payload.new.id,
+            date: new Date(payload.new.date),
+            shift: payload.new.shift,
+            cats: typeof payload.new.cats === 'string' 
+              ? JSON.parse(payload.new.cats) 
+              : payload.new.cats,
+            note: payload.new.note,
+            member: payload.new.member,
+          }
 
-                    const oldData = {
-                        recordId: formData.value.recordId,
-                        date: formData.value.date,
-                        shift: formData.value.shift,
-                        cats: formData.value.cats,
-                        note: formData.value.note,
-                        member: formData.value.member,
-                    };
+          const oldData = {
+            recordId: formData.value.recordId,
+            date: formData.value.date,
+            shift: formData.value.shift,
+            cats: formData.value.cats,
+            note: formData.value.note,
+            member: formData.value.member,
+          }
 
-                    if (!isEqual(oldData, newData)) {
-                        formData.value.recordId = newData.recordId;
-                        formData.value.date = newData.date;
-                        formData.value.shift = newData.shift;
-                        formData.value.cats = newData.cats;
-                        formData.value.note = newData.note;
-                        formData.value.member = newData.member;
-                        lastUpdatedAt.value = new Date();
-                    }
-                }
-            }
-        )
-        .subscribe((status) => {
-            //   console.log('Realtime status:', status)  // 加 log 檢查
-        });
+          if (!isEqual(oldData, newData)) {
+            formData.value.recordId = newData.recordId
+            formData.value.date = newData.date
+            formData.value.shift = newData.shift
+            formData.value.cats = newData.cats
+            formData.value.note = newData.note
+            formData.value.member = newData.member
+            lastUpdatedAt.value = new Date()
+          }
+        }
+      }
+    )
+    .subscribe((status) => {
+      console.log('Realtime status:', status)  // 加 log 檢查
+    })
 }
 
 async function Submit() {
@@ -584,6 +584,26 @@ onMounted(async () => {
     }
 });
 
+// 監聽 route 變化，重新載入資料
+watch(
+    () => route.query,
+    async (newQuery, oldQuery) => {
+        // 如果 date 或 shift 變化，重新載入
+        if (newQuery.date !== oldQuery?.date || newQuery.shift !== oldQuery?.shift) {
+            loading.value = true;
+            try {
+                InitDateAndShift();
+                await InitRegular();
+                await InitPrevRegular();
+            } catch (error) {
+                console.error('Reload error:', error);
+            } finally {
+                loading.value = false;
+            }
+        }
+    }
+);
+
 onUnmounted(() => {
     if (realtimeChannel.value) {
         supabase.removeChannel(realtimeChannel.value);
@@ -609,6 +629,15 @@ onUnmounted(() => {
         color: white;
     }
 
+    .el-slider {
+        &.is-disabled {
+            opacity: 0.5;
+            :deep(.el-slider__marks-text) {
+                color: #bbb;
+            }
+        }
+    }
+
     .detail {
         .food {
             .el-slider {
@@ -617,29 +646,59 @@ onUnmounted(() => {
             }
             .el-checkbox {
                 width: 40px;
+                margin-right: 0;
             }
+        }
+    }
+
+    .can {
+        :deep(.el-radio-group) {
+            width: calc(100% - 40px) !important;
         }
     }
 
     .excretion {
         > .d_flex {
             justify-content: start;
+            flex-wrap: nowrap;
         }
         .W40 {
+            display: flex;
+            flex-wrap: nowrap;
             justify-content: start;
             padding-top: 10px;
             width: 80px;
+            .el-checkbox {
+                margin-right: 5px;
+            }
         }
         .W60 {
             padding-top: 10px;
             width: calc(100% - 80px);
-            .el-radio-group {
+            :deep(.el-radio-group) {
+                display: flex;
+                flex-wrap: nowrap;
                 justify-content: start;
                 width: 100%;
-                > label {
-                    width: 45px;
+                label {
+                    margin-right: 10px;
                 }
             }
+        }
+    }
+
+    .shift {
+        margin-bottom: 15px;
+        .el-checkbox {
+            width: 100%;
+            flex-direction: row;
+            align-items: flex-end;
+            display: flex;
+            justify-content: flex-end;
+        }
+        span {
+            padding-left: 10px !important;
+            padding-top: 0 !important;
         }
     }
 }

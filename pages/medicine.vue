@@ -480,6 +480,28 @@ onMounted(async () => {
     }
 });
 
+// 監聽 route 變化，重新載入資料
+watch(
+    () => route.query,
+    async (newQuery, oldQuery) => {
+        if (
+            newQuery.date !== oldQuery?.date ||
+            newQuery.shift !== oldQuery?.shift
+        ) {
+            loading.value = true;
+            try {
+                InitDateAndShift();
+                await InitMedicine();
+                await InitPrevMedicine();
+            } catch (error) {
+                console.error('Reload error:', error);
+            } finally {
+                loading.value = false;
+            }
+        }
+    }
+);
+
 onUnmounted(() => {
     if (realtimeChannel.value) {
         supabase.removeChannel(realtimeChannel.value);
