@@ -24,7 +24,13 @@
             v-model="jumpDate"
             type="date"
             value-format="YYYY-MM-DD"
-            style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;"
+            style="
+                position: absolute;
+                opacity: 0;
+                pointer-events: none;
+                width: 0;
+                height: 0;
+            "
             @change="jumpToDate"
         />
 
@@ -405,16 +411,6 @@
                         </div>
                     </div>
                 </div>
-
-                <!-- 備註 -->
-                <div class="note-section">
-                    <div class="note-label">備註</div>
-                    <textarea
-                        :value="getNoteValue(day.date)"
-                        @blur="setNoteValue(day.date, $event)"
-                        placeholder="請輸入備註"
-                    ></textarea>
-                </div>
             </div>
         </div>
 
@@ -707,18 +703,6 @@ function setTimeSelectValue(date, shift, optionId, type, val) {
 
     myVoteData.value[date][shift][optionId][`time_${type}`] = val;
     // 不要自動儲存，等用戶勾選時再儲存
-}
-
-// 取得備註值
-function getNoteValue(date) {
-    return myVoteData.value[date]?.note || '';
-}
-
-// 設定備註值
-function setNoteValue(date, event) {
-    if (!myVoteData.value[date]) myVoteData.value[date] = {};
-    myVoteData.value[date].note = event.target.value;
-    debouncedSave();
 }
 
 // 儲存投票
@@ -1031,37 +1015,6 @@ onUnmounted(() => {
 
     span {
         color: #999;
-    }
-}
-
-.note-section {
-    display: flex;
-    margin-top: 12px;
-    padding-top: 12px;
-    border-top: 1px solid #eee;
-
-    .note-label {
-        width: 45px;
-        color: #6da2c2;
-        font-size: 14px;
-        font-weight: 500;
-        flex-shrink: 0;
-    }
-
-    textarea {
-        flex: 1;
-        min-height: 60px;
-        padding: 8px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        font-size: 14px;
-        resize: vertical;
-        font-family: inherit;
-
-        &:focus {
-            outline: none;
-            border-color: #6da2c2;
-        }
     }
 }
 
