@@ -1,9 +1,12 @@
 <template>
     <div>
         <div class="user-bar" v-if="user">
-            <span class="user-name">Hi, {{ displayName }}</span>
-            <NuxtLink to="/settings" class="settings-link">設定</NuxtLink>
-            <button class="logout-btn" @click="signOut">登出</button>
+            <NuxtLink to="/" class="site-name">Feliformia</NuxtLink>
+            <div class="user-actions">
+                <span class="user-name">Hi, {{ displayName }}</span>
+                <NuxtLink to="/settings" class="settings-link">設定</NuxtLink>
+                <button class="logout-btn" @click="signOut">登出</button>
+            </div>
         </div>
         <div class="wrapper">
             <slot />
@@ -20,11 +23,15 @@ const supabase = useSupabaseClient();
 const { displayName, loadProfile } = useProfile();
 
 onMounted(() => {
-    if (user.value) loadProfile();
+    if (user.value) {
+        loadProfile();
+    }
 });
 
 watch(user, (newUser) => {
-    if (newUser) loadProfile();
+    if (newUser) {
+        loadProfile();
+    }
 });
 
 const signOut = async () => {
@@ -44,10 +51,23 @@ $brown: #8e8783;
     background: #f5f7f8;
     padding: 8px 16px;
     display: flex;
-    justify-content: flex-end;
+    justify-content: space-between;
     align-items: center;
-    gap: 12px;
     border-bottom: 1px solid #e0e0e0;
+
+    .site-name {
+        font-size: 14px;
+        font-weight: 600;
+        color: $red;
+        text-decoration: none;
+        margin-bottom: 0;
+    }
+
+    .user-actions {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
 
     .user-name {
         font-size: 13px;
@@ -59,6 +79,14 @@ $brown: #8e8783;
         color: $grey;
         text-decoration: underline;
         margin-bottom: 0;
+    }
+
+    .admin-link {
+        font-size: 12px;
+        color: $red;
+        text-decoration: underline;
+        margin-bottom: 0;
+        font-weight: 500;
     }
 
     .logout-btn {

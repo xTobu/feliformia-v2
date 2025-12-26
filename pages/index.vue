@@ -19,6 +19,9 @@
             style="color: #b33a39"
             >貓咪簡介 / 飲食 / 習慣需知</a
         >
+        <NuxtLink v-if="isAdmin" to="/admin" class="admin-link">
+            管理後台
+        </NuxtLink>
     </div>
 </template>
 
@@ -29,6 +32,43 @@ definePageMeta({
 
 useHead({
     title: '貓毛輪值線上表單',
+});
+
+const user = useSupabaseUser();
+const supabase = useSupabaseClient();
+const isAdmin = ref(false);
+
+// 取得 user id（相容不同版本）
+const getUserId = () => user.value?.id || user.value?.sub;
+
+async function checkAdmin() {
+    const userId = getUserId();
+    if (!userId) {
+        isAdmin.value = false;
+        return;
+    }
+
+    const { data } = await supabase
+        .from('profiles')
+        .select('is_admin')
+        .eq('id', userId)
+        .single();
+
+    isAdmin.value = data?.is_admin || false;
+}
+
+onMounted(() => {
+    if (getUserId()) {
+        checkAdmin();
+    }
+});
+
+watch(user, (newUser) => {
+    if (newUser?.id || newUser?.sub) {
+        checkAdmin();
+    } else {
+        isAdmin.value = false;
+    }
 });
 </script>
 
@@ -44,6 +84,12 @@ useHead({
     padding: 20px 20px;
     a {
         display: block;
+    }
+
+    .admin-link {
+        margin-top: 40px;
+        font-size: 13px;
+        color: #657181;
     }
 }
 </style>

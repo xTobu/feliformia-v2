@@ -9,6 +9,7 @@
 |--------|------|-------------|
 | id | UUID | PK, 對應 auth.users |
 | nickname | TEXT | 顯示名稱 |
+| is_admin | BOOLEAN | 是否為管理員，預設 FALSE |
 | created_at | TIMESTAMPTZ | 建立時間 |
 | updated_at | TIMESTAMPTZ | 更新時間 |
 
