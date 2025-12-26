@@ -450,7 +450,6 @@ const voteOptions = ref([]);
 const myVoteData = ref({});
 const allVotes = ref([]);
 const allUsers = ref([]);
-const saveStatus = ref('');
 const currentUserId = ref(null);
 
 // 計算本週範圍文字
@@ -930,7 +929,16 @@ onUnmounted(() => {
 
 .shift-section {
     display: flex;
-    margin-bottom: 12px;
+    padding: 12px 0;
+
+    &:first-child {
+        padding-top: 0;
+    }
+}
+
+// 早班和晚班之間的分隔線
+.shift-section + .shift-section {
+    border-top: 1px solid #eee;
 }
 
 .shift-label {
@@ -939,7 +947,8 @@ onUnmounted(() => {
     font-size: 14px;
     font-weight: 500;
     flex-shrink: 0;
-    padding-top: 2px;
+    display: flex;
+    align-items: center;
 }
 
 .shift-options {
@@ -952,8 +961,6 @@ onUnmounted(() => {
 }
 
 .option-row {
-    margin-bottom: 8px;
-
     &:last-child {
         margin-bottom: 0;
     }
@@ -1057,18 +1064,5 @@ onUnmounted(() => {
         color: #666;
         line-height: 1.5;
     }
-}
-
-.save-status {
-    position: fixed;
-    bottom: 70px;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #333;
-    color: white;
-    padding: 8px 20px;
-    border-radius: 20px;
-    font-size: 14px;
-    z-index: 100;
 }
 </style>
