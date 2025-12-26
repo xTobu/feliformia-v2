@@ -32,6 +32,17 @@
                     </div>
                     <div class="menu-arrow">→</div>
                 </NuxtLink>
+
+                <NuxtLink to="/admin/profiles" class="menu-item">
+                    <div class="menu-icon">👥</div>
+                    <div class="menu-content">
+                        <div class="menu-title">志工一覽</div>
+                        <div class="menu-desc">
+                            查看志工名單、編輯名稱與權限
+                        </div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
             </div>
 
             <NuxtLink to="/" class="back-link">← 返回首頁</NuxtLink>
