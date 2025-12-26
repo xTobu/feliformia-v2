@@ -86,22 +86,30 @@
                 </div>
 
                 <!-- 填表志工 -->
-                <div class="W100">
-                    <el-select
-                        v-model="formData.member"
-                        filterable
-                        :disabled="isDisabled"
-                        placeholder="請選擇填表志工"
-                        class="mb20 W100"
-                        @change="onAutoSave"
-                    >
-                        <el-option
-                            v-for="member in memberList"
-                            :key="member.value"
-                            :label="member.label"
-                            :value="member.value"
-                        />
-                    </el-select>
+                <div class="W100 mb20">
+                    <div class="member-row">
+                        <el-select
+                            v-model="formData.member"
+                            filterable
+                            :disabled="isDisabled"
+                            placeholder="請選擇填表志工"
+                            class="member-select"
+                            @change="onAutoSave"
+                        >
+                            <el-option
+                                v-for="member in memberList"
+                                :key="member.value"
+                                :label="member.label"
+                                :value="member.value"
+                            />
+                        </el-select>
+                        <el-button
+                            :disabled="isDisabled || !nickname"
+                            @click="selectMe"
+                        >
+                            選自己
+                        </el-button>
+                    </div>
                 </div>
 
                 <!-- 按鈕區 -->
@@ -180,6 +188,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
+const { nickname } = useProfile();
 
 // State
 const loading = ref(true);
@@ -255,6 +264,13 @@ const autoSave = debounce(UpdateMedicine, 800);
 function onAutoSave() {
     if (formData.value.recordId) {
         autoSave();
+    }
+}
+
+function selectMe() {
+    if (nickname.value) {
+        formData.value.member = nickname.value;
+        onAutoSave();
     }
 }
 
@@ -520,6 +536,21 @@ onUnmounted(() => {
         margin: 0 0 5px 0;
         color: #ccc;
         font-size: 11px;
+    }
+
+    .member-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+
+        .member-select {
+            flex: 1;
+        }
+
+        .el-button {
+            width: auto !important;
+            flex-shrink: 0;
+        }
     }
 
     .line-green {
