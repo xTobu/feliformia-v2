@@ -22,6 +22,7 @@
                     <li class="red" @click="open('/medicine')">
                         # 餵藥及特殊飲食表
                     </li>
+                    <li class="pink" @click="goto('/vote')"># 值班投票</li>
                     <li @click="open('/weekly')">卯咪飲食週表</li>
                     <li @click="open('/weekly-medicine')">卯咪餵藥週表</li>
                     <li
@@ -148,6 +149,10 @@ async function GetNotice() {
 
         &.red {
             color: #b43a39;
+        }
+
+        &.pink {
+            color: #e8a598;
         }
     }
 }

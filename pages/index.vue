@@ -3,6 +3,7 @@
         <h1 class="f_grey">貓毛輪值線上表單</h1>
         <NuxtLink class="btn" to="/regular">飲食及如廁紀錄</NuxtLink>
         <NuxtLink class="btn" to="/medicine">餵藥及特殊飲食紀錄</NuxtLink>
+        <NuxtLink class="btn" to="/vote">值班投票</NuxtLink>
         <a
             href="/weekly"
             target="_blank"
