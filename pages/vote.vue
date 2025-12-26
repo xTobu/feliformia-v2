@@ -3,10 +3,9 @@
         <!-- 標題 -->
         <div class="vote-header">
             <div class="header-left">
-                <h1>Hi, {{ displayName }}！本週吸貓了嗎？</h1>
                 <p class="week-range">{{ weekRangeText }}</p>
             </div>
-            <el-checkbox v-model="isPass" @change="saveVote">
+            <el-checkbox v-model="isPass" @change="debouncedSave">
                 本週Pass
             </el-checkbox>
         </div>
@@ -423,14 +422,12 @@
                 <div class="status-names">{{ notVotedNames || '無' }}</div>
             </div>
         </div>
-
-        <!-- 儲存狀態 -->
-        <div class="save-status" v-if="saveStatus">{{ saveStatus }}</div>
     </div>
 </template>
 
 <script setup>
 import { debounce } from 'lodash-es';
+import Swal from 'sweetalert2';
 
 definePageMeta({
     middleware: 'auth',
@@ -511,12 +508,14 @@ function prevWeek() {
     const prev = $dayjs(weekStart.value).subtract(7, 'day');
     initWeek(prev);
     loadData();
+    setupRealtimeSubscription();
 }
 
 // 本週
 function thisWeek() {
     initWeek();
     loadData();
+    setupRealtimeSubscription();
 }
 
 // 下一週
@@ -524,6 +523,7 @@ function nextWeek() {
     const next = $dayjs(weekStart.value).add(7, 'day');
     initWeek(next);
     loadData();
+    setupRealtimeSubscription();
 }
 
 // 載入投票選項
@@ -696,46 +696,128 @@ function setNoteValue(date, event) {
 // 儲存投票
 async function saveVote() {
     if (!currentUserId.value) {
-        saveStatus.value = '請先登入';
+        Swal.fire({
+            html: '請先登入',
+            confirmButtonColor: '#b33a39',
+        });
         return;
     }
 
-    saveStatus.value = '儲存中...';
-
     try {
-        const { error } = await supabase.from('votes').upsert(
-            {
-                user_id: currentUserId.value,
-                week_start: weekStart.value,
-                is_pass: isPass.value,
-                data: myVoteData.value,
-                nickname: displayName.value || '未命名',
-                updated_at: new Date().toISOString(),
-            },
-            {
-                onConflict: 'user_id,week_start',
-            }
-        );
+        const voteRecord = {
+            user_id: currentUserId.value,
+            week_start: weekStart.value,
+            is_pass: isPass.value,
+            data: myVoteData.value,
+            nickname: displayName.value || '未命名',
+            updated_at: new Date().toISOString(),
+        };
+
+        const { error } = await supabase.from('votes').upsert(voteRecord, {
+            onConflict: 'user_id,week_start',
+        });
 
         if (error) {
             console.error('Save error:', error);
-            saveStatus.value = '儲存失敗';
+            Swal.fire({
+                html: '投票失敗。<br>請確認網路狀態，或者聯繫群組。',
+                confirmButtonColor: '#b33a39',
+            });
         } else {
-            saveStatus.value = '已儲存';
-            await loadAllVotes();
+            // 更新本地 allVotes 中自己的那筆
+            const index = allVotes.value.findIndex(
+                (v) => v.user_id === currentUserId.value
+            );
+            if (index !== -1) {
+                allVotes.value[index] = {
+                    ...allVotes.value[index],
+                    ...voteRecord,
+                };
+            } else {
+                allVotes.value.push(voteRecord);
+            }
         }
     } catch (err) {
         console.error('Save error:', err);
-        saveStatus.value = '儲存失敗';
+        Swal.fire({
+            html: '儲存失敗。<br>請確認網路狀態後重試。',
+            confirmButtonColor: '#b33a39',
+        });
     }
-
-    setTimeout(() => {
-        saveStatus.value = '';
-    }, 2000);
 }
 
 // 防抖儲存
 const debouncedSave = debounce(saveVote, 800);
+
+// Realtime 訂閱
+let votesChannel = null;
+
+function setupRealtimeSubscription() {
+    // 取消舊的訂閱
+    if (votesChannel) {
+        supabase.removeChannel(votesChannel);
+    }
+
+    // 訂閱 votes 表的變更（只訂閱當前週）
+    votesChannel = supabase
+        .channel(`votes:${weekStart.value}`)
+        .on(
+            'postgres_changes',
+            {
+                event: '*',
+                schema: 'public',
+                table: 'votes',
+                filter: `week_start=eq.${weekStart.value}`,
+            },
+            (payload) => {
+                console.log('Realtime vote update:', payload);
+                handleRealtimeUpdate(payload);
+            }
+        )
+        .subscribe();
+}
+
+function handleRealtimeUpdate(payload) {
+    const { eventType, new: newRecord, old: oldRecord } = payload;
+
+    if (eventType === 'INSERT') {
+        // 新增投票，加入 allVotes
+        // 跳過自己的（自己的已經在本地更新了）
+        if (newRecord.user_id !== currentUserId.value) {
+            allVotes.value.push(newRecord);
+        }
+    } else if (eventType === 'UPDATE') {
+        // 更新投票
+        const index = allVotes.value.findIndex(
+            (v) =>
+                v.user_id === newRecord.user_id &&
+                v.week_start === newRecord.week_start
+        );
+        if (index !== -1) {
+            // 如果是自己的，只更新非本地控制的欄位
+            if (newRecord.user_id === currentUserId.value) {
+                // 自己的投票不需要更新（本地已是最新）
+                return;
+            }
+            allVotes.value[index] = newRecord;
+        } else {
+            // 找不到就加入
+            if (newRecord.user_id !== currentUserId.value) {
+                allVotes.value.push(newRecord);
+            }
+        }
+    } else if (eventType === 'DELETE') {
+        // 刪除投票
+        const index = allVotes.value.findIndex(
+            (v) =>
+                v.user_id === oldRecord.user_id &&
+                v.week_start === oldRecord.week_start
+        );
+        if (index !== -1) {
+            allVotes.value.splice(index, 1);
+        }
+    }
+}
 
 // 初始化
 onMounted(async () => {
@@ -747,6 +829,14 @@ onMounted(async () => {
 
     initWeek();
     await loadData();
+    setupRealtimeSubscription();
+});
+
+// 清理訂閱
+onUnmounted(() => {
+    if (votesChannel) {
+        supabase.removeChannel(votesChannel);
+    }
 });
 </script>
 
@@ -761,7 +851,7 @@ onMounted(async () => {
 .vote-header {
     display: flex;
     justify-content: space-between;
-    align-items: flex-start;
+    align-items: center;
     margin-bottom: 16px;
 
     .header-left {
@@ -878,7 +968,7 @@ onMounted(async () => {
 
 .other-voter {
     padding: 2px 0;
-    font-size: 14px;
+    font-size: 14.25px;
     color: #666;
 
     // junx 先用 margin-left 硬推
