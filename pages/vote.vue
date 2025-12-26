@@ -15,7 +15,18 @@
             <button @click="prevWeek" class="nav-btn">&lt; 上週</button>
             <button @click="thisWeek" class="nav-btn today">本週</button>
             <button @click="nextWeek" class="nav-btn">下週 &gt;</button>
+            <button @click="openDatePicker" class="nav-btn icon-btn">
+                <el-icon><Calendar /></el-icon>
+            </button>
         </div>
+        <el-date-picker
+            ref="datePickerRef"
+            v-model="jumpDate"
+            type="date"
+            value-format="YYYY-MM-DD"
+            style="position: absolute; opacity: 0; pointer-events: none; width: 0; height: 0;"
+            @change="jumpToDate"
+        />
 
         <!-- Loading -->
         <div v-if="loading" class="loading">載入中...</div>
@@ -428,6 +439,7 @@
 <script setup>
 import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
+import { Calendar } from '@element-plus/icons-vue';
 
 definePageMeta({
     middleware: 'auth',
@@ -451,6 +463,8 @@ const myVoteData = ref({});
 const allVotes = ref([]);
 const allUsers = ref([]);
 const currentUserId = ref(null);
+const jumpDate = ref(null);
+const datePickerRef = ref(null);
 
 // 計算本週範圍文字
 const weekRangeText = computed(() => {
@@ -523,6 +537,21 @@ function nextWeek() {
     initWeek(next);
     loadData();
     setupRealtimeSubscription();
+}
+
+// 跳至指定日期
+function jumpToDate(date) {
+    if (date) {
+        initWeek($dayjs(date));
+        loadData();
+        setupRealtimeSubscription();
+        jumpDate.value = null; // 清空選擇器
+    }
+}
+
+// 打開日期選擇器
+function openDatePicker() {
+    datePickerRef.value?.focus();
 }
 
 // 載入投票選項
@@ -871,6 +900,7 @@ onUnmounted(() => {
 .week-nav {
     display: flex;
     justify-content: center;
+    align-items: center;
     gap: 8px;
     margin-bottom: 16px;
 
@@ -893,6 +923,17 @@ onUnmounted(() => {
 
             &:hover {
                 background: #5a8fb0;
+            }
+        }
+
+        &.icon-btn {
+            width: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            .el-icon {
+                font-size: 14px;
             }
         }
     }
