@@ -173,22 +173,30 @@
                 </div>
 
                 <!-- 填表志工 -->
-                <div class="W100">
-                    <el-select
-                        v-model="formData.member"
-                        filterable
-                        :disabled="isDisabled"
-                        placeholder="請選擇填表志工"
-                        class="mb20 W100"
-                        @change="onAutoSave"
-                    >
-                        <el-option
-                            v-for="member in memberList"
-                            :key="member.value"
-                            :label="member.label"
-                            :value="member.value"
-                        />
-                    </el-select>
+                <div class="W100 mb20">
+                    <div class="member-row">
+                        <el-select
+                            v-model="formData.member"
+                            filterable
+                            :disabled="isDisabled"
+                            placeholder="請選擇填表志工"
+                            class="member-select"
+                            @change="onAutoSave"
+                        >
+                            <el-option
+                                v-for="member in memberList"
+                                :key="member.value"
+                                :label="member.label"
+                                :value="member.value"
+                            />
+                        </el-select>
+                        <el-button
+                            :disabled="isDisabled || !nickname"
+                            @click="selectMe"
+                        >
+                            選自己
+                        </el-button>
+                    </div>
                 </div>
 
                 <!-- 按鈕區 -->
@@ -267,6 +275,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
+const { nickname } = useProfile();
 
 // State
 const loading = ref(true);
@@ -339,6 +348,13 @@ const autoSave = debounce(UpdateRegular, 300);
 function onAutoSave() {
     if (formData.value.recordId) {
         autoSave();
+    }
+}
+
+function selectMe() {
+    if (nickname.value) {
+        formData.value.member = nickname.value;
+        onAutoSave();
     }
 }
 
@@ -455,59 +471,60 @@ async function UpdateRegular() {
 }
 
 function subscribeToRealtime(recordId) {
-  // 先移除舊的 channel
-  if (realtimeChannel.value) {
-    supabase.removeChannel(realtimeChannel.value)
-  }
+    // 先移除舊的 channel
+    if (realtimeChannel.value) {
+        supabase.removeChannel(realtimeChannel.value);
+    }
 
-  realtimeChannel.value = supabase
-    .channel(`regular-${recordId}`)
-    .on(
-      'postgres_changes',
-      {
-        event: 'UPDATE',
-        schema: 'public',
-        table: 'regulars',
-        filter: `id=eq.${recordId}`,
-      },
-      (payload) => {
-        console.log('Realtime update:', payload) 
-        if (payload.new) {
-          const newData = {
-            recordId: payload.new.id,
-            date: new Date(payload.new.date),
-            shift: payload.new.shift,
-            cats: typeof payload.new.cats === 'string' 
-              ? JSON.parse(payload.new.cats) 
-              : payload.new.cats,
-            note: payload.new.note,
-            member: payload.new.member,
-          }
+    realtimeChannel.value = supabase
+        .channel(`regular-${recordId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'UPDATE',
+                schema: 'public',
+                table: 'regulars',
+                filter: `id=eq.${recordId}`,
+            },
+            (payload) => {
+                console.log('Realtime update:', payload);
+                if (payload.new) {
+                    const newData = {
+                        recordId: payload.new.id,
+                        date: new Date(payload.new.date),
+                        shift: payload.new.shift,
+                        cats:
+                            typeof payload.new.cats === 'string'
+                                ? JSON.parse(payload.new.cats)
+                                : payload.new.cats,
+                        note: payload.new.note,
+                        member: payload.new.member,
+                    };
 
-          const oldData = {
-            recordId: formData.value.recordId,
-            date: formData.value.date,
-            shift: formData.value.shift,
-            cats: formData.value.cats,
-            note: formData.value.note,
-            member: formData.value.member,
-          }
+                    const oldData = {
+                        recordId: formData.value.recordId,
+                        date: formData.value.date,
+                        shift: formData.value.shift,
+                        cats: formData.value.cats,
+                        note: formData.value.note,
+                        member: formData.value.member,
+                    };
 
-          if (!isEqual(oldData, newData)) {
-            formData.value.recordId = newData.recordId
-            formData.value.date = newData.date
-            formData.value.shift = newData.shift
-            formData.value.cats = newData.cats
-            formData.value.note = newData.note
-            formData.value.member = newData.member
-            lastUpdatedAt.value = new Date()
-          }
-        }
-      }
-    )
-    .subscribe((status) => {
-      console.log('Realtime status:', status)  // 加 log 檢查
-    })
+                    if (!isEqual(oldData, newData)) {
+                        formData.value.recordId = newData.recordId;
+                        formData.value.date = newData.date;
+                        formData.value.shift = newData.shift;
+                        formData.value.cats = newData.cats;
+                        formData.value.note = newData.note;
+                        formData.value.member = newData.member;
+                        lastUpdatedAt.value = new Date();
+                    }
+                }
+            }
+        )
+        .subscribe((status) => {
+            console.log('Realtime status:', status); // 加 log 檢查
+        });
 }
 
 async function Submit() {
@@ -589,7 +606,10 @@ watch(
     () => route.query,
     async (newQuery, oldQuery) => {
         // 如果 date 或 shift 變化，重新載入
-        if (newQuery.date !== oldQuery?.date || newQuery.shift !== oldQuery?.shift) {
+        if (
+            newQuery.date !== oldQuery?.date ||
+            newQuery.shift !== oldQuery?.shift
+        ) {
             loading.value = true;
             try {
                 InitDateAndShift();
@@ -622,6 +642,21 @@ onUnmounted(() => {
         margin: 0 0 5px 0;
         color: #ccc;
         font-size: 11px;
+    }
+
+    .member-row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+
+        .member-select {
+            flex: 1;
+        }
+
+        .el-button {
+            width: auto !important;
+            flex-shrink: 0;
+        }
     }
 
     .line-green {
