@@ -130,10 +130,6 @@ async function updatePassword() {
     max-width: 400px;
     width: 100%;
 
-    h1 {
-        margin: 0 0 30px 0;
-        font-size: 24px;
-    }
 }
 
 .form-group {

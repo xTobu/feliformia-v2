@@ -21,31 +21,23 @@
             >
                 <template #item="{ element: cat }">
                     <div class="cat-item">
-                        <div class="cat-left">
-                            <span class="drag-handle">☰</span>
-                            <div class="cat-info">
-                                <div class="cat-name">{{ cat.name }}</div>
-                                <div class="cat-meta">
-                                    <span v-if="cat.room" class="cat-room"
-                                        >📍 {{ cat.room }}</span
-                                    >
-                                    <span v-if="cat.adopted" class="cat-adopted"
-                                        >🏠 已領養</span
-                                    >
+                        <span class="drag-handle">☰</span>
+                        <div class="cat-info">
+                            <div class="cat-name">{{ cat.name }}</div>
+                            <div class="cat-meta">
+                                <div class="cat-status">
+                                    <span v-if="cat.room">📍 {{ cat.room }}</span>
+                                    <span v-if="cat.adopted">🏠 已領養</span>
+                                </div>
+                                <div class="cat-actions">
+                                    <el-button  @click="openDialog(cat)">
+                                        編輯
+                                    </el-button>
+                                    <el-button type="danger" @click="confirmDelete(cat)">
+                                        刪除
+                                    </el-button>
                                 </div>
                             </div>
-                        </div>
-                        <div class="cat-actions">
-                            <el-button size="small" @click="openDialog(cat)">
-                                編輯
-                            </el-button>
-                            <el-button
-                                size="small"
-                                type="danger"
-                                @click="confirmDelete(cat)"
-                            >
-                                刪除
-                            </el-button>
                         </div>
                     </div>
                 </template>
@@ -58,9 +50,9 @@
             <el-dialog
                 v-model="dialogVisible"
                 :title="editingCat ? '編輯貓咪' : '新增貓咪'"
-                width="400px"
+                width="300px"
             >
-                <el-form :model="form" label-width="80px" @submit.prevent>
+                <el-form :model="form" label-width="54px" @submit.prevent>
                     <el-form-item label="名稱">
                         <el-input
                             v-model="form.name"
@@ -251,13 +243,7 @@ onMounted(() => {
 #cats-admin {
     max-width: 600px;
     margin: 0 auto;
-    padding: 16px;
     padding-bottom: 80px;
-
-    h1 {
-        font-size: 18px;
-        margin: 0 0 16px 0;
-    }
 
     :deep(.el-button) {
         width: auto !important;
@@ -281,9 +267,9 @@ onMounted(() => {
 
 .cat-item {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 12px 16px;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 12px 8px;
     background: #fff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
@@ -294,17 +280,13 @@ onMounted(() => {
     }
 }
 
-.cat-left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
 .drag-handle {
     cursor: grab;
     color: #999;
     font-size: 16px;
-    padding: 4px;
+    line-height: 8px;
+    height: 20px;
+    padding: 4px 6px;
     user-select: none;
 
     &:hover {
@@ -318,18 +300,27 @@ onMounted(() => {
 
 .cat-info {
     text-align: left;
+    width: 100%;
+
 }
 
 .cat-name {
     font-weight: 500;
+    font-size: 14px;
 }
 
 .cat-meta {
+    width: 100%;
     display: flex;
-    gap: 12px;
+    justify-content: space-between;
     font-size: 12px;
     color: #888;
-    margin-top: 4px;
+    margin-top: 12px;
+    .cat-status {
+        line-height: 32px;
+        display: flex;
+        gap: 4px;
+    }
 }
 
 .cat-adopted {
@@ -338,7 +329,6 @@ onMounted(() => {
 
 .cat-actions {
     display: flex;
-    gap: 4px;
 }
 
 .empty {
@@ -367,18 +357,19 @@ onMounted(() => {
     background: #e8f4f8;
     border: 1px dashed #6da2c2;
 }
-</style>
 
-<style lang="scss">
-.el-dialog {
+:deep(.el-dialog) {
     .el-dialog__footer {
         display: flex;
         justify-content: flex-end;
-        gap: 8px;
 
         .el-button {
             width: auto !important;
         }
     }
+}
+
+:deep(.el-form-item) {
+    align-items: center;
 }
 </style>

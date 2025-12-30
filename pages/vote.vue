@@ -100,8 +100,7 @@
                                                     option.id,
                                                     'end'
                                                 )
-                                            }}</template
-                                        >
+                                            }}</template>
                                     </el-checkbox>
 
                                     <!-- 只有自己沒投時才顯示時間選擇器 -->
@@ -134,11 +133,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="開始"
-                                            style="width: 100px"
+                                            placeholder="開始時間"
                                         />
                                         <span>→</span>
                                         <el-time-select
@@ -160,11 +159,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="結束"
-                                            style="width: 100px"
+                                            placeholder="結束時間"
                                         />
                                     </div>
                                 </div>
@@ -318,11 +317,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="開始"
-                                            style="width: 100px"
+                                            placeholder="開始時間"
                                         />
                                         <span>→</span>
                                         <el-time-select
@@ -344,11 +343,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="結束"
-                                            style="width: 100px"
+                                            placeholder="結束時間"
                                         />
                                     </div>
                                 </div>
@@ -856,7 +855,6 @@ onUnmounted(() => {
 #vote {
     max-width: 600px;
     margin: 0 auto;
-    padding: 16px;
     padding-bottom: 80px;
 }
 
@@ -867,15 +865,10 @@ onUnmounted(() => {
     margin-bottom: 16px;
 
     .header-left {
-        h1 {
-            font-size: 18px;
-            margin: 0 0 4px 0;
-        }
-
         .week-range {
-            color: #6da2c2;
+            color: #555;
             font-weight: 500;
-            font-size: 15px;
+            font-size: 17px;
             margin: 0;
         }
     }
@@ -940,28 +933,27 @@ onUnmounted(() => {
     background: #fff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    padding: 16px;
     margin-bottom: 16px;
 }
 
 .day-title {
     font-weight: 500;
     font-size: 15px;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
+    padding: 8px;
     border-bottom: 1px solid #eee;
+    background: #f5f7f8;
 }
 
 .shift-section {
     display: flex;
-    padding: 12px 0;
+    padding: 12px 12px 8px;
 
     &:first-child {
         padding-top: 0;
     }
 }
 
-// 早班和晚班之間的分隔線
+/* 早班和晚班之間的分隔線 */
 .shift-section + .shift-section {
     border-top: 1px solid #eee;
 }
@@ -979,7 +971,7 @@ onUnmounted(() => {
 .shift-options {
     flex: 1;
 
-    // 讓勾選後的文字不要變藍色
+    /* 讓勾選後的文字不要變藍色 */
     :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
         color: inherit;
     }
@@ -994,7 +986,6 @@ onUnmounted(() => {
 .option-main {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: 8px;
 }
 
@@ -1002,8 +993,6 @@ onUnmounted(() => {
     padding: 2px 0;
     font-size: 14.25px;
     color: #666;
-
-    // junx 先用 margin-left 硬推
     text-align: left;
     margin-left: 64px;
 }
@@ -1011,10 +1000,20 @@ onUnmounted(() => {
 .time-inputs {
     display: inline-flex;
     align-items: center;
-    gap: 4px;
+    gap: 4px;  
+    width: calc(100% - 60px);
 
     span {
         color: #999;
+    }
+    :deep(.el-select__wrapper) {
+        justify-content: start;
+        font-size: 12px;
+        height: 40px;
+        padding: 0px 6px 0 8px;
+        .el-select__prefix {
+            display: none;
+        }
     }
 }
 
@@ -1058,5 +1057,8 @@ onUnmounted(() => {
         color: #666;
         line-height: 1.5;
     }
+}
+.el-checkbox {
+
 }
 </style>

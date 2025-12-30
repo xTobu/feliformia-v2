@@ -67,11 +67,6 @@ useHead({
     margin: 0 auto;
     padding: 16px;
     padding-bottom: 80px;
-
-    h1 {
-        font-size: 18px;
-        margin: 0 0 20px 0;
-    }
 }
 
 .menu-list {

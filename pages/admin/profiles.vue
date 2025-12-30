@@ -59,7 +59,7 @@
             </div>
 
             <!-- 編輯 Dialog -->
-            <el-dialog v-model="dialogVisible" title="編輯志工" width="400px">
+            <el-dialog v-model="dialogVisible" title="編輯志工" width="300px">
                 <el-form :model="form" label-width="80px" @submit.prevent>
                     <el-form-item label="Email">
                         <el-input :value="form.email" disabled />
@@ -182,13 +182,7 @@ onMounted(() => {
 #profiles-admin {
     max-width: 600px;
     margin: 0 auto;
-    padding: 16px;
     padding-bottom: 80px;
-
-    h1 {
-        font-size: 18px;
-        margin: 0 0 16px 0;
-    }
 
     :deep(.el-button) {
         width: auto !important;
@@ -293,14 +287,11 @@ onMounted(() => {
         color: #b33a39;
     }
 }
-</style>
 
-<style lang="scss">
-.el-dialog {
+:deep(.el-dialog) {
     .el-dialog__footer {
         display: flex;
         justify-content: flex-end;
-        gap: 8px;
 
         .el-button {
             width: auto !important;

@@ -237,14 +237,14 @@
                         {{ loadingNotify ? '通知中...' : 'LINE 手動發送' }}
                     </button>
 
+                    <NuxtLink class="f_red" to="/medicine" target="_blank"
+                        >前往餵藥及特殊飲食須知</NuxtLink
+                    >
                     <NuxtLink class="f_red" :to="prevLink" target="_blank"
                         >看前班紀錄</NuxtLink
                     >
                     <NuxtLink class="f_red" to="/regular" target="_blank"
                         >回到今天</NuxtLink
-                    >
-                    <NuxtLink class="f_red" to="/medicine" target="_blank"
-                        >前往餵藥及特殊飲食須知</NuxtLink
                     >
                 </div>
             </form>
@@ -656,6 +656,7 @@ onUnmounted(() => {
         .el-button {
             width: auto !important;
             flex-shrink: 0;
+            height: 45px;
         }
     }
 
@@ -681,7 +682,7 @@ onUnmounted(() => {
             }
             .el-checkbox {
                 width: 40px;
-                margin-right: 0;
+                margin-top: 4px;
             }
         }
     }
@@ -701,14 +702,12 @@ onUnmounted(() => {
             display: flex;
             flex-wrap: nowrap;
             justify-content: start;
-            padding-top: 10px;
+            padding-top: 12px;
             width: 80px;
-            .el-checkbox {
-                margin-right: 5px;
-            }
+            
         }
         .W60 {
-            padding-top: 10px;
+            padding-left: 24px;
             width: calc(100% - 80px);
             :deep(.el-radio-group) {
                 display: flex;
@@ -736,5 +735,47 @@ onUnmounted(() => {
             padding-top: 0 !important;
         }
     }
+}
+
+:deep(.el-slider__stop) {
+    background-color: var(--el-color-primary);
+}
+
+:deep(.el-slider__marks-text) {
+    color: #657181;
+    font-size: 12px;
+}
+
+:deep(.el-radio__label) {
+    font-weight: 400;
+}
+
+:deep(.el-checkbox), :deep(.el-radio) {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 40px;
+    margin-right: 0;
+    
+    span {
+        padding: 4px 0 0;
+        color: #657181;
+        font-size: 12px;
+        line-height: 14px;
+    }
+    
+    .el-checkbox__input {
+       width: 18px;
+       height: 18px;
+       padding-top: 0;
+    }
+}
+
+:deep(.el-input) {
+     max-width: 100%;
+}
+
+:deep(.el-input__wrapper), :deep(.el-select__wrapper) {
+    height: 45px;
 }
 </style>

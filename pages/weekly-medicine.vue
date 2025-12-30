@@ -24,9 +24,9 @@
             <el-empty v-if="!selectedCat" description="請選擇卯咪" />
 
             <template v-for="data in computedTableData" :key="data.id">
-                <div class="label-tag">{{ data.date }} - {{ data.shift }}</div>
-                <div class="label-tag name" :class="{ empty: !data.member }">
-                    {{ data.member || '無填寫' }}
+                <div class="info-header">
+                    <el-tag type="warning">{{ data.date }}{{ data.shift }}</el-tag>
+                    <el-tag v-if="data.member"> {{ data.member }}</el-tag>  
                 </div>
                 <el-table
                     class="weekly-table"
@@ -176,50 +176,54 @@ onMounted(async () => {
 </script>
 
 <style lang="scss">
-.el-table {
-    &.weekly-table {
-        margin: 0 0 32px 0;
+    .info-header {
+        display: flex;
+        gap: 4px;
+        justify-content: start;
+        align-items: center;
+        margin-bottom: 4px;
     }
-    .weekly-head {
-        height: 36px;
-        background: #a58f86 !important;
-        color: #fff;
-        font-size: 16px;
-        line-height: 16px;
-        font-weight: 400;
-        padding: 4px 0;
-    }
-    .weekly-cell {
-        > .cell {
-            display: flex;
-            justify-content: center;
-            align-items: center;
+    .el-table {
+        &.weekly-table {
+            margin: 0 0 32px 0;
+        }
+        .weekly-head {
+            height: 32px;
+            background: #8e8783 !important;
+            color: #fff;
+            font-size: 16px;
+            line-height: 16px;
+            font-weight: 400;
+            padding: 2px 0;
+        }
+        .weekly-cell {
+            > .cell {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+        }
+        span.warning {
+            color: #b7282e;
         }
     }
-    span.warning {
-        color: #b7282e;
-    }
-}
 
-#medicine {
-    a {
-        display: block;
+    #medicine {
+        a {
+            display: block;
+        }
+        div.label-tag {
+            float: left;
+            font-weight: 500;
+            padding: 4px 6px;
+            font-size: 15px;
+            color: #333;
+            border-radius: 4px;
+    
+        }
     }
-    div.label-tag {
-        float: left;
-        padding: 4px 6px;
+
+    .el-table .cell {
         font-size: 14px;
-        color: #fff;
-        border-radius: 4px;
-        background-color: #b28c6e;
-
-        &.name {
-            margin-left: 1px;
-        }
-
-        &.empty {
-            background-color: #bb5548;
-        }
     }
-}
 </style>
