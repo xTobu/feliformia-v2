@@ -474,6 +474,20 @@ const weekRangeText = computed(() => {
     return `${start.format('YYYY/MM/DD')} - ${end.format('MM/DD')}`;
 });
 
+// 用 user_id 查 nickname 的 Map
+const userMap = computed(() => {
+    const map = new Map();
+    for (const user of allUsers.value) {
+        map.set(user.id, user.nickname || user.email || '未命名');
+    }
+    return map;
+});
+
+// 根據 user_id 取得 nickname
+function getNickname(userId) {
+    return userMap.value.get(userId) || '未命名';
+}
+
 // 檢查 data 中是否有任何 checked 項目
 function hasAnyChecked(data) {
     if (!data) return false;
@@ -493,7 +507,7 @@ function hasAnyChecked(data) {
 const votedNames = computed(() => {
     return allVotes.value
         .filter((v) => v.is_pass || hasAnyChecked(v.data))
-        .map((v) => v.nickname || '未命名')
+        .map((v) => getNickname(v.user_id))
         .join('、');
 });
 
@@ -501,11 +515,11 @@ const votedNames = computed(() => {
 const passNames = computed(() => {
     return allVotes.value
         .filter((v) => v.is_pass)
-        .map((v) => v.nickname || '未命名')
+        .map((v) => getNickname(v.user_id))
         .join('、');
 });
 
-// 未投票名單（沒有任何動作的人）
+// 未投票名單（沒有任何動作的人，只顯示啟用中的用戶）
 const notVotedNames = computed(() => {
     // 取得有投票或 Pass 的 user_id
     const activeUserIds = allVotes.value
@@ -513,8 +527,8 @@ const notVotedNames = computed(() => {
         .map((v) => v.user_id);
 
     return allUsers.value
-        .filter((u) => !activeUserIds.includes(u.id))
-        .map((u) => u.nickname || '未命名')
+        .filter((u) => u.is_active !== false && !activeUserIds.includes(u.id))
+        .map((u) => u.nickname || u.email || '未命名')
         .join('、');
 });
 
@@ -595,7 +609,9 @@ async function loadVoteOptions() {
 
 // 載入所有用戶
 async function loadUsers() {
-    const { data } = await supabase.from('profiles').select('id, nickname');
+    const { data } = await supabase
+        .from('profiles')
+        .select('id, nickname, email, is_active');
 
     if (data) {
         allUsers.value = data;
@@ -648,7 +664,7 @@ function getOtherVoters(date, shift, optionId) {
 
         const voteData = vote.data?.[date]?.[shift]?.[optionId];
         if (voteData?.checked) {
-            const name = vote.nickname || '未命名';
+            const name = getNickname(vote.user_id);
 
             // 如果有時間，加上時間資訊
             if (voteData.time_start && voteData.time_end) {
@@ -680,7 +696,7 @@ function getAllVotersText(date, shift, option) {
 
         const voteData = vote.data?.[date]?.[shift]?.[option.id];
         if (voteData?.checked) {
-            names.push(vote.nickname || '未命名');
+            names.push(getNickname(vote.user_id));
         }
     }
 
@@ -751,7 +767,6 @@ async function saveVote() {
             week_start: weekStart.value,
             is_pass: isPass.value,
             data: myVoteData.value,
-            nickname: displayName.value || '未命名',
             updated_at: new Date().toISOString(),
         };
 
