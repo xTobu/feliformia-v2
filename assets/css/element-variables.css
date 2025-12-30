@@ -13,6 +13,10 @@
   --el-color-primary: #6da2c2;
 }
 
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
 /* Checkbox 尺寸 18px */
 .el-checkbox__inner {
   width: 18px;
