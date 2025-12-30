@@ -88,7 +88,7 @@
                 </div>
 
                 <div class="form-group question">
-                    <label>我們貓屋在哪個縣市？</label>
+                    <label>我們貓屋在哪個行政區？</label>
                     <input
                         v-model="securityAnswer"
                         type="text"
