@@ -64,16 +64,16 @@
             <el-dialog
                 v-model="dialogVisible"
                 :title="editingOption ? '編輯選項' : '新增選項'"
-                width="400px"
+                width="300px"
             >
-                <el-form :model="form" label-width="100px" @submit.prevent>
+                <el-form :model="form" label-width="70px" @submit.prevent>
                     <el-form-item label="選項名稱">
                         <el-input
                             v-model="form.name"
                             placeholder="例如：醫療"
                         />
                     </el-form-item>
-                    <el-form-item label="需填時間">
+                    <el-form-item label="需填時間" style="padding-bottom: 10px; position: relative;">
                         <el-switch v-model="form.has_time_range" />
                         <span class="hint">啟用後，志工需填寫時間區間</span>
                     </el-form-item>
@@ -256,13 +256,7 @@ onMounted(() => {
 #vote-options-admin {
     max-width: 600px;
     margin: 0 auto;
-    padding: 16px;
     padding-bottom: 80px;
-
-    h1 {
-        font-size: 18px;
-        margin: 0 0 16px 0;
-    }
 
     :deep(.el-button) {
         width: auto !important;
@@ -330,6 +324,9 @@ onMounted(() => {
     margin-left: 8px;
     font-size: 12px;
     color: #999;
+    position: absolute;
+    bottom: -24px;
+    left: -8px;
 }
 
 .empty {
@@ -358,14 +355,11 @@ onMounted(() => {
         color: #b33a39;
     }
 }
-</style>
 
-<style lang="scss">
-.el-dialog {
+:deep(.el-dialog) {
     .el-dialog__footer {
         display: flex;
         justify-content: flex-end;
-        gap: 8px;
 
         .el-button {
             width: auto !important;

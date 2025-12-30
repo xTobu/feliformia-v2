@@ -198,10 +198,6 @@ async function updatePassword() {
     padding: 20px;
 }
 
-h1 {
-    margin-bottom: 30px;
-}
-
 .settings-section {
     background: #fff;
     border: 1px solid #e0e0e0;

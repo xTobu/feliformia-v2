@@ -1,5 +1,5 @@
 <template>
-    <footer class="bg_blue f_white f12">Copyright © {{ new Date().getFullYear() }} 吾等與貓毛.</footer>
+    <footer class="f_grey f12">Copyright © {{ new Date().getFullYear() }} 吾等與貓毛.</footer>
 </template>
 
 <style lang="scss" scoped>

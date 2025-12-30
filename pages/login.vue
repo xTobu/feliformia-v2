@@ -336,10 +336,6 @@ const sendReset = async () => {
     max-width: 400px;
     width: 100%;
 
-    h1 {
-        margin: 0 0 8px 0;
-        font-size: 28px;
-    }
     .subtitle {
         color: #657181;
         margin: 0 0 30px 0;
