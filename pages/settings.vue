@@ -136,6 +136,20 @@ async function saveProfile() {
             ''
         );
 
+        // 檢查是否有其他人使用相同名稱
+        const { data: existing } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('nickname', cleanNickname)
+            .neq('id', userId)
+            .limit(1);
+
+        if (existing && existing.length > 0) {
+            profileError.value = '此名稱已被使用';
+            saving.value = false;
+            return;
+        }
+
         const { error } = await supabase.from('profiles').upsert({
             id: userId,
             nickname: cleanNickname,
