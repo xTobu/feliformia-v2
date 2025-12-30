@@ -100,7 +100,8 @@
                                                     option.id,
                                                     'end'
                                                 )
-                                            }}</template>
+                                            }}</template
+                                        >
                                     </el-checkbox>
 
                                     <!-- 只有自己沒投時才顯示時間選擇器 -->
@@ -420,12 +421,16 @@
         <div class="vote-status">
             <h2>值班概況</h2>
             <div class="status-row">
+                <div class="status-label">未投票</div>
+                <div class="status-names">{{ notVotedNames || '無' }}</div>
+            </div>
+            <div class="status-row">
                 <div class="status-label">已投票</div>
                 <div class="status-names">{{ votedNames || '無' }}</div>
             </div>
             <div class="status-row">
-                <div class="status-label">未投票</div>
-                <div class="status-names">{{ notVotedNames || '無' }}</div>
+                <div class="status-label">本週 Pass</div>
+                <div class="status-names">{{ passNames || '無' }}</div>
             </div>
         </div>
     </div>
@@ -469,20 +474,46 @@ const weekRangeText = computed(() => {
     return `${start.format('YYYY/MM/DD')} - ${end.format('MM/DD')}`;
 });
 
-// 已投票名單
+// 檢查 data 中是否有任何 checked 項目
+function hasAnyChecked(data) {
+    if (!data) return false;
+    for (const date in data) {
+        for (const shift in data[date]) {
+            for (const optionId in data[date][shift]) {
+                if (data[date][shift][optionId]?.checked) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// 已投票名單（有勾選任何選項 或 Pass）
 const votedNames = computed(() => {
     return allVotes.value
-        .filter((v) => !v.is_pass || Object.keys(v.data || {}).length > 0)
+        .filter((v) => v.is_pass || hasAnyChecked(v.data))
         .map((v) => v.nickname || '未命名')
         .join('、');
 });
 
-// 未投票名單
+// 本週 Pass 名單
+const passNames = computed(() => {
+    return allVotes.value
+        .filter((v) => v.is_pass)
+        .map((v) => v.nickname || '未命名')
+        .join('、');
+});
+
+// 未投票名單（沒有任何動作的人）
 const notVotedNames = computed(() => {
-    const votedUserIds = allVotes.value.map((v) => v.user_id);
+    // 取得有投票或 Pass 的 user_id
+    const activeUserIds = allVotes.value
+        .filter((v) => v.is_pass || hasAnyChecked(v.data))
+        .map((v) => v.user_id);
 
     return allUsers.value
-        .filter((u) => !votedUserIds.includes(u.id))
+        .filter((u) => !activeUserIds.includes(u.id))
         .map((u) => u.nickname || '未命名')
         .join('、');
 });
@@ -1001,7 +1032,7 @@ onUnmounted(() => {
 .time-inputs {
     display: inline-flex;
     align-items: center;
-    gap: 4px;  
+    gap: 4px;
     width: calc(100% - 60px);
 
     span {
@@ -1046,7 +1077,7 @@ onUnmounted(() => {
     }
 
     .status-label {
-        width: 60px;
+        width: 75px;
         font-weight: 500;
         font-size: 14px;
         flex-shrink: 0;
@@ -1058,8 +1089,5 @@ onUnmounted(() => {
         color: #666;
         line-height: 1.5;
     }
-}
-.el-checkbox {
-
 }
 </style>

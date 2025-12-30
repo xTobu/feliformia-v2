@@ -150,6 +150,16 @@ useHead({
     title: '登入',
 });
 
+useSeoMeta({
+    title: '登入',
+    description: '志工系統',
+    ogTitle: '吾等與貓毛 Feliformia',
+    ogDescription: '志工系統',
+    ogImage: '/share.jpeg',
+    ogUrl: '/',
+    ogType: 'website',
+});
+
 const supabase = useSupabaseClient();
 
 // 模式：login, register, reset
