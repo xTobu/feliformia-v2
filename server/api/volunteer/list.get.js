@@ -3,7 +3,8 @@ import { supabase } from '~/server/utils/supabase'
 export default defineEventHandler(async () => {
     const { data, error } = await supabase
         .from('profiles')
-        .select('id, nickname, email')
+        .select('id, nickname, email, is_active')
+        .neq('is_active', false)
 
     if (error) {
         throw createError({ statusCode: 500, message: error.message })
