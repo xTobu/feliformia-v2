@@ -2,7 +2,7 @@
     <div class="login-container">
         <div class="login-box">
             <h1>吾等與貓毛</h1>
-            <p class="subtitle">Feliformia 志工系統</p>
+            <p class="subtitle">志工系統</p>
 
             <!-- 登入表單 -->
             <template v-if="mode === 'login'">
@@ -88,7 +88,7 @@
                 </div>
 
                 <div class="form-group question">
-                    <label>我們貓屋在哪裡？</label>
+                    <label>我們貓屋在哪個縣市？</label>
                     <input
                         v-model="securityAnswer"
                         type="text"
@@ -318,33 +318,41 @@ const sendReset = async () => {
 </script>
 
 <style scoped lang="scss">
+:deep(body) {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+}
+
 .login-container {
     min-height: 100vh;
     display: flex;
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #f5f7f8 0%, #e8ecef 100%);
-    padding: 20px;
+    padding: 0;
 }
 
 .login-box {
     background: white;
-    padding: 40px;
+    padding: 24px 32px;
     border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     text-align: center;
     max-width: 400px;
-    width: 100%;
+    width: 92%;
+    margin: 16px auto;
 
     .subtitle {
         color: #657181;
-        margin: 0 0 30px 0;
+        margin: -8px 0 30px 0;
         font-size: 14px;
     }
 }
 
 .info {
-    color: #657181;
+    color: #b33a39;
     font-size: 14px;
     margin-bottom: 20px;
 }

@@ -610,4 +610,8 @@ onUnmounted(() => {
         }
     }
 }
+:deep(.el-input) {
+    max-width: 100%;
+    height: 45px;
+}
 </style>

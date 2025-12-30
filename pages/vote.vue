@@ -991,10 +991,11 @@ onUnmounted(() => {
 
 .other-voter {
     padding: 2px 0;
-    font-size: 14.25px;
+    font-size: 14px;
+    font-weight: 500;
     color: #666;
     text-align: left;
-    margin-left: 64px;
+    margin-left: 68px;
 }
 
 .time-inputs {

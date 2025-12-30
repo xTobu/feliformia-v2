@@ -1,7 +1,7 @@
 <template>
     <ClientOnly>
         <div id="notices-admin">
-            <h1>醫療事項管理</h1>
+            <h1>餵藥及特殊飲食管理</h1>
 
             <!-- 新增按鈕 -->
             <div class="actions">
