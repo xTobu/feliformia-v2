@@ -52,6 +52,13 @@
                             v-for="option in voteOptions"
                             :key="'morning-' + option.id"
                             class="option-row"
+                            :class="{
+                                'no-votes': hasNoVotes(
+                                    day.date,
+                                    'morning',
+                                    option.id
+                                ),
+                            }"
                         >
                             <!-- 有時間選擇的選項（如醫療） -->
                             <template v-if="option.has_time_range">
@@ -236,6 +243,13 @@
                             v-for="option in voteOptions"
                             :key="'night-' + option.id"
                             class="option-row"
+                            :class="{
+                                'no-votes': hasNoVotes(
+                                    day.date,
+                                    'night',
+                                    option.id
+                                ),
+                            }"
                         >
                             <!-- 有時間選擇的選項（如醫療） -->
                             <template v-if="option.has_time_range">
@@ -432,6 +446,41 @@
                 <div class="status-label">本週 Pass</div>
                 <div class="status-names">{{ passNames || '無' }}</div>
             </div>
+            <div class="status-row empty-slots">
+                <div class="empty-header">
+                    <div class="status-label">本週空班</div>
+                    <el-button
+                        size="small"
+                        text
+                        @click="showEmptySlots = !showEmptySlots"
+                    >
+                        {{ showEmptySlots ? '收合' : '展開' }}
+                    </el-button>
+                </div>
+                <div v-show="showEmptySlots" class="status-content">
+                    <template v-if="emptySlots.length">
+                        <div
+                            v-for="day in emptySlots"
+                            :key="day.date"
+                            class="empty-day"
+                        >
+                            <div class="empty-date">
+                                {{ day.dateText }} ({{ day.weekday }})
+                            </div>
+                            <div class="empty-list">
+                                <div
+                                    v-for="slot in day.slots"
+                                    :key="slot"
+                                    class="empty-item"
+                                >
+                                    • {{ slot }}
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+                    <span v-else>無</span>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -465,6 +514,7 @@ const allUsers = ref([]);
 const currentUserId = ref(null);
 const jumpDate = ref(null);
 const datePickerRef = ref(null);
+const showEmptySlots = ref(false);
 
 // 計算本週範圍文字
 const weekRangeText = computed(() => {
@@ -503,6 +553,20 @@ function hasAnyChecked(data) {
     return false;
 }
 
+// 檢查某個選項是否完全沒有人投票（不含 Pass 的人）
+function hasNoVotes(date, shift, optionId) {
+    for (const vote of allVotes.value) {
+        // 跳過 Pass 的人
+        if (vote.is_pass) continue;
+
+        const voteData = vote.data?.[date]?.[shift]?.[optionId];
+        if (voteData?.checked) {
+            return false; // 有人投票
+        }
+    }
+    return true; // 沒有人投票
+}
+
 // 已投票名單（有勾選任何選項 或 Pass）
 const votedNames = computed(() => {
     return allVotes.value
@@ -530,6 +594,35 @@ const notVotedNames = computed(() => {
         .filter((u) => u.is_active !== false && !activeUserIds.includes(u.id))
         .map((u) => u.nickname || u.email || '未命名')
         .join('、');
+});
+
+// 本週空班列表
+const emptySlots = computed(() => {
+    const result = [];
+    const shiftLabels = { morning: '早班', night: '晚班' };
+
+    for (const day of weekDays.value) {
+        const daySlots = [];
+
+        for (const shift of ['morning', 'night']) {
+            for (const option of voteOptions.value) {
+                if (hasNoVotes(day.date, shift, option.id)) {
+                    daySlots.push(`${shiftLabels[shift]}${option.name}`);
+                }
+            }
+        }
+
+        if (daySlots.length > 0) {
+            result.push({
+                date: day.date,
+                dateText: day.dateText,
+                weekday: day.weekday,
+                slots: daySlots,
+            });
+        }
+    }
+
+    return result;
 });
 
 // 初始化週
@@ -1027,6 +1120,20 @@ onUnmounted(() => {
     &:last-child {
         margin-bottom: 0;
     }
+
+    /* 沒有人投票時的 highlight 樣式 */
+    &.no-votes {
+        background: #fff8e6;
+        border-left: 3px solid #e6a23c;
+        margin-left: -8px;
+        padding-left: 8px;
+        margin-right: -8px;
+        padding-right: 8px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        border-radius: 0 4px 4px 0;
+    }
 }
 
 .option-main {
@@ -1103,6 +1210,61 @@ onUnmounted(() => {
         font-size: 14px;
         color: #666;
         line-height: 1.5;
+    }
+
+    .empty-slots {
+        flex-direction: column;
+        align-items: flex-start;
+
+        .empty-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+
+            .status-label {
+                margin-bottom: 0;
+            }
+
+            .el-button {
+                color: #6da2c2;
+                padding: 4px 8px;
+            }
+        }
+
+        .status-content {
+            width: 100%;
+            font-size: 14px;
+            color: #666;
+            margin-top: 12px;
+            text-align: left;
+            padding-left: 50%;
+        }
+
+        .empty-day {
+            margin-bottom: 12px;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        .empty-date {
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .empty-list {
+            margin: 0;
+            padding-left: 8px;
+
+            .empty-item {
+                color: #e6a23c;
+                line-height: 1.6;
+                text-align: left;
+            }
+        }
     }
 }
 </style>
