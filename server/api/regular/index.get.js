@@ -92,5 +92,6 @@ async function getCatList() {
             recordId: record.id,
             name: record.name,
             room: record.room,
+            diet_note: record.diet_note,
         }))
 }
