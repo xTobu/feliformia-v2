@@ -450,7 +450,6 @@
                 <div class="empty-header">
                     <div class="status-label">本週空班</div>
                     <el-button
-                        size="small"
                         text
                         @click="showEmptySlots = !showEmptySlots"
                     >
@@ -556,6 +555,11 @@ function hasAnyChecked(data) {
 
 // 檢查某個選項是否完全沒有人投票（不含 Pass 的人）
 function hasNoVotes(date, shift, optionId) {
+    const option = voteOptions.value.find((opt) => opt.id === optionId);
+    if (option?.name === '快閃/協助') {
+        return false;
+    }
+
     for (const vote of allVotes.value) {
         // 跳過 Pass 的人
         if (vote.is_pass) continue;
