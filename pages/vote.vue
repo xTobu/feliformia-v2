@@ -476,6 +476,7 @@
                                     • {{ slot }}
                                 </div>
                             </div>
+                            <div class="empty-spacer">&nbsp;</div>
                         </div>
                     </template>
                     <span v-else>無</span>
@@ -1242,11 +1243,20 @@ onUnmounted(() => {
         }
 
         .empty-day {
-            margin-bottom: 12px;
+            margin-bottom: 4px;
 
             &:last-child {
                 margin-bottom: 0;
+
+                .empty-spacer {
+                    display: none;
+                }
             }
+        }
+
+        .empty-spacer {
+            height: 8px;
+            user-select: text;
         }
 
         .empty-date {
