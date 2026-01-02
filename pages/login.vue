@@ -290,7 +290,7 @@ const signUp = async () => {
         }
 
         success.value = '註冊成功！';
-        
+
         // 清空表單
         registerName.value = '';
         registerEmail.value = '';
@@ -337,6 +337,7 @@ const sendReset = async () => {
 
 .login-container {
     min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -352,7 +353,7 @@ const sendReset = async () => {
     text-align: center;
     max-width: 400px;
     width: 92%;
-    margin: 16px auto;
+    margin: 0 auto;
 
     .subtitle {
         color: #657181;
