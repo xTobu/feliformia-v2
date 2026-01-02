@@ -46,9 +46,8 @@
                             class="name"
                             target="_blank"
                             :href="'/weekly?cat=' + cat.cat?.recordId"
-                            >{{ cat.name }}</a
+                            >{{ cat.name }} {{ cat.cat?.diet_note ? `：${cat.cat.diet_note}` : '' }}</a
                         >
-
                         <div class="detail">
                             <!-- 食物 - 乾 -->
                             <div class="feed food d_flex">

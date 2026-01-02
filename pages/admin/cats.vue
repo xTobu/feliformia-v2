@@ -24,16 +24,24 @@
                         <span class="drag-handle">☰</span>
                         <div class="cat-info">
                             <div class="cat-name">{{ cat.name }}</div>
+                            <div v-if="cat.diet_note" class="cat-diet-note">
+                                {{ cat.diet_note }}
+                            </div>
                             <div class="cat-meta">
                                 <div class="cat-status">
-                                    <span v-if="cat.room">📍 {{ cat.room }}</span>
+                                    <span v-if="cat.room"
+                                        >📍 {{ cat.room }}</span
+                                    >
                                     <span v-if="cat.adopted">🏠 已領養</span>
                                 </div>
                                 <div class="cat-actions">
-                                    <el-button  @click="openDialog(cat)">
+                                    <el-button @click="openDialog(cat)">
                                         編輯
                                     </el-button>
-                                    <el-button type="danger" @click="confirmDelete(cat)">
+                                    <el-button
+                                        type="danger"
+                                        @click="confirmDelete(cat)"
+                                    >
                                         刪除
                                     </el-button>
                                 </div>
@@ -52,11 +60,19 @@
                 :title="editingCat ? '編輯貓咪' : '新增貓咪'"
                 width="300px"
             >
-                <el-form :model="form" label-width="54px" @submit.prevent>
+                <el-form :model="form" label-width="70px" @submit.prevent>
                     <el-form-item label="名稱">
                         <el-input
                             v-model="form.name"
-                            placeholder="例如：奇拉拉：K36 早2匙，晚3匙"
+                            placeholder="例如：奇拉拉"
+                        />
+                    </el-form-item>
+                    <el-form-item label="飲食備註">
+                        <el-input
+                            v-model="form.diet_note"
+                            type="textarea"
+                            :rows="2"
+                            placeholder="例如：K36 早2匙，晚3匙"
                         />
                     </el-form-item>
                     <el-form-item label="房間">
@@ -109,6 +125,7 @@ const dialogVisible = ref(false);
 const editingCat = ref(null);
 const form = ref({
     name: '',
+    diet_note: '',
     room: '',
     adopted: false,
 });
@@ -140,12 +157,14 @@ function openDialog(cat = null) {
     if (cat) {
         form.value = {
             name: cat.name,
+            diet_note: cat.diet_note || '',
             room: cat.room || '',
             adopted: cat.adopted || false,
         };
     } else {
         form.value = {
             name: '',
+            diet_note: '',
             room: '',
             adopted: false,
         };
@@ -169,6 +188,7 @@ async function saveCat() {
             .from('cats')
             .update({
                 name: form.value.name,
+                diet_note: form.value.diet_note || null,
                 room: form.value.room || null,
                 adopted: form.value.adopted,
             })
@@ -190,6 +210,7 @@ async function saveCat() {
 
         const { error } = await supabase.from('cats').insert({
             name: form.value.name,
+            diet_note: form.value.diet_note || null,
             room: form.value.room || null,
             adopted: form.value.adopted,
             order: maxOrder + 1,
@@ -301,12 +322,17 @@ onMounted(() => {
 .cat-info {
     text-align: left;
     width: 100%;
-
 }
 
 .cat-name {
     font-weight: 500;
     font-size: 14px;
+}
+
+.cat-diet-note {
+    font-size: 13px;
+    color: #666;
+    margin-top: 4px;
 }
 
 .cat-meta {

@@ -6,8 +6,14 @@
             <!-- 統計 -->
             <div class="stats">
                 <div class="stat-card">
-                    <div class="stat-number">{{ profiles.length }}</div>
-                    <div class="stat-label">志工總數</div>
+                    <div class="stat-number">{{ activeCount }}</div>
+                    <div class="stat-label">啟用中</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number inactive-number">
+                        {{ inactiveCount }}
+                    </div>
+                    <div class="stat-label">已停用</div>
                 </div>
             </div>
 
@@ -27,6 +33,7 @@
                     v-for="profile in filteredProfiles"
                     :key="profile.id"
                     class="profile-item"
+                    :class="{ inactive: profile.is_active === false }"
                 >
                     <div class="profile-info">
                         <div class="profile-name">
@@ -37,6 +44,13 @@
                         </div>
                     </div>
                     <div class="profile-meta">
+                        <el-tag
+                            v-if="profile.is_active === false"
+                            type="info"
+                            size="small"
+                        >
+                            已停用
+                        </el-tag>
                         <el-tag
                             v-if="profile.is_admin"
                             type="danger"
@@ -72,6 +86,9 @@
                     </el-form-item>
                     <el-form-item label="管理員">
                         <el-switch v-model="form.is_admin" />
+                    </el-form-item>
+                    <el-form-item label="啟用">
+                        <el-switch v-model="form.is_active" />
                     </el-form-item>
                 </el-form>
                 <template #footer>
@@ -111,6 +128,7 @@ const form = ref({
     email: '',
     nickname: '',
     is_admin: false,
+    is_active: true,
 });
 
 // 過濾後的志工列表
@@ -126,11 +144,20 @@ const filteredProfiles = computed(() => {
     );
 });
 
+// 統計
+const activeCount = computed(() => {
+    return profiles.value.filter((p) => p.is_active !== false).length;
+});
+
+const inactiveCount = computed(() => {
+    return profiles.value.filter((p) => p.is_active === false).length;
+});
+
 // 載入志工
 async function loadProfiles() {
     const { data } = await supabase
         .from('profiles')
-        .select('id, nickname, email, is_admin, created_at')
+        .select('id, nickname, email, is_admin, is_active, created_at')
         .order('created_at', { ascending: false });
 
     if (data) {
@@ -145,6 +172,7 @@ function openDialog(profile) {
         email: profile.email,
         nickname: profile.nickname || '',
         is_admin: profile.is_admin || false,
+        is_active: profile.is_active !== false, // 預設為 true
     };
     dialogVisible.value = true;
 }
@@ -156,6 +184,7 @@ async function saveProfile() {
         .update({
             nickname: form.value.nickname || null,
             is_admin: form.value.is_admin,
+            is_active: form.value.is_active,
             updated_at: new Date().toISOString(),
         })
         .eq('id', editingProfile.value.id);
@@ -209,6 +238,10 @@ onMounted(() => {
     font-size: 32px;
     font-weight: 600;
     color: #b33a39;
+
+    &.inactive-number {
+        color: #999;
+    }
 }
 
 .stat-label {
@@ -239,6 +272,11 @@ onMounted(() => {
 
     &:hover {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    }
+
+    &.inactive {
+        opacity: 0.6;
+        background: #f9f9f9;
     }
 }
 
