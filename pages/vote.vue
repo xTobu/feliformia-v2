@@ -449,10 +449,7 @@
             <div class="status-row empty-slots">
                 <div class="empty-header">
                     <div class="status-label">本週空班</div>
-                    <el-button
-                        text
-                        @click="showEmptySlots = !showEmptySlots"
-                    >
+                    <el-button text @click="showEmptySlots = !showEmptySlots">
                         {{ showEmptySlots ? '收合' : '展開' }}
                     </el-button>
                 </div>
@@ -555,8 +552,9 @@ function hasAnyChecked(data) {
 
 // 檢查某個選項是否完全沒有人投票（不含 Pass 的人）
 function hasNoVotes(date, shift, optionId) {
+    // 如果該選項設定為跳過空班檢查，直接回傳 false
     const option = voteOptions.value.find((opt) => opt.id === optionId);
-    if (option?.name === '快閃/協助') {
+    if (option?.skip_empty_check) {
         return false;
     }
 
@@ -612,7 +610,7 @@ const emptySlots = computed(() => {
         for (const shift of ['morning', 'night']) {
             for (const option of voteOptions.value) {
                 if (hasNoVotes(day.date, shift, option.id)) {
-                    daySlots.push(`${shiftLabels[shift]}${option.name}`);
+                    daySlots.push(`${shiftLabels[shift]} - ${option.name}`);
                 }
             }
         }
@@ -1129,7 +1127,7 @@ onUnmounted(() => {
     /* 沒有人投票時的 highlight 樣式 */
     &.no-votes {
         background: #fff8e6;
-        border-left: 3px solid #e6a23c;
+        // border-left: 3px solid #e6a23c;
         margin-left: -8px;
         padding-left: 8px;
         margin-right: -8px;
@@ -1274,7 +1272,7 @@ onUnmounted(() => {
             padding-left: 8px;
 
             .empty-item {
-                color: #e6a23c;
+                // color: #e6a23c;
                 line-height: 1.6;
                 text-align: left;
             }
