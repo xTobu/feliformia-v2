@@ -49,7 +49,7 @@ const { isAdmin } = useProfile();
     transform: translate(-50%, -50%);
     width: 100%;
     max-width: 450px;
-    margin: -25% auto 0 auto;
+    margin: 0 auto;
     padding: 20px 20px;
     a {
         display: block;
