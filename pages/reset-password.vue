@@ -113,7 +113,8 @@ async function updatePassword() {
 
 <style scoped lang="scss">
 .reset-container {
-    min-height: 100vh;
+    min-height: 100dvh;
+    overflow: hidden;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -130,10 +131,6 @@ async function updatePassword() {
     max-width: 400px;
     width: 100%;
 
-    h1 {
-        margin: 0 0 30px 0;
-        font-size: 24px;
-    }
 }
 
 .form-group {

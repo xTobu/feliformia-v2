@@ -1,5 +1,4 @@
 <template>
-    <div>
         <button class="btn__float" @click="drawer = !drawer">
             <img v-if="!drawer" src="~/assets/img/ic-menu.svg" alt="" />
             <img v-else src="~/assets/img/ic-close.svg" alt="" />
@@ -7,24 +6,25 @@
 
         <el-drawer
             v-model="drawer"
-            size="40%"
+            size="450px"
             :with-header="false"
             direction="btt"
         >
             <div class="drawer__content">
                 <ul>
-                    <li class="red" @click="toggleDialogNotice()">
+                    <!-- <li class="red" @click="toggleDialogNotice()">
                         # 注意事項
-                    </li>
+                    </li> -->
+ 
                     <li class="red" @click="open('/regular')">
-                        # 飲食及如廁紀錄
+                        <Icon icon="mdi:silverware-fork-knife" width="17" /> <span>飲食及如廁紀錄</span>
                     </li>
                     <li class="red" @click="open('/medicine')">
-                        # 餵藥及特殊飲食表
+                        <Icon icon="fa-solid:syringe" width="17" /> <span>餵藥及特殊飲食表</span>
                     </li>
-                    <li class="pink" @click="goto('/vote')"># 值班投票</li>
-                    <li @click="open('/weekly')">卯咪飲食週表</li>
-                    <li @click="open('/weekly-medicine')">卯咪餵藥週表</li>
+                    <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
+                    <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>
+                    <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>卯咪餵藥週表</span></li>
                     <li
                         @click="
                             open(
@@ -32,9 +32,9 @@
                             )
                         "
                     >
-                        貓咪簡介 / 飲食 / 習慣需知
+                        <Icon icon="mdi:information" width="17" /> <span>貓咪簡介 / 飲食 / 習慣需知</span>
                     </li>
-                    <li @click="goto('/')">首頁</li>
+                    <li @click="goto('/')"><Icon icon="mdi:home" width="17" /> <span>首頁</span></li>
                 </ul>
             </div>
         </el-drawer>
@@ -59,10 +59,10 @@
                 </span>
             </template>
         </el-dialog>
-    </div>
 </template>
 
 <script setup>
+import { Icon } from '@iconify/vue';
 import { marked } from 'marked';
 
 const router = useRouter();
@@ -128,9 +128,8 @@ async function GetNotice() {
 
 .drawer__content {
     width: 100%;
-    max-width: 450px;
     margin: 0 auto;
-    padding: 0px 32px;
+    padding: 0px;
 
     ul {
         list-style: none;
@@ -143,6 +142,9 @@ async function GetNotice() {
     li {
         cursor: pointer;
         text-align: left;
+        display: flex;
+        align-items: center;
+        gap: 10px;
         color: #5a5c5f;
         padding: 16px;
         border-bottom: 1px solid #ababab66;

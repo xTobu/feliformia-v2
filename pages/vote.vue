@@ -52,6 +52,13 @@
                             v-for="option in voteOptions"
                             :key="'morning-' + option.id"
                             class="option-row"
+                            :class="{
+                                'no-votes': hasNoVotes(
+                                    day.date,
+                                    'morning',
+                                    option.id
+                                ),
+                            }"
                         >
                             <!-- 有時間選擇的選項（如醫療） -->
                             <template v-if="option.has_time_range">
@@ -134,11 +141,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="開始"
-                                            style="width: 100px"
+                                            placeholder="開始時間"
                                         />
                                         <span>→</span>
                                         <el-time-select
@@ -160,11 +167,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="結束"
-                                            style="width: 100px"
+                                            placeholder="結束時間"
                                         />
                                     </div>
                                 </div>
@@ -236,6 +243,13 @@
                             v-for="option in voteOptions"
                             :key="'night-' + option.id"
                             class="option-row"
+                            :class="{
+                                'no-votes': hasNoVotes(
+                                    day.date,
+                                    'night',
+                                    option.id
+                                ),
+                            }"
                         >
                             <!-- 有時間選擇的選項（如醫療） -->
                             <template v-if="option.has_time_range">
@@ -318,11 +332,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="開始"
-                                            style="width: 100px"
+                                            placeholder="開始時間"
                                         />
                                         <span>→</span>
                                         <el-time-select
@@ -344,11 +358,11 @@
                                                         val
                                                     )
                                             "
+                                            prefix-icon=""
                                             start="06:00"
                                             step="00:15"
                                             end="23:30"
-                                            placeholder="結束"
-                                            style="width: 100px"
+                                            placeholder="結束時間"
                                         />
                                     </div>
                                 </div>
@@ -421,12 +435,48 @@
         <div class="vote-status">
             <h2>值班概況</h2>
             <div class="status-row">
+                <div class="status-label">未投票</div>
+                <div class="status-names">{{ notVotedNames || '無' }}</div>
+            </div>
+            <div class="status-row">
                 <div class="status-label">已投票</div>
                 <div class="status-names">{{ votedNames || '無' }}</div>
             </div>
             <div class="status-row">
-                <div class="status-label">未投票</div>
-                <div class="status-names">{{ notVotedNames || '無' }}</div>
+                <div class="status-label">本週 Pass</div>
+                <div class="status-names">{{ passNames || '無' }}</div>
+            </div>
+            <div class="status-row empty-slots">
+                <div class="empty-header">
+                    <div class="status-label">本週空班</div>
+                    <el-button text @click="showEmptySlots = !showEmptySlots">
+                        {{ showEmptySlots ? '收合' : '展開' }}
+                    </el-button>
+                </div>
+                <div v-show="showEmptySlots" class="status-content">
+                    <template v-if="emptySlots.length">
+                        <div
+                            v-for="day in emptySlots"
+                            :key="day.date"
+                            class="empty-day"
+                        >
+                            <div class="empty-date">
+                                {{ day.dateText }} ({{ day.weekday }})
+                            </div>
+                            <div class="empty-list">
+                                <div
+                                    v-for="slot in day.slots"
+                                    :key="slot"
+                                    class="empty-item"
+                                >
+                                    • {{ slot }}
+                                </div>
+                            </div>
+                            <div class="empty-spacer">&nbsp;</div>
+                        </div>
+                    </template>
+                    <span v-else>無</span>
+                </div>
             </div>
         </div>
     </div>
@@ -461,6 +511,7 @@ const allUsers = ref([]);
 const currentUserId = ref(null);
 const jumpDate = ref(null);
 const datePickerRef = ref(null);
+const showEmptySlots = ref(false);
 
 // 計算本週範圍文字
 const weekRangeText = computed(() => {
@@ -470,22 +521,111 @@ const weekRangeText = computed(() => {
     return `${start.format('YYYY/MM/DD')} - ${end.format('MM/DD')}`;
 });
 
-// 已投票名單
+// 用 user_id 查 nickname 的 Map
+const userMap = computed(() => {
+    const map = new Map();
+    for (const user of allUsers.value) {
+        map.set(user.id, user.nickname || user.email || '未命名');
+    }
+    return map;
+});
+
+// 根據 user_id 取得 nickname
+function getNickname(userId) {
+    return userMap.value.get(userId) || '未命名';
+}
+
+// 檢查 data 中是否有任何 checked 項目
+function hasAnyChecked(data) {
+    if (!data) return false;
+    for (const date in data) {
+        for (const shift in data[date]) {
+            for (const optionId in data[date][shift]) {
+                if (data[date][shift][optionId]?.checked) {
+                    return true;
+                }
+            }
+        }
+    }
+    return false;
+}
+
+// 檢查某個選項是否完全沒有人投票（不含 Pass 的人）
+function hasNoVotes(date, shift, optionId) {
+    // 如果該選項設定為跳過空班檢查，直接回傳 false
+    const option = voteOptions.value.find((opt) => opt.id === optionId);
+    if (option?.skip_empty_check) {
+        return false;
+    }
+
+    for (const vote of allVotes.value) {
+        // 跳過 Pass 的人
+        if (vote.is_pass) continue;
+
+        const voteData = vote.data?.[date]?.[shift]?.[optionId];
+        if (voteData?.checked) {
+            return false; // 有人投票
+        }
+    }
+    return true; // 沒有人投票
+}
+
+// 已投票名單（有勾選任何選項 或 Pass）
 const votedNames = computed(() => {
     return allVotes.value
-        .filter((v) => !v.is_pass || Object.keys(v.data || {}).length > 0)
-        .map((v) => v.nickname || '未命名')
+        .filter((v) => v.is_pass || hasAnyChecked(v.data))
+        .map((v) => getNickname(v.user_id))
         .join('、');
 });
 
-// 未投票名單
+// 本週 Pass 名單
+const passNames = computed(() => {
+    return allVotes.value
+        .filter((v) => v.is_pass)
+        .map((v) => getNickname(v.user_id))
+        .join('、');
+});
+
+// 未投票名單（沒有任何動作的人，只顯示啟用中的用戶）
 const notVotedNames = computed(() => {
-    const votedUserIds = allVotes.value.map((v) => v.user_id);
+    // 取得有投票或 Pass 的 user_id
+    const activeUserIds = allVotes.value
+        .filter((v) => v.is_pass || hasAnyChecked(v.data))
+        .map((v) => v.user_id);
 
     return allUsers.value
-        .filter((u) => !votedUserIds.includes(u.id))
-        .map((u) => u.nickname || '未命名')
+        .filter((u) => u.is_active !== false && !activeUserIds.includes(u.id))
+        .map((u) => u.nickname || u.email || '未命名')
         .join('、');
+});
+
+// 本週空班列表
+const emptySlots = computed(() => {
+    const result = [];
+    const shiftLabels = { morning: '早班', night: '晚班' };
+
+    for (const day of weekDays.value) {
+        const daySlots = [];
+
+        for (const shift of ['morning', 'night']) {
+            for (const option of voteOptions.value) {
+                if (hasNoVotes(day.date, shift, option.id)) {
+                    daySlots.push(`${shiftLabels[shift]} - ${option.name}`);
+                }
+            }
+        }
+
+        if (daySlots.length > 0) {
+            result.push({
+                date: day.date,
+                dateText: day.dateText,
+                weekday: day.weekday,
+                slots: daySlots,
+            });
+        }
+    }
+
+    return result;
 });
 
 // 初始化週
@@ -565,7 +705,9 @@ async function loadVoteOptions() {
 
 // 載入所有用戶
 async function loadUsers() {
-    const { data } = await supabase.from('profiles').select('id, nickname');
+    const { data } = await supabase
+        .from('profiles')
+        .select('id, nickname, email, is_active');
 
     if (data) {
         allUsers.value = data;
@@ -618,7 +760,7 @@ function getOtherVoters(date, shift, optionId) {
 
         const voteData = vote.data?.[date]?.[shift]?.[optionId];
         if (voteData?.checked) {
-            const name = vote.nickname || '未命名';
+            const name = getNickname(vote.user_id);
 
             // 如果有時間，加上時間資訊
             if (voteData.time_start && voteData.time_end) {
@@ -650,7 +792,7 @@ function getAllVotersText(date, shift, option) {
 
         const voteData = vote.data?.[date]?.[shift]?.[option.id];
         if (voteData?.checked) {
-            names.push(vote.nickname || '未命名');
+            names.push(getNickname(vote.user_id));
         }
     }
 
@@ -721,7 +863,6 @@ async function saveVote() {
             week_start: weekStart.value,
             is_pass: isPass.value,
             data: myVoteData.value,
-            nickname: displayName.value || '未命名',
             updated_at: new Date().toISOString(),
         };
 
@@ -856,7 +997,6 @@ onUnmounted(() => {
 #vote {
     max-width: 600px;
     margin: 0 auto;
-    padding: 16px;
     padding-bottom: 80px;
 }
 
@@ -867,15 +1007,10 @@ onUnmounted(() => {
     margin-bottom: 16px;
 
     .header-left {
-        h1 {
-            font-size: 18px;
-            margin: 0 0 4px 0;
-        }
-
         .week-range {
-            color: #6da2c2;
+            color: #555;
             font-weight: 500;
-            font-size: 15px;
+            font-size: 17px;
             margin: 0;
         }
     }
@@ -940,28 +1075,27 @@ onUnmounted(() => {
     background: #fff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
-    padding: 16px;
     margin-bottom: 16px;
 }
 
 .day-title {
     font-weight: 500;
     font-size: 15px;
-    margin-bottom: 12px;
-    padding-bottom: 8px;
+    padding: 8px;
     border-bottom: 1px solid #eee;
+    background: #f5f7f8;
 }
 
 .shift-section {
     display: flex;
-    padding: 12px 0;
+    padding: 12px 12px 8px;
 
     &:first-child {
         padding-top: 0;
     }
 }
 
-// 早班和晚班之間的分隔線
+/* 早班和晚班之間的分隔線 */
 .shift-section + .shift-section {
     border-top: 1px solid #eee;
 }
@@ -979,7 +1113,7 @@ onUnmounted(() => {
 .shift-options {
     flex: 1;
 
-    // 讓勾選後的文字不要變藍色
+    /* 讓勾選後的文字不要變藍色 */
     :deep(.el-checkbox__input.is-checked + .el-checkbox__label) {
         color: inherit;
     }
@@ -989,32 +1123,54 @@ onUnmounted(() => {
     &:last-child {
         margin-bottom: 0;
     }
+
+    /* 沒有人投票時的 highlight 樣式 */
+    &.no-votes {
+        background: #fff8e6;
+        // border-left: 3px solid #e6a23c;
+        margin-left: -8px;
+        padding-left: 8px;
+        margin-right: -8px;
+        padding-right: 8px;
+        padding-top: 4px;
+        padding-bottom: 4px;
+        margin-bottom: 4px;
+        border-radius: 0 4px 4px 0;
+    }
 }
 
 .option-main {
     display: flex;
     align-items: center;
-    flex-wrap: wrap;
     gap: 8px;
 }
 
 .other-voter {
     padding: 2px 0;
-    font-size: 14.25px;
+    font-size: 14px;
+    font-weight: 500;
     color: #666;
-
-    // junx 先用 margin-left 硬推
     text-align: left;
-    margin-left: 64px;
+    margin-left: 68px;
 }
 
 .time-inputs {
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    width: calc(100% - 60px);
 
     span {
         color: #999;
+    }
+    :deep(.el-select__wrapper) {
+        justify-content: start;
+        font-size: 12px;
+        height: 40px;
+        padding: 0px 6px 0 8px;
+        .el-select__prefix {
+            display: none;
+        }
     }
 }
 
@@ -1046,7 +1202,7 @@ onUnmounted(() => {
     }
 
     .status-label {
-        width: 60px;
+        width: 75px;
         font-weight: 500;
         font-size: 14px;
         flex-shrink: 0;
@@ -1057,6 +1213,70 @@ onUnmounted(() => {
         font-size: 14px;
         color: #666;
         line-height: 1.5;
+    }
+
+    .empty-slots {
+        flex-direction: column;
+        align-items: flex-start;
+
+        .empty-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+
+            .status-label {
+                margin-bottom: 0;
+            }
+
+            .el-button {
+                color: #6da2c2;
+                padding: 4px 8px;
+            }
+        }
+
+        .status-content {
+            width: 100%;
+            font-size: 14px;
+            color: #666;
+            margin-top: 12px;
+            text-align: left;
+            padding-left: 50%;
+        }
+
+        .empty-day {
+            margin-bottom: 4px;
+
+            &:last-child {
+                margin-bottom: 0;
+
+                .empty-spacer {
+                    display: none;
+                }
+            }
+        }
+
+        .empty-spacer {
+            height: 8px;
+            user-select: text;
+        }
+
+        .empty-date {
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .empty-list {
+            margin: 0;
+            padding-left: 8px;
+
+            .empty-item {
+                // color: #e6a23c;
+                line-height: 1.6;
+                text-align: left;
+            }
+        }
     }
 }
 </style>

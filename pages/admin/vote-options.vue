@@ -32,6 +32,13 @@
                                 需填時間
                             </el-tag>
                             <el-tag
+                                v-if="option.skip_empty_check"
+                                size="small"
+                                type="warning"
+                            >
+                                不檢查空班
+                            </el-tag>
+                            <el-tag
                                 v-if="!option.is_active"
                                 size="small"
                                 type="danger"
@@ -64,9 +71,9 @@
             <el-dialog
                 v-model="dialogVisible"
                 :title="editingOption ? '編輯選項' : '新增選項'"
-                width="400px"
+                width="300px"
             >
-                <el-form :model="form" label-width="100px" @submit.prevent>
+                <el-form :model="form" label-width="70px" @submit.prevent>
                     <el-form-item label="選項名稱">
                         <el-input
                             v-model="form.name"
@@ -74,8 +81,18 @@
                         />
                     </el-form-item>
                     <el-form-item label="需填時間">
-                        <el-switch v-model="form.has_time_range" />
-                        <span class="hint">啟用後，志工需填寫時間區間</span>
+                        <div class="switch-with-hint">
+                            <el-switch v-model="form.has_time_range" />
+                            <span class="hint">啟用後，投票時需填寫時段</span>
+                        </div>
+                    </el-form-item>
+                    <el-form-item label="空班無視">
+                        <div class="switch-with-hint">
+                            <el-switch v-model="form.skip_empty_check" />
+                            <span class="hint"
+                                >啟用後，不列入空班提示與統計</span
+                            >
+                        </div>
                     </el-form-item>
                     <el-form-item label="啟用狀態">
                         <el-switch v-model="form.is_active" />
@@ -116,6 +133,7 @@ const editingOption = ref(null);
 const form = ref({
     name: '',
     has_time_range: false,
+    skip_empty_check: false,
     is_active: true,
 });
 
@@ -150,12 +168,14 @@ function openDialog(option = null) {
         form.value = {
             name: option.name,
             has_time_range: option.has_time_range,
+            skip_empty_check: option.skip_empty_check || false,
             is_active: option.is_active,
         };
     } else {
         form.value = {
             name: '',
             has_time_range: false,
+            skip_empty_check: false,
             is_active: true,
         };
     }
@@ -179,6 +199,7 @@ async function saveOption() {
             .update({
                 name: form.value.name,
                 has_time_range: form.value.has_time_range,
+                skip_empty_check: form.value.skip_empty_check,
                 is_active: form.value.is_active,
             })
             .eq('id', editingOption.value.id);
@@ -200,6 +221,7 @@ async function saveOption() {
         const { error } = await supabase.from('vote_options').insert({
             name: form.value.name,
             has_time_range: form.value.has_time_range,
+            skip_empty_check: form.value.skip_empty_check,
             is_active: form.value.is_active,
             is_exclusive: false,
             sort_order: maxOrder + 1,
@@ -256,13 +278,7 @@ onMounted(() => {
 #vote-options-admin {
     max-width: 600px;
     margin: 0 auto;
-    padding: 16px;
     padding-bottom: 80px;
-
-    h1 {
-        font-size: 18px;
-        margin: 0 0 16px 0;
-    }
 
     :deep(.el-button) {
         width: auto !important;
@@ -326,10 +342,16 @@ onMounted(() => {
     gap: 4px;
 }
 
+.switch-with-hint {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
 .hint {
-    margin-left: 8px;
     font-size: 12px;
     color: #999;
+    line-height: 1.4;
 }
 
 .empty {
@@ -358,14 +380,11 @@ onMounted(() => {
         color: #b33a39;
     }
 }
-</style>
 
-<style lang="scss">
-.el-dialog {
+:deep(.el-dialog) {
     .el-dialog__footer {
         display: flex;
         justify-content: flex-end;
-        gap: 8px;
 
         .el-button {
             width: auto !important;

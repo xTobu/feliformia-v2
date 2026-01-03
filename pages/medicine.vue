@@ -150,15 +150,16 @@
                         {{ loadingNotify ? '通知中...' : 'LINE 手動發送' }}
                     </button>
 
+                    <NuxtLink class="f_red" to="/regular" target="_blank"
+                        >前往飲食及如廁紀錄</NuxtLink
+                    >
                     <NuxtLink class="f_red" :to="prevLink" target="_blank"
                         >看前班紀錄</NuxtLink
                     >
                     <NuxtLink class="f_red" to="/medicine" target="_blank"
                         >回到今天</NuxtLink
                     >
-                    <NuxtLink class="f_red" to="/regular" target="_blank"
-                        >前往飲食及如廁紀錄</NuxtLink
-                    >
+                    
                 </div>
             </form>
             <FloatButton />
@@ -550,6 +551,7 @@ onUnmounted(() => {
         .el-button {
             width: auto !important;
             flex-shrink: 0;
+            height: 45px;
         }
     }
 
@@ -577,6 +579,17 @@ onUnmounted(() => {
 
                 .done {
                     width: 40px;
+                    > label {
+                        display: flex;
+                        flex-direction: column;
+                        justify-content: center;
+                        align-items: center;
+                        gap: 6px;
+                        :deep(.el-checkbox__label) {
+                            padding-left: 0 !important;
+                            font-size: 12px;
+                        }
+                    }
                 }
 
                 .txt {
@@ -596,5 +609,9 @@ onUnmounted(() => {
             }
         }
     }
+}
+:deep(.el-input) {
+    max-width: 100%;
+    height: 45px;
 }
 </style>

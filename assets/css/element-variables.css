@@ -1,0 +1,68 @@
+:root {
+  /* Checkbox */
+  --el-checkbox-checked-bg-color: #6da2c2;
+  --el-checkbox-checked-input-border-color: #6da2c2;
+  --el-checkbox-input-width: 18px;
+  --el-checkbox-input-height: 18px;
+  
+  /* Radio */
+  --el-radio-input-width: 18px;
+  --el-radio-input-height: 18px;
+  
+  /* 如果你也想改 Radio, Switch 等其他元件的主色 */
+  --el-color-primary: #6da2c2;
+}
+
+body {
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+/* Checkbox 尺寸 18px */
+.el-checkbox__inner {
+  width: 18px;
+  height: 18px;
+}
+
+.el-checkbox__inner::after {
+  left: 8px;
+  top: 8px;
+  width: 4px;
+  height: 9px;
+}
+
+/* Radio 尺寸 18px */
+.el-radio__inner {
+  width: 18px;
+  height: 18px;
+}
+
+.el-radio__inner::after {
+  width: 6px;
+  height: 6px;
+}
+
+h1 {
+  margin-bottom: 18px !important;
+  font-size: 21px;
+  font-weight: 500;
+}
+
+form {
+  padding-bottom: 16px !important;
+}
+
+.el-button+.el-button {
+  margin-left: 8px;
+}
+
+.el-dialog__header {
+  padding-bottom: 24px;
+}
+
+.el-select__wrapper {
+  height: 45px;
+}
+
+.el-textarea__inner {
+  min-height: 100px !important;
+}

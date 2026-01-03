@@ -59,7 +59,7 @@ $brown: #8e8783;
     .site-name {
         font-size: 14px;
         font-weight: 600;
-        color: $red;
+        color: $blue;
         text-decoration: none;
         margin-bottom: 0;
     }
@@ -117,7 +117,7 @@ html {
     font-family: 'Noto Sans TC', 'Helvetica Neue', Helvetica, sans-serif;
     text-align: center;
     font-size: 15px;
-    min-height: 100vh;
+    // min-height: 100vh;
     position: relative;
     margin: 0;
 }
@@ -132,7 +132,7 @@ html {
     width: 100%;
     max-width: 450px;
     margin: 0 auto;
-    padding: 20px 20px;
+    padding: 16px;
 }
 
 .W20 {
@@ -209,7 +209,7 @@ html {
     justify-content: space-between;
     .W50 {
         width: calc(50% - 10px) !important;
-        margin-bottom: 10px;
+        margin-bottom: 16px;
     }
     &.j_start {
         justify-content: start;
@@ -257,11 +257,6 @@ select {
     }
 }
 
-h1 {
-    font-size: 23px;
-    font-weight: 500;
-    margin-bottom: 30px;
-}
 
 a {
     text-decoration: underline;
@@ -272,7 +267,7 @@ a {
 .btn {
     background-color: $red;
     color: #fff;
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 500;
     padding: 0 20px;
     line-height: 50px;
@@ -285,7 +280,7 @@ a {
 
 .record_item {
     align-items: center;
-    padding: 30px 25px 10px 10px;
+    padding: 32px 25px 10px 10px;
     border-bottom: 1px solid #ccc;
     position: relative;
     &:nth-child(even) {
@@ -334,22 +329,18 @@ a {
 .ps {
     text-align: left;
     line-height: 1.5;
-    padding: 20px 0;
+    padding: 10px 0;
 }
 
 // Element Plus 樣式覆蓋
-.el-drawer__body {
-    border-top: solid 24px white;
-}
+
 .el-dialog__header {
     span {
         font-weight: 500;
         color: #6da2c2;
     }
 }
-.el-dialog__body {
-    padding: 0px 30px !important;
-}
+
 .el-dialog__footer {
     text-align: center !important;
 }

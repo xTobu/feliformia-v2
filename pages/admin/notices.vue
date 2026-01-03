@@ -1,7 +1,7 @@
 <template>
     <ClientOnly>
         <div id="notices-admin">
-            <h1>特殊事項管理</h1>
+            <h1>餵藥及特殊飲食管理</h1>
 
             <!-- 新增按鈕 -->
             <div class="actions">
@@ -21,39 +21,38 @@
             >
                 <template #item="{ element: notice }">
                     <div class="notice-item">
-                        <div class="notice-left">
-                            <span class="drag-handle">☰</span>
-                            <div class="notice-info">
-                                <div class="notice-header">
-                                    <span class="notice-name">{{
-                                        notice.name
-                                    }}</span>
-                                    <el-tag
-                                        :type="shiftTagType(notice.shift)"
-                                        size="small"
-                                    >
-                                        {{ shiftLabel(notice.shift) }}
-                                    </el-tag>
-                                </div>
-                                <div class="notice-treatment">
-                                    {{ notice.treatment }}
-                                </div>
-                                <div class="notice-reason" v-if="notice.reason">
-                                    💡 {{ notice.reason }}
-                                </div>
+                        <span class="drag-handle">☰</span>
+                        <div class="notice-info">
+                            <div class="notice-header">
+                                <span class="notice-name">{{
+                                    notice.name
+                                }}</span>
+                                <el-tag
+                                    :type="shiftTagType(notice.shift)"
+                                    size="small"
+                                >
+                                    {{ shiftLabel(notice.shift) }}
+                                </el-tag>
                             </div>
-                        </div>
-                        <div class="notice-actions">
-                            <el-button size="small" @click="openDialog(notice)">
-                                編輯
-                            </el-button>
-                            <el-button
-                                size="small"
-                                type="danger"
-                                @click="confirmDelete(notice)"
-                            >
-                                刪除
-                            </el-button>
+                            <div class="notice-treatment" v-if="notice.treatment">
+                                {{ notice.treatment }}
+                            </div>
+                            <div class="notice-reason" v-if="notice.reason">
+                                💡 {{ notice.reason }}
+                            </div>
+                               
+                            <div class="notice-actions">
+                                <el-button @click="openDialog(notice)">
+                                    編輯
+                                </el-button>
+                                <el-button
+                                    type="danger"
+                                    @click="confirmDelete(notice)"
+                                >
+                                    刪除
+                                </el-button>
+                            </div>
+                            
                         </div>
                     </div>
                 </template>
@@ -66,9 +65,9 @@
             <el-dialog
                 v-model="dialogVisible"
                 :title="editingNotice ? '編輯事項' : '新增事項'"
-                width="450px"
+                width="300px"
             >
-                <el-form :model="form" label-width="80px" @submit.prevent>
+                <el-form :model="form" label-width="40px" @submit.prevent>
                     <el-form-item label="貓咪">
                         <el-select
                             v-model="form.name"
@@ -80,8 +79,8 @@
                             <el-option
                                 v-for="cat in cats"
                                 :key="cat.id"
-                                :label="cat.name.split('：')[0]"
-                                :value="cat.name.split('：')[0]"
+                                :label="cat.name.split(/[：:]/)[0]"
+                                :value="cat.name.split(/[：:]/)[0]"
                             />
                         </el-select>
                     </el-form-item>
@@ -181,7 +180,6 @@ async function loadCats() {
         .select('id, name')
         .eq('adopted', false)
         .order('order');
-
     if (data) {
         cats.value = data;
     }
@@ -324,13 +322,7 @@ onMounted(() => {
 #notices-admin {
     max-width: 650px;
     margin: 0 auto;
-    padding: 16px;
     padding-bottom: 80px;
-
-    h1 {
-        font-size: 18px;
-        margin: 0 0 16px 0;
-    }
 
     :deep(.el-button) {
         width: auto !important;
@@ -344,6 +336,10 @@ onMounted(() => {
     :deep(.el-radio-group) {
         display: flex;
         gap: 16px;
+        justify-content: start;
+        .el-radio {
+            margin-right: 0;
+        }
     }
 }
 
@@ -359,9 +355,9 @@ onMounted(() => {
 
 .notice-item {
     display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 12px 16px;
+    justify-content: flex-start;
+    gap: 6px;
+    padding: 12px 8px;
     background: #fff;
     border: 1px solid #e0e0e0;
     border-radius: 8px;
@@ -372,20 +368,14 @@ onMounted(() => {
     }
 }
 
-.notice-left {
-    display: flex;
-    align-items: flex-start;
-    gap: 12px;
-    flex: 1;
-}
-
 .drag-handle {
     cursor: grab;
     color: #999;
     font-size: 16px;
-    padding: 4px;
+    line-height: 8px;
+    height: 20px;
+    padding: 4px 6px;
     user-select: none;
-    margin-top: 2px;
 
     &:hover {
         color: #666;
@@ -397,38 +387,40 @@ onMounted(() => {
 }
 
 .notice-info {
-    text-align: left;
-    flex: 1;
-}
-
-.notice-header {
     display: flex;
-    align-items: center;
+    flex-direction: column;
     gap: 8px;
-    margin-bottom: 8px;
+    width: 100%;
+    text-align: left;
+    .notice-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        .notice-name {
+            font-weight: 500;
+        }
+    }
+   
+    .notice-treatment {
+        font-size: 14px;
+        color: #333;
+        line-height: 1.4;
+    }
+
+    .notice-reason {
+        font-size: 14px;
+        color: #888;
+    }
+
+    .notice-actions {
+        width: 100%;
+        display: flex;
+        justify-content: flex-end;
+        gap: 4px;
+    }
 }
 
-.notice-name {
-    font-weight: 500;
-}
 
-.notice-treatment {
-    font-size: 14px;
-    color: #333;
-    line-height: 1.4;
-}
-
-.notice-reason {
-    font-size: 14px;
-    color: #888;
-    margin-top: 8px;
-}
-
-.notice-actions {
-    display: flex;
-    gap: 4px;
-    margin-left: 12px;
-}
 
 .empty {
     text-align: center;
@@ -456,18 +448,19 @@ onMounted(() => {
     background: #e8f4f8;
     border: 1px dashed #6da2c2;
 }
-</style>
 
-<style lang="scss">
-.el-dialog {
+:deep(.el-dialog) {
     .el-dialog__footer {
         display: flex;
         justify-content: flex-end;
-        gap: 8px;
 
         .el-button {
             width: auto !important;
         }
     }
+}
+
+:deep(.el-form-item) {
+    align-items: center;
 }
 </style>

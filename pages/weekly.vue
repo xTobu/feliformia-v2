@@ -12,7 +12,7 @@
                         >
                             <el-option
                                 v-for="cat in optionsCats"
-                                :label="cat.name"
+                                :label="cat.name.split(/[：:]/)[0]"
                                 :value="cat.id"
                                 :key="cat.id"
                             />
@@ -264,7 +264,7 @@ onMounted(async () => {
     }
     .weekly-head {
         height: 36px;
-        background: #a58f86 !important;
+        background: #8e8783 !important;
         color: #fff;
         font-size: 16px;
         line-height: 16px;

@@ -2,7 +2,7 @@
     <div class="login-container">
         <div class="login-box">
             <h1>吾等與貓毛</h1>
-            <p class="subtitle">Feliformia 志工系統</p>
+            <p class="subtitle">志工系統</p>
 
             <!-- 登入表單 -->
             <template v-if="mode === 'login'">
@@ -88,7 +88,7 @@
                 </div>
 
                 <div class="form-group question">
-                    <label>我們貓屋在哪裡？</label>
+                    <label>我們貓屋在哪個行政區？</label>
                     <input
                         v-model="securityAnswer"
                         type="text"
@@ -148,6 +148,16 @@ definePageMeta({
 
 useHead({
     title: '登入',
+});
+
+useSeoMeta({
+    title: '登入',
+    description: '志工系統',
+    ogTitle: '吾等與貓毛 Feliformia',
+    ogDescription: '志工系統',
+    ogImage: '/share.jpeg',
+    ogUrl: '/',
+    ogType: 'website',
 });
 
 const supabase = useSupabaseClient();
@@ -280,7 +290,7 @@ const signUp = async () => {
         }
 
         success.value = '註冊成功！';
-        
+
         // 清空表單
         registerName.value = '';
         registerEmail.value = '';
@@ -318,37 +328,41 @@ const sendReset = async () => {
 </script>
 
 <style scoped lang="scss">
+:deep(body) {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+}
+
 .login-container {
-    min-height: 100vh;
+    min-height: 100dvh;
     display: flex;
     align-items: center;
     justify-content: center;
     background: linear-gradient(135deg, #f5f7f8 0%, #e8ecef 100%);
-    padding: 20px;
+    padding: 0;
 }
 
 .login-box {
     background: white;
-    padding: 40px;
+    padding: 24px 32px;
     border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
     text-align: center;
     max-width: 400px;
-    width: 100%;
+    width: 92%;
+    margin: 0 auto;
 
-    h1 {
-        margin: 0 0 8px 0;
-        font-size: 28px;
-    }
     .subtitle {
         color: #657181;
-        margin: 0 0 30px 0;
+        margin: -8px 0 30px 0;
         font-size: 14px;
     }
 }
 
 .info {
-    color: #657181;
+    color: #b33a39;
     font-size: 14px;
     margin-bottom: 20px;
 }

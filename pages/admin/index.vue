@@ -16,7 +16,7 @@
                 <NuxtLink to="/admin/notices" class="menu-item">
                     <div class="menu-icon">📋</div>
                     <div class="menu-content">
-                        <div class="menu-title">特殊事項管理</div>
+                        <div class="menu-title">餵藥及特殊飲食管理</div>
                         <div class="menu-desc">
                             新增、編輯、排序特殊照護事項
                         </div>
@@ -67,11 +67,6 @@ useHead({
     margin: 0 auto;
     padding: 16px;
     padding-bottom: 80px;
-
-    h1 {
-        font-size: 18px;
-        margin: 0 0 20px 0;
-    }
 }
 
 .menu-list {
