@@ -18,6 +18,9 @@
             <button @click="openDatePicker" class="nav-btn icon-btn">
                 <el-icon><Calendar /></el-icon>
             </button>
+            <button @click="copyWeekLink" class="nav-btn icon-btn">
+                <el-icon><Share /></el-icon>
+            </button>
         </div>
         <el-date-picker
             ref="datePickerRef"
@@ -485,7 +488,7 @@
 <script setup>
 import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
-import { Calendar } from '@element-plus/icons-vue';
+import { Calendar, Share } from '@element-plus/icons-vue';
 
 definePageMeta({
     middleware: 'auth',
@@ -496,6 +499,8 @@ useHead({
 });
 
 const supabase = useSupabaseClient();
+const route = useRoute();
+const router = useRouter();
 const { $dayjs } = useNuxtApp();
 const { displayName } = useProfile();
 
@@ -648,22 +653,20 @@ const emptySlots = computed(() => {
     return result;
 });
 
-// 初始化週
+// 初始化週（從週二開始：二三四五六日一）
 function initWeek(date = null) {
     const targetDate = date ? $dayjs(date) : $dayjs();
-    // 取得該週的週一
-    const dayOfWeek = targetDate.day();
-    const monday = targetDate.subtract(
-        dayOfWeek === 0 ? 6 : dayOfWeek - 1,
-        'day'
-    );
-    weekStart.value = monday.format('YYYY-MM-DD');
+    // 取得該週的週二
+    const dayOfWeek = targetDate.day(); // 0=日, 1=一, 2=二, ...
+    const daysToSubtract = (dayOfWeek - 2 + 7) % 7; // 計算到週二要減幾天
+    const tuesday = targetDate.subtract(daysToSubtract, 'day');
+    weekStart.value = tuesday.format('YYYY-MM-DD');
 
-    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+    const weekdays = ['二', '三', '四', '五', '六', '日', '一'];
     weekDays.value = [];
 
     for (let i = 0; i < 7; i++) {
-        const day = monday.add(i, 'day');
+        const day = tuesday.add(i, 'day');
         weekDays.value.push({
             date: day.format('YYYY-MM-DD'),
             dateText: day.format('MM/DD'),
@@ -676,6 +679,7 @@ function initWeek(date = null) {
 function prevWeek() {
     const prev = $dayjs(weekStart.value).subtract(7, 'day');
     initWeek(prev);
+    router.replace({ query: { date: weekStart.value } });
     loadData();
     setupRealtimeSubscription();
 }
@@ -683,6 +687,7 @@ function prevWeek() {
 // 本週
 function thisWeek() {
     initWeek();
+    router.replace({ query: {} });
     loadData();
     setupRealtimeSubscription();
 }
@@ -691,6 +696,7 @@ function thisWeek() {
 function nextWeek() {
     const next = $dayjs(weekStart.value).add(7, 'day');
     initWeek(next);
+    router.replace({ query: { date: weekStart.value } });
     loadData();
     setupRealtimeSubscription();
 }
@@ -699,6 +705,7 @@ function nextWeek() {
 function jumpToDate(date) {
     if (date) {
         initWeek($dayjs(date));
+        router.replace({ query: { date: weekStart.value } });
         loadData();
         setupRealtimeSubscription();
         jumpDate.value = null; // 清空選擇器
@@ -708,6 +715,24 @@ function jumpToDate(date) {
 // 打開日期選擇器
 function openDatePicker() {
     datePickerRef.value?.focus();
+}
+
+// 複製本週連結
+async function copyWeekLink() {
+    const url = `${window.location.origin}/vote?date=${weekStart.value}`;
+    try {
+        await navigator.clipboard.writeText(url);
+        Swal.fire({
+            html: `已複製連結<br><span style="font-size: 12px; color: #999; word-break: break-all;">${url}</span>`,
+            timer: 2000,
+            showConfirmButton: false,
+        });
+    } catch {
+        Swal.fire({
+            text: '複製失敗',
+            confirmButtonColor: '#b33a39',
+        });
+    }
 }
 
 // 載入投票選項
@@ -1000,7 +1025,14 @@ onMounted(async () => {
     } = await supabase.auth.getUser();
     currentUserId.value = currentUser?.id;
 
-    initWeek();
+    // 檢查 URL 是否有指定日期
+    const dateParam = route.query.date;
+    if (dateParam && $dayjs(dateParam).isValid()) {
+        initWeek($dayjs(dateParam));
+    } else {
+        initWeek();
+    }
+
     await loadData();
     setupRealtimeSubscription();
 });
