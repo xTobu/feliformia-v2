@@ -49,7 +49,7 @@
                     <div class="shift-label">早班</div>
                     <div class="shift-options">
                         <div
-                            v-for="option in voteOptions"
+                            v-for="option in morningOptions"
                             :key="'morning-' + option.id"
                             class="option-row"
                             :class="{
@@ -240,7 +240,7 @@
                     <div class="shift-label">晚班</div>
                     <div class="shift-options">
                         <div
-                            v-for="option in voteOptions"
+                            v-for="option in nightOptions"
                             :key="'night-' + option.id"
                             class="option-row"
                             :class="{
@@ -513,6 +513,20 @@ const jumpDate = ref(null);
 const datePickerRef = ref(null);
 const showEmptySlots = ref(false);
 
+// 早班選項（shift 為 'both' 或 'morning'）
+const morningOptions = computed(() => {
+    return voteOptions.value.filter(
+        (opt) => !opt.shift || opt.shift === 'both' || opt.shift === 'morning'
+    );
+});
+
+// 晚班選項（shift 為 'both' 或 'night'）
+const nightOptions = computed(() => {
+    return voteOptions.value.filter(
+        (opt) => !opt.shift || opt.shift === 'both' || opt.shift === 'night'
+    );
+});
+
 // 計算本週範圍文字
 const weekRangeText = computed(() => {
     if (!weekStart.value) return '';
@@ -607,11 +621,17 @@ const emptySlots = computed(() => {
     for (const day of weekDays.value) {
         const daySlots = [];
 
-        for (const shift of ['morning', 'night']) {
-            for (const option of voteOptions.value) {
-                if (hasNoVotes(day.date, shift, option.id)) {
-                    daySlots.push(`${shiftLabels[shift]} - ${option.name}`);
-                }
+        // 早班：檢查 morningOptions
+        for (const option of morningOptions.value) {
+            if (hasNoVotes(day.date, 'morning', option.id)) {
+                daySlots.push(`${shiftLabels['morning']} - ${option.name}`);
+            }
+        }
+
+        // 晚班：檢查 nightOptions
+        for (const option of nightOptions.value) {
+            if (hasNoVotes(day.date, 'night', option.id)) {
+                daySlots.push(`${shiftLabels['night']} - ${option.name}`);
             }
         }
 

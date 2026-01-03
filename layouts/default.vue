@@ -117,7 +117,7 @@ html {
     font-family: 'Noto Sans TC', 'Helvetica Neue', Helvetica, sans-serif;
     text-align: center;
     font-size: 15px;
-    // min-height: 100vh;
+    min-height: 100vh;
     position: relative;
     margin: 0;
 }

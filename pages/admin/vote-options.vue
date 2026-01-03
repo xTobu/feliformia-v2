@@ -25,6 +25,18 @@
                             <span class="drag-handle">☰</span>
                             <span class="option-name">{{ option.name }}</span>
                             <el-tag
+                                v-if="option.shift === 'morning'"
+                                size="small"
+                            >
+                                僅早班
+                            </el-tag>
+                            <el-tag
+                                v-if="option.shift === 'night'"
+                                size="small"
+                            >
+                                僅晚班
+                            </el-tag>
+                            <el-tag
                                 v-if="option.has_time_range"
                                 size="small"
                                 type="info"
@@ -80,6 +92,14 @@
                             placeholder="例如：醫療"
                         />
                     </el-form-item>
+                    <el-form-item label="適用班別">
+                        <el-radio-group v-model="form.shift">
+                            <el-radio value="morning">早班</el-radio>
+                            <el-radio value="night">晚班</el-radio>
+                            <el-radio value="both">早晚班</el-radio>
+
+                        </el-radio-group>
+                    </el-form-item>
                     <el-form-item label="需填時間">
                         <div class="switch-with-hint">
                             <el-switch v-model="form.has_time_range" />
@@ -132,6 +152,7 @@ const dialogVisible = ref(false);
 const editingOption = ref(null);
 const form = ref({
     name: '',
+    shift: 'both',
     has_time_range: false,
     skip_empty_check: false,
     is_active: true,
@@ -167,6 +188,7 @@ function openDialog(option = null) {
     if (option) {
         form.value = {
             name: option.name,
+            shift: option.shift || 'both',
             has_time_range: option.has_time_range,
             skip_empty_check: option.skip_empty_check || false,
             is_active: option.is_active,
@@ -174,6 +196,7 @@ function openDialog(option = null) {
     } else {
         form.value = {
             name: '',
+            shift: 'both',
             has_time_range: false,
             skip_empty_check: false,
             is_active: true,
@@ -198,6 +221,7 @@ async function saveOption() {
             .from('vote_options')
             .update({
                 name: form.value.name,
+                shift: form.value.shift,
                 has_time_range: form.value.has_time_range,
                 skip_empty_check: form.value.skip_empty_check,
                 is_active: form.value.is_active,
@@ -220,6 +244,7 @@ async function saveOption() {
 
         const { error } = await supabase.from('vote_options').insert({
             name: form.value.name,
+            shift: form.value.shift,
             has_time_range: form.value.has_time_range,
             skip_empty_check: form.value.skip_empty_check,
             is_active: form.value.is_active,
