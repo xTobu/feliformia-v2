@@ -835,20 +835,20 @@ const filteredWeeklyStats = computed(() => {
     );
 });
 
-// 初始化週（從週二開始：二三四五六日一）
+// 初始化週（從週一開始：一二三四五六日）
 function initWeek(date = null) {
     const targetDate = date ? $dayjs(date) : $dayjs();
-    // 取得該週的週二
+    // 取得該週的週一
     const dayOfWeek = targetDate.day(); // 0=日, 1=一, 2=二, ...
-    const daysToSubtract = (dayOfWeek - 2 + 7) % 7; // 計算到週二要減幾天
-    const tuesday = targetDate.subtract(daysToSubtract, 'day');
-    weekStart.value = tuesday.format('YYYY-MM-DD');
+    const daysToSubtract = (dayOfWeek - 1 + 7) % 7; // 計算到週一要減幾天
+    const monday = targetDate.subtract(daysToSubtract, 'day');
+    weekStart.value = monday.format('YYYY-MM-DD');
 
-    const weekdays = ['二', '三', '四', '五', '六', '日', '一'];
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     weekDays.value = [];
 
     for (let i = 0; i < 7; i++) {
-        const day = tuesday.add(i, 'day');
+        const day = monday.add(i, 'day');
         weekDays.value.push({
             date: day.format('YYYY-MM-DD'),
             dateText: day.format('MM/DD'),
