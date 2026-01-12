@@ -530,14 +530,20 @@
                                         >
                                             • {{ voter.name
                                             }}<span
-                                                v-if="voter.timeStart && voter.timeEnd"
+                                                v-if="
+                                                    voter.timeStart &&
+                                                    voter.timeEnd
+                                                "
                                                 class="voter-time"
                                             >
-                                                ({{ voter.timeStart }} → {{ voter.timeEnd }})</span
+                                                {{ voter.timeStart }} →
+                                                {{ voter.timeEnd }}</span
                                             >
                                         </div>
                                     </template>
-                                    <span v-else class="no-voter">無人投票</span>
+                                    <span v-else class="no-voter"
+                                        >無人投票</span
+                                    >
                                 </div>
                             </div>
                         </div>
@@ -582,6 +588,26 @@ const datePickerRef = ref(null);
 const showEmptySlots = ref(false);
 const showWeeklyStats = ref(false);
 const selectedStats = ref([]);
+
+// localStorage 管理
+const { get: getStorage, set: setStorage } = useLocalStorage();
+
+// 從 localStorage 讀取篩選設定
+onMounted(() => {
+    const saved = getStorage('vote-stats-filter', []);
+    if (saved.length) {
+        selectedStats.value = saved;
+    }
+});
+
+// 監聽變化並存到 localStorage
+watch(
+    selectedStats,
+    (newVal) => {
+        setStorage('vote-stats-filter', newVal);
+    },
+    { deep: true }
+);
 
 // 早班選項（shift 為 'both' 或 'morning'）
 const morningOptions = computed(() => {
