@@ -481,6 +481,69 @@
                     <span v-else>無</span>
                 </div>
             </div>
+            <div class="status-row weekly-stats">
+                <div class="empty-header">
+                    <div class="status-label">本週統計</div>
+                    <el-button text @click="showWeeklyStats = !showWeeklyStats">
+                        {{ showWeeklyStats ? '收合' : '展開' }}
+                    </el-button>
+                </div>
+                <div v-show="showWeeklyStats" class="status-content">
+                    <div class="stats-filter">
+                        <el-select
+                            v-model="selectedStats"
+                            multiple
+                            collapse-tags
+                            collapse-tags-tooltip
+                            placeholder="全部顯示"
+                            clearable
+                        >
+                            <el-option
+                                v-for="option in weeklyStats"
+                                :key="option.id"
+                                :label="option.name"
+                                :value="option.id"
+                            />
+                        </el-select>
+                    </div>
+                    <div
+                        v-for="option in filteredWeeklyStats"
+                        :key="option.id"
+                        class="stats-option"
+                    >
+                        <div class="stats-option-name">{{ option.name }}</div>
+                        <div class="stats-days">
+                            <div
+                                v-for="day in option.days"
+                                :key="day.date"
+                                class="stats-day"
+                            >
+                                <div class="stats-date">
+                                    {{ day.dateText }} ({{ day.weekday }})
+                                </div>
+                                <div class="stats-voters">
+                                    <template v-if="day.voters.length">
+                                        <div
+                                            v-for="voter in day.voters"
+                                            :key="voter.name"
+                                            class="voter-item"
+                                        >
+                                            • {{ voter.name
+                                            }}<span
+                                                v-if="voter.timeStart && voter.timeEnd"
+                                                class="voter-time"
+                                            >
+                                                ({{ voter.timeStart }} → {{ voter.timeEnd }})</span
+                                            >
+                                        </div>
+                                    </template>
+                                    <span v-else class="no-voter">無人投票</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -517,6 +580,8 @@ const currentUserId = ref(null);
 const jumpDate = ref(null);
 const datePickerRef = ref(null);
 const showEmptySlots = ref(false);
+const showWeeklyStats = ref(false);
+const selectedStats = ref([]);
 
 // 早班選項（shift 為 'both' 或 'morning'）
 const morningOptions = computed(() => {
@@ -651,6 +716,97 @@ const emptySlots = computed(() => {
     }
 
     return result;
+});
+
+// 本週統計：每個班別+選項的投票人
+const weeklyStats = computed(() => {
+    const result = [];
+
+    // 早班選項
+    for (const option of morningOptions.value) {
+        const days = [];
+
+        for (const day of weekDays.value) {
+            const voters = [];
+
+            for (const vote of allVotes.value) {
+                if (vote.is_pass) continue;
+
+                const voteData = vote.data?.[day.date]?.morning?.[option.id];
+                if (voteData?.checked) {
+                    const voterInfo = {
+                        name: getNickname(vote.user_id),
+                        timeStart: voteData.time_start || null,
+                        timeEnd: voteData.time_end || null,
+                    };
+                    voters.push(voterInfo);
+                }
+            }
+
+            days.push({
+                date: day.date,
+                dateText: day.dateText,
+                weekday: day.weekday,
+                voters,
+            });
+        }
+
+        result.push({
+            id: `morning-${option.id}`,
+            name: `早班 - ${option.name}`,
+            hasTimeRange: option.has_time_range,
+            days,
+        });
+    }
+
+    // 晚班選項
+    for (const option of nightOptions.value) {
+        const days = [];
+
+        for (const day of weekDays.value) {
+            const voters = [];
+
+            for (const vote of allVotes.value) {
+                if (vote.is_pass) continue;
+
+                const voteData = vote.data?.[day.date]?.night?.[option.id];
+                if (voteData?.checked) {
+                    const voterInfo = {
+                        name: getNickname(vote.user_id),
+                        timeStart: voteData.time_start || null,
+                        timeEnd: voteData.time_end || null,
+                    };
+                    voters.push(voterInfo);
+                }
+            }
+
+            days.push({
+                date: day.date,
+                dateText: day.dateText,
+                weekday: day.weekday,
+                voters,
+            });
+        }
+
+        result.push({
+            id: `night-${option.id}`,
+            name: `晚班 - ${option.name}`,
+            hasTimeRange: option.has_time_range,
+            days,
+        });
+    }
+
+    return result;
+});
+
+// 過濾後的本週統計
+const filteredWeeklyStats = computed(() => {
+    if (selectedStats.value.length === 0) {
+        return weeklyStats.value;
+    }
+    return weeklyStats.value.filter((option) =>
+        selectedStats.value.includes(option.id)
+    );
 });
 
 // 初始化週（從週二開始：二三四五六日一）
@@ -1325,6 +1481,99 @@ onUnmounted(() => {
                 // color: #e6a23c;
                 line-height: 1.6;
                 text-align: left;
+            }
+        }
+    }
+
+    .weekly-stats {
+        flex-direction: column;
+        align-items: flex-start;
+
+        .empty-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+
+            .status-label {
+                margin-bottom: 0;
+            }
+
+            .el-button {
+                color: #6da2c2;
+                padding: 4px 8px;
+            }
+        }
+
+        .status-content {
+            width: 100%;
+            font-size: 14px;
+            color: #666;
+            margin-top: 12px;
+            text-align: left;
+            padding-left: 50%;
+        }
+
+        .stats-filter {
+            margin-bottom: 16px;
+
+            :deep(button) {
+                width: auto;
+            }
+        }
+
+        .stats-option {
+            margin-bottom: 20px;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        .stats-option-name {
+            font-weight: 600;
+            color: #b33a39;
+            font-size: 15px;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .stats-days {
+            // 不需要額外 padding，已經由 status-content 的 padding-left: 50% 處理
+        }
+
+        .stats-day {
+            margin-bottom: 8px;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        .stats-date {
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 2px;
+        }
+
+        .stats-voters {
+            padding-left: 8px;
+            line-height: 1.6;
+            color: #555;
+
+            .voter-item {
+                margin-bottom: 2px;
+            }
+
+            .voter-time {
+                color: #888;
+                font-size: 13px;
+                margin-left: 4px;
+            }
+
+            .no-voter {
+                color: #999;
             }
         }
     }
