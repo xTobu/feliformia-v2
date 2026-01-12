@@ -750,12 +750,10 @@ async function loadVoteOptions() {
 
 // 載入所有用戶
 async function loadUsers() {
-    const { data } = await supabase
-        .from('profiles')
-        .select('id, nickname, email, is_active');
-
-    if (data) {
-        allUsers.value = data;
+    try {
+        allUsers.value = await $fetch('/api/users/list');
+    } catch (error) {
+        console.error('載入用戶失敗:', error);
     }
 }
 
