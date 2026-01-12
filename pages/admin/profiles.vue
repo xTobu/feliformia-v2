@@ -155,13 +155,10 @@ const inactiveCount = computed(() => {
 
 // 載入志工
 async function loadProfiles() {
-    const { data } = await supabase
-        .from('profiles')
-        .select('id, nickname, email, is_admin, is_active, created_at')
-        .order('created_at', { ascending: false });
-
-    if (data) {
-        profiles.value = data;
+    try {
+        profiles.value = await $fetch('/api/admin/profiles');
+    } catch (error) {
+        console.error('載入志工失敗:', error);
     }
 }
 

@@ -18,6 +18,9 @@
             <button @click="openDatePicker" class="nav-btn icon-btn">
                 <el-icon><Calendar /></el-icon>
             </button>
+            <button @click="copyWeekLink" class="nav-btn icon-btn">
+                <el-icon><Share /></el-icon>
+            </button>
         </div>
         <el-date-picker
             ref="datePickerRef"
@@ -49,7 +52,7 @@
                     <div class="shift-label">早班</div>
                     <div class="shift-options">
                         <div
-                            v-for="option in voteOptions"
+                            v-for="option in morningOptions"
                             :key="'morning-' + option.id"
                             class="option-row"
                             :class="{
@@ -240,7 +243,7 @@
                     <div class="shift-label">晚班</div>
                     <div class="shift-options">
                         <div
-                            v-for="option in voteOptions"
+                            v-for="option in nightOptions"
                             :key="'night-' + option.id"
                             class="option-row"
                             :class="{
@@ -449,10 +452,7 @@
             <div class="status-row empty-slots">
                 <div class="empty-header">
                     <div class="status-label">本週空班</div>
-                    <el-button
-                        text
-                        @click="showEmptySlots = !showEmptySlots"
-                    >
+                    <el-button text @click="showEmptySlots = !showEmptySlots">
                         {{ showEmptySlots ? '收合' : '展開' }}
                     </el-button>
                 </div>
@@ -481,6 +481,75 @@
                     <span v-else>無</span>
                 </div>
             </div>
+            <div class="status-row weekly-stats">
+                <div class="empty-header">
+                    <div class="status-label">本週統計</div>
+                    <el-button text @click="showWeeklyStats = !showWeeklyStats">
+                        {{ showWeeklyStats ? '收合' : '展開' }}
+                    </el-button>
+                </div>
+                <div v-show="showWeeklyStats" class="status-content">
+                    <div class="stats-filter">
+                        <el-select
+                            v-model="selectedStats"
+                            multiple
+                            collapse-tags
+                            collapse-tags-tooltip
+                            placeholder="全部顯示"
+                            clearable
+                        >
+                            <el-option
+                                v-for="option in weeklyStats"
+                                :key="option.id"
+                                :label="option.name"
+                                :value="option.id"
+                            />
+                        </el-select>
+                    </div>
+                    <div
+                        v-for="option in filteredWeeklyStats"
+                        :key="option.id"
+                        class="stats-option"
+                    >
+                        <div class="stats-option-name">{{ option.name }}</div>
+                        <div class="stats-days">
+                            <div
+                                v-for="day in option.days"
+                                :key="day.date"
+                                class="stats-day"
+                            >
+                                <div class="stats-date">
+                                    {{ day.dateText }} ({{ day.weekday }})
+                                </div>
+                                <div class="stats-voters">
+                                    <template v-if="day.voters.length">
+                                        <div
+                                            v-for="voter in day.voters"
+                                            :key="voter.name"
+                                            class="voter-item"
+                                        >
+                                            • {{ voter.name
+                                            }}<span
+                                                v-if="
+                                                    voter.timeStart &&
+                                                    voter.timeEnd
+                                                "
+                                                class="voter-time"
+                                            >
+                                                {{ voter.timeStart }} →
+                                                {{ voter.timeEnd }}</span
+                                            >
+                                        </div>
+                                    </template>
+                                    <span v-else class="no-voter"
+                                        >無人投票</span
+                                    >
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 </template>
@@ -488,7 +557,7 @@
 <script setup>
 import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
-import { Calendar } from '@element-plus/icons-vue';
+import { Calendar, Share } from '@element-plus/icons-vue';
 
 definePageMeta({
     middleware: 'auth',
@@ -499,6 +568,8 @@ useHead({
 });
 
 const supabase = useSupabaseClient();
+const route = useRoute();
+const router = useRouter();
 const { $dayjs } = useNuxtApp();
 const { displayName } = useProfile();
 
@@ -515,6 +586,42 @@ const currentUserId = ref(null);
 const jumpDate = ref(null);
 const datePickerRef = ref(null);
 const showEmptySlots = ref(false);
+const showWeeklyStats = ref(false);
+const selectedStats = ref([]);
+
+// localStorage 管理
+const { get: getStorage, set: setStorage } = useLocalStorage();
+
+// 從 localStorage 讀取篩選設定
+onMounted(() => {
+    const saved = getStorage('vote-stats-filter', []);
+    if (saved.length) {
+        selectedStats.value = saved;
+    }
+});
+
+// 監聽變化並存到 localStorage
+watch(
+    selectedStats,
+    (newVal) => {
+        setStorage('vote-stats-filter', newVal);
+    },
+    { deep: true }
+);
+
+// 早班選項（shift 為 'both' 或 'morning'）
+const morningOptions = computed(() => {
+    return voteOptions.value.filter(
+        (opt) => !opt.shift || opt.shift === 'both' || opt.shift === 'morning'
+    );
+});
+
+// 晚班選項（shift 為 'both' 或 'night'）
+const nightOptions = computed(() => {
+    return voteOptions.value.filter(
+        (opt) => !opt.shift || opt.shift === 'both' || opt.shift === 'night'
+    );
+});
 
 // 計算本週範圍文字
 const weekRangeText = computed(() => {
@@ -555,8 +662,9 @@ function hasAnyChecked(data) {
 
 // 檢查某個選項是否完全沒有人投票（不含 Pass 的人）
 function hasNoVotes(date, shift, optionId) {
+    // 如果該選項設定為跳過空班檢查，直接回傳 false
     const option = voteOptions.value.find((opt) => opt.id === optionId);
-    if (option?.name === '快閃/協助') {
+    if (option?.skip_empty_check) {
         return false;
     }
 
@@ -609,11 +717,17 @@ const emptySlots = computed(() => {
     for (const day of weekDays.value) {
         const daySlots = [];
 
-        for (const shift of ['morning', 'night']) {
-            for (const option of voteOptions.value) {
-                if (hasNoVotes(day.date, shift, option.id)) {
-                    daySlots.push(`${shiftLabels[shift]}${option.name}`);
-                }
+        // 早班：檢查 morningOptions
+        for (const option of morningOptions.value) {
+            if (hasNoVotes(day.date, 'morning', option.id)) {
+                daySlots.push(`${shiftLabels['morning']} - ${option.name}`);
+            }
+        }
+
+        // 晚班：檢查 nightOptions
+        for (const option of nightOptions.value) {
+            if (hasNoVotes(day.date, 'night', option.id)) {
+                daySlots.push(`${shiftLabels['night']} - ${option.name}`);
             }
         }
 
@@ -630,22 +744,111 @@ const emptySlots = computed(() => {
     return result;
 });
 
-// 初始化週
+// 本週統計：每個班別+選項的投票人
+const weeklyStats = computed(() => {
+    const result = [];
+
+    // 早班選項
+    for (const option of morningOptions.value) {
+        const days = [];
+
+        for (const day of weekDays.value) {
+            const voters = [];
+
+            for (const vote of allVotes.value) {
+                if (vote.is_pass) continue;
+
+                const voteData = vote.data?.[day.date]?.morning?.[option.id];
+                if (voteData?.checked) {
+                    const voterInfo = {
+                        name: getNickname(vote.user_id),
+                        timeStart: voteData.time_start || null,
+                        timeEnd: voteData.time_end || null,
+                    };
+                    voters.push(voterInfo);
+                }
+            }
+
+            days.push({
+                date: day.date,
+                dateText: day.dateText,
+                weekday: day.weekday,
+                voters,
+            });
+        }
+
+        result.push({
+            id: `morning-${option.id}`,
+            name: `早班 - ${option.name}`,
+            hasTimeRange: option.has_time_range,
+            days,
+        });
+    }
+
+    // 晚班選項
+    for (const option of nightOptions.value) {
+        const days = [];
+
+        for (const day of weekDays.value) {
+            const voters = [];
+
+            for (const vote of allVotes.value) {
+                if (vote.is_pass) continue;
+
+                const voteData = vote.data?.[day.date]?.night?.[option.id];
+                if (voteData?.checked) {
+                    const voterInfo = {
+                        name: getNickname(vote.user_id),
+                        timeStart: voteData.time_start || null,
+                        timeEnd: voteData.time_end || null,
+                    };
+                    voters.push(voterInfo);
+                }
+            }
+
+            days.push({
+                date: day.date,
+                dateText: day.dateText,
+                weekday: day.weekday,
+                voters,
+            });
+        }
+
+        result.push({
+            id: `night-${option.id}`,
+            name: `晚班 - ${option.name}`,
+            hasTimeRange: option.has_time_range,
+            days,
+        });
+    }
+
+    return result;
+});
+
+// 過濾後的本週統計
+const filteredWeeklyStats = computed(() => {
+    if (selectedStats.value.length === 0) {
+        return weeklyStats.value;
+    }
+    return weeklyStats.value.filter((option) =>
+        selectedStats.value.includes(option.id)
+    );
+});
+
+// 初始化週（從週二開始：二三四五六日一）
 function initWeek(date = null) {
     const targetDate = date ? $dayjs(date) : $dayjs();
-    // 取得該週的週一
-    const dayOfWeek = targetDate.day();
-    const monday = targetDate.subtract(
-        dayOfWeek === 0 ? 6 : dayOfWeek - 1,
-        'day'
-    );
-    weekStart.value = monday.format('YYYY-MM-DD');
+    // 取得該週的週二
+    const dayOfWeek = targetDate.day(); // 0=日, 1=一, 2=二, ...
+    const daysToSubtract = (dayOfWeek - 2 + 7) % 7; // 計算到週二要減幾天
+    const tuesday = targetDate.subtract(daysToSubtract, 'day');
+    weekStart.value = tuesday.format('YYYY-MM-DD');
 
-    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
+    const weekdays = ['二', '三', '四', '五', '六', '日', '一'];
     weekDays.value = [];
 
     for (let i = 0; i < 7; i++) {
-        const day = monday.add(i, 'day');
+        const day = tuesday.add(i, 'day');
         weekDays.value.push({
             date: day.format('YYYY-MM-DD'),
             dateText: day.format('MM/DD'),
@@ -658,6 +861,7 @@ function initWeek(date = null) {
 function prevWeek() {
     const prev = $dayjs(weekStart.value).subtract(7, 'day');
     initWeek(prev);
+    router.replace({ query: { date: weekStart.value } });
     loadData();
     setupRealtimeSubscription();
 }
@@ -665,6 +869,7 @@ function prevWeek() {
 // 本週
 function thisWeek() {
     initWeek();
+    router.replace({ query: {} });
     loadData();
     setupRealtimeSubscription();
 }
@@ -673,6 +878,7 @@ function thisWeek() {
 function nextWeek() {
     const next = $dayjs(weekStart.value).add(7, 'day');
     initWeek(next);
+    router.replace({ query: { date: weekStart.value } });
     loadData();
     setupRealtimeSubscription();
 }
@@ -681,6 +887,7 @@ function nextWeek() {
 function jumpToDate(date) {
     if (date) {
         initWeek($dayjs(date));
+        router.replace({ query: { date: weekStart.value } });
         loadData();
         setupRealtimeSubscription();
         jumpDate.value = null; // 清空選擇器
@@ -690,6 +897,24 @@ function jumpToDate(date) {
 // 打開日期選擇器
 function openDatePicker() {
     datePickerRef.value?.focus();
+}
+
+// 複製本週連結
+async function copyWeekLink() {
+    const url = `${window.location.origin}/vote?date=${weekStart.value}`;
+    try {
+        await navigator.clipboard.writeText(url);
+        Swal.fire({
+            html: `已複製連結<br><span style="font-size: 12px; color: #999; word-break: break-all;">${url}</span>`,
+            timer: 2000,
+            showConfirmButton: false,
+        });
+    } catch {
+        Swal.fire({
+            text: '複製失敗',
+            confirmButtonColor: '#b33a39',
+        });
+    }
 }
 
 // 載入投票選項
@@ -707,12 +932,10 @@ async function loadVoteOptions() {
 
 // 載入所有用戶
 async function loadUsers() {
-    const { data } = await supabase
-        .from('profiles')
-        .select('id, nickname, email, is_active');
-
-    if (data) {
-        allUsers.value = data;
+    try {
+        allUsers.value = await $fetch('/api/users/list');
+    } catch (error) {
+        console.error('載入用戶失敗:', error);
     }
 }
 
@@ -982,7 +1205,14 @@ onMounted(async () => {
     } = await supabase.auth.getUser();
     currentUserId.value = currentUser?.id;
 
-    initWeek();
+    // 檢查 URL 是否有指定日期
+    const dateParam = route.query.date;
+    if (dateParam && $dayjs(dateParam).isValid()) {
+        initWeek($dayjs(dateParam));
+    } else {
+        initWeek();
+    }
+
     await loadData();
     setupRealtimeSubscription();
 });
@@ -1129,7 +1359,7 @@ onUnmounted(() => {
     /* 沒有人投票時的 highlight 樣式 */
     &.no-votes {
         background: #fff8e6;
-        border-left: 3px solid #e6a23c;
+        // border-left: 3px solid #e6a23c;
         margin-left: -8px;
         padding-left: 8px;
         margin-right: -8px;
@@ -1274,9 +1504,102 @@ onUnmounted(() => {
             padding-left: 8px;
 
             .empty-item {
-                color: #e6a23c;
+                // color: #e6a23c;
                 line-height: 1.6;
                 text-align: left;
+            }
+        }
+    }
+
+    .weekly-stats {
+        flex-direction: column;
+        align-items: flex-start;
+
+        .empty-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+
+            .status-label {
+                margin-bottom: 0;
+            }
+
+            .el-button {
+                color: #6da2c2;
+                padding: 4px 8px;
+            }
+        }
+
+        .status-content {
+            width: 100%;
+            font-size: 14px;
+            color: #666;
+            margin-top: 12px;
+            text-align: left;
+            padding-left: 50%;
+        }
+
+        .stats-filter {
+            margin-bottom: 16px;
+
+            :deep(button) {
+                width: auto;
+            }
+        }
+
+        .stats-option {
+            margin-bottom: 20px;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        .stats-option-name {
+            font-weight: 600;
+            color: #b33a39;
+            font-size: 15px;
+            margin-bottom: 8px;
+            padding-bottom: 4px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .stats-days {
+            // 不需要額外 padding，已經由 status-content 的 padding-left: 50% 處理
+        }
+
+        .stats-day {
+            margin-bottom: 8px;
+
+            &:last-child {
+                margin-bottom: 0;
+            }
+        }
+
+        .stats-date {
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 2px;
+        }
+
+        .stats-voters {
+            padding-left: 8px;
+            line-height: 1.6;
+            color: #555;
+
+            .voter-item {
+                margin-bottom: 2px;
+            }
+
+            .voter-time {
+                color: #888;
+                font-size: 13px;
+                margin-left: 4px;
+            }
+
+            .no-voter {
+                color: #999;
             }
         }
     }

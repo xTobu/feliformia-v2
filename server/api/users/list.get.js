@@ -5,7 +5,6 @@ export default defineEventHandler(async () => {
     const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('id, nickname, is_active')
-        .neq('is_active', false)
 
     if (profilesError) {
         throw createError({ statusCode: 500, message: profilesError.message })
@@ -23,10 +22,11 @@ export default defineEventHandler(async () => {
         authData.users.map((u) => [u.id, u.email])
     )
 
-    return profiles
-        .map((record) => ({
-            recordId: record.id,
-            name: record.nickname || emailMap[record.id] || '未命名',
-        }))
-        .sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'))
-});
+    // 合併資料
+    return profiles.map((p) => ({
+        id: p.id,
+        nickname: p.nickname,
+        email: emailMap[p.id] || null,
+        is_active: p.is_active,
+    }))
+})
