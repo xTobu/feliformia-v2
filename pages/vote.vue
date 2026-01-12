@@ -461,16 +461,16 @@
                         <div
                             v-for="day in emptySlots"
                             :key="day.date"
-                            class="empty-day"
+                            class="day"
                         >
-                            <div class="empty-date">
+                            <div class="date">
                                 {{ day.dateText }} ({{ day.weekday }})
                             </div>
-                            <div class="empty-list">
+                            <div class="list">
                                 <div
                                     v-for="slot in day.slots"
                                     :key="slot"
-                                    class="empty-item"
+                                    class="item"
                                 >
                                     • {{ slot }}
                                 </div>
@@ -516,9 +516,9 @@
                             <div
                                 v-for="day in option.days"
                                 :key="day.date"
-                                class="stats-day"
+                                class="day"
                             >
-                                <div class="stats-date">
+                                <div class="date">
                                     {{ day.dateText }} ({{ day.weekday }})
                                 </div>
                                 <div class="stats-voters">
@@ -1413,6 +1413,8 @@ onUnmounted(() => {
     margin: 16px 0;
 }
 
+
+
 .vote-status {
     background: #f5f7f8;
     border-radius: 8px;
@@ -1426,7 +1428,86 @@ onUnmounted(() => {
     .status-row {
         display: flex;
         padding: 10px 0;
+        gap: 12px;
         border-top: 1px solid #e0e0e0;
+        flex-wrap: wrap;
+        align-items: flex-start;
+
+        .empty-header {
+            display: flex;
+            // justify-content: space-between;
+            align-items: center;
+            width: 100%;
+
+            .status-label {
+                margin-bottom: 0;
+                width: 75px;
+            }
+
+            .el-button {
+                color: #6da2c2;
+                padding: 4px 8px;
+                width: min-content;
+            }
+        }
+
+        .status-content {
+            width: 100%;
+            font-size: 14px;
+            color: #666;
+            text-align: left;
+            padding-left: 80px;
+            .stats-filter {
+                margin-bottom: 16px;
+                :deep(button) {
+                    width: auto;
+                }
+                :deep(.el-tag) {
+                    border-radius: 2px;
+                    height: 30px;
+                }
+            }
+            .stats-option-name {
+                font-weight: 600;
+                color: #b33a39;
+                font-size: 15px;
+                margin: 24px 0 8px;
+                padding-bottom: 8px;
+                border-bottom: 1px solid #e0e0e0;
+            }
+        }
+
+        .day {
+            margin-bottom: 12px;
+
+            &:last-child {
+                margin-bottom: 0;
+
+                .empty-spacer {
+                    display: none;
+                }
+            }
+        }
+
+        .empty-spacer {
+            height: 8px;
+            user-select: text;
+        }
+
+        .date {
+            font-weight: 500;
+            color: #555;
+            margin-bottom: 4px;
+        }
+
+        .list {
+            margin: 0;
+
+            .item {
+                line-height: 1.6;
+                text-align: left;
+            }
+        }
 
         &:first-of-type {
             border-top: none;
@@ -1445,163 +1526,122 @@ onUnmounted(() => {
         font-size: 14px;
         color: #666;
         line-height: 1.5;
+        text-align: left;
     }
 
-    .empty-slots {
-        flex-direction: column;
-        align-items: flex-start;
+    .stats-voters {
+        padding-left: 8px;
+        line-height: 1.6;
+        color: #555;
 
-        .empty-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-
-            .status-label {
-                margin-bottom: 0;
-            }
-
-            .el-button {
-                color: #6da2c2;
-                padding: 4px 8px;
-            }
-        }
-
-        .status-content {
-            width: 100%;
-            font-size: 14px;
-            color: #666;
-            margin-top: 12px;
-            text-align: left;
-            padding-left: 50%;
-        }
-
-        .empty-day {
-            margin-bottom: 4px;
-
-            &:last-child {
-                margin-bottom: 0;
-
-                .empty-spacer {
-                    display: none;
-                }
-            }
-        }
-
-        .empty-spacer {
-            height: 8px;
-            user-select: text;
-        }
-
-        .empty-date {
-            font-weight: 500;
-            color: #555;
-            margin-bottom: 4px;
-        }
-
-        .empty-list {
-            margin: 0;
-            padding-left: 8px;
-
-            .empty-item {
-                // color: #e6a23c;
-                line-height: 1.6;
-                text-align: left;
-            }
-        }
-    }
-
-    .weekly-stats {
-        flex-direction: column;
-        align-items: flex-start;
-
-        .empty-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            width: 100%;
-
-            .status-label {
-                margin-bottom: 0;
-            }
-
-            .el-button {
-                color: #6da2c2;
-                padding: 4px 8px;
-            }
-        }
-
-        .status-content {
-            width: 100%;
-            font-size: 14px;
-            color: #666;
-            margin-top: 12px;
-            text-align: left;
-            padding-left: 50%;
-        }
-
-        .stats-filter {
-            margin-bottom: 16px;
-
-            :deep(button) {
-                width: auto;
-            }
-        }
-
-        .stats-option {
-            margin-bottom: 20px;
-
-            &:last-child {
-                margin-bottom: 0;
-            }
-        }
-
-        .stats-option-name {
-            font-weight: 600;
-            color: #b33a39;
-            font-size: 15px;
-            margin-bottom: 8px;
-            padding-bottom: 4px;
-            border-bottom: 1px solid #e0e0e0;
-        }
-
-        .stats-days {
-            // 不需要額外 padding，已經由 status-content 的 padding-left: 50% 處理
-        }
-
-        .stats-day {
-            margin-bottom: 8px;
-
-            &:last-child {
-                margin-bottom: 0;
-            }
-        }
-
-        .stats-date {
-            font-weight: 500;
-            color: #555;
+        .voter-item {
             margin-bottom: 2px;
         }
 
-        .stats-voters {
-            padding-left: 8px;
-            line-height: 1.6;
-            color: #555;
+        .voter-time {
+            color: #888;
+            font-size: 13px;
+            margin-left: 4px;
+        }
 
-            .voter-item {
-                margin-bottom: 2px;
-            }
-
-            .voter-time {
-                color: #888;
-                font-size: 13px;
-                margin-left: 4px;
-            }
-
-            .no-voter {
-                color: #999;
-            }
+        .no-voter {
+            color: #999;
         }
     }
+
+
+    // .weekly-stats {
+    //     flex-direction: column;
+    //     align-items: flex-start;
+
+    //     .empty-header {
+    //         display: flex;
+    //         justify-content: space-between;
+    //         align-items: center;
+    //         width: 100%;
+
+    //         .status-label {
+    //             margin-bottom: 0;
+    //             width: 75px;
+    //         }
+
+    //         .el-button {
+    //             color: #6da2c2;
+    //             padding: 4px 8px;
+    //         }
+    //     }
+
+    //     .status-content {
+    //         width: 100%;
+    //         font-size: 14px;
+    //         color: #666;
+    //         margin-top: 12px;
+    //         text-align: left;
+    //         padding-left: 50%;
+    //     }
+
+    //     .stats-filter {
+    //         margin-bottom: 16px;
+
+    //         :deep(button) {
+    //             width: auto;
+    //         }
+    //     }
+
+    //     .stats-option {
+    //         margin-bottom: 20px;
+
+    //         &:last-child {
+    //             margin-bottom: 0;
+    //         }
+    //     }
+
+    //     .stats-option-name {
+    //         font-weight: 600;
+    //         color: #b33a39;
+    //         font-size: 15px;
+    //         margin-bottom: 8px;
+    //         padding-bottom: 4px;
+    //         border-bottom: 1px solid #e0e0e0;
+    //     }
+
+    //     .stats-days {
+    //         // 不需要額外 padding，已經由 status-content 的 padding-left: 50% 處理
+    //     }
+
+    //     .stats-day {
+    //         margin-bottom: 8px;
+
+    //         &:last-child {
+    //             margin-bottom: 0;
+    //         }
+    //     }
+
+    //     .stats-date {
+    //         font-weight: 500;
+    //         color: #555;
+    //         margin-bottom: 2px;
+    //     }
+
+    //     .stats-voters {
+    //         padding-left: 8px;
+    //         line-height: 1.6;
+    //         color: #555;
+
+    //         .voter-item {
+    //             margin-bottom: 2px;
+    //         }
+
+    //         .voter-time {
+    //             color: #888;
+    //             font-size: 13px;
+    //             margin-left: 4px;
+    //         }
+
+    //         .no-voter {
+    //             color: #999;
+    //         }
+    //     }
+    // }
 }
 </style>
