@@ -1,0 +1,17 @@
+name: Keep Supabase Project Active
+
+on:
+  schedule:
+    # 這會讓腳本在每週一、週四的凌晨 0:00 (UTC) 自動執行
+    - cron: '0 0 * * 1,4'
+  workflow_dispatch: # 允許您在 GitHub 介面上手動點擊按鈕來測試
+
+jobs:
+  ping_db:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send a request to Supabase
+        run: |
+          curl -i -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/regulars?select=count" \
+          -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
+          -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"
