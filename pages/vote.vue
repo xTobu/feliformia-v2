@@ -481,7 +481,7 @@
                     <span v-else>無</span>
                 </div>
             </div>
-            <div class="status-row weekly-stats">
+            <div class="status-row">
                 <div class="empty-header">
                     <div class="status-label">本週統計</div>
                     <el-button text @click="showWeeklyStats = !showWeeklyStats">
@@ -493,8 +493,6 @@
                         <el-select
                             v-model="selectedStats"
                             multiple
-                            collapse-tags
-                            collapse-tags-tooltip
                             placeholder="全部顯示"
                             clearable
                         >
@@ -835,16 +833,16 @@ const filteredWeeklyStats = computed(() => {
     );
 });
 
-// 初始化週（從週二開始：二三四五六日一）
+// 初始化週（從週一開始：一二三四五六日）
 function initWeek(date = null) {
     const targetDate = date ? $dayjs(date) : $dayjs();
-    // 取得該週的週二
+    // 取得該週的週一
     const dayOfWeek = targetDate.day(); // 0=日, 1=一, 2=二, ...
-    const daysToSubtract = (dayOfWeek - 1 + 7) % 7; // 計算到週二要減幾天
+    const daysToSubtract = (dayOfWeek - 1 + 7) % 7; // 計算到週一要減幾天
     const monday = targetDate.subtract(daysToSubtract, 'day');
     weekStart.value = monday.format('YYYY-MM-DD');
 
-    const weekdays = ['ㄧ','二', '三', '四', '五', '六', '日'];
+    const weekdays = ['一', '二', '三', '四', '五', '六', '日'];
     weekDays.value = [];
 
     for (let i = 0; i < 7; i++) {
@@ -1413,8 +1411,6 @@ onUnmounted(() => {
     margin: 16px 0;
 }
 
-
-
 .vote-status {
     background: #f5f7f8;
     border-radius: 8px;
@@ -1466,6 +1462,9 @@ onUnmounted(() => {
                     border-radius: 2px;
                     height: 30px;
                 }
+            }
+            :deep(.el-select__wrapper) {
+                height: auto;
             }
             .stats-option-name {
                 font-weight: 600;
@@ -1548,100 +1547,5 @@ onUnmounted(() => {
             color: #999;
         }
     }
-
-
-    // .weekly-stats {
-    //     flex-direction: column;
-    //     align-items: flex-start;
-
-    //     .empty-header {
-    //         display: flex;
-    //         justify-content: space-between;
-    //         align-items: center;
-    //         width: 100%;
-
-    //         .status-label {
-    //             margin-bottom: 0;
-    //             width: 75px;
-    //         }
-
-    //         .el-button {
-    //             color: #6da2c2;
-    //             padding: 4px 8px;
-    //         }
-    //     }
-
-    //     .status-content {
-    //         width: 100%;
-    //         font-size: 14px;
-    //         color: #666;
-    //         margin-top: 12px;
-    //         text-align: left;
-    //         padding-left: 50%;
-    //     }
-
-    //     .stats-filter {
-    //         margin-bottom: 16px;
-
-    //         :deep(button) {
-    //             width: auto;
-    //         }
-    //     }
-
-    //     .stats-option {
-    //         margin-bottom: 20px;
-
-    //         &:last-child {
-    //             margin-bottom: 0;
-    //         }
-    //     }
-
-    //     .stats-option-name {
-    //         font-weight: 600;
-    //         color: #b33a39;
-    //         font-size: 15px;
-    //         margin-bottom: 8px;
-    //         padding-bottom: 4px;
-    //         border-bottom: 1px solid #e0e0e0;
-    //     }
-
-    //     .stats-days {
-    //         // 不需要額外 padding，已經由 status-content 的 padding-left: 50% 處理
-    //     }
-
-    //     .stats-day {
-    //         margin-bottom: 8px;
-
-    //         &:last-child {
-    //             margin-bottom: 0;
-    //         }
-    //     }
-
-    //     .stats-date {
-    //         font-weight: 500;
-    //         color: #555;
-    //         margin-bottom: 2px;
-    //     }
-
-    //     .stats-voters {
-    //         padding-left: 8px;
-    //         line-height: 1.6;
-    //         color: #555;
-
-    //         .voter-item {
-    //             margin-bottom: 2px;
-    //         }
-
-    //         .voter-time {
-    //             color: #888;
-    //             font-size: 13px;
-    //             margin-left: 4px;
-    //         }
-
-    //         .no-voter {
-    //             color: #999;
-    //         }
-    //     }
-    // }
 }
 </style>
