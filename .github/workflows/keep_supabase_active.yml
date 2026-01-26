@@ -2,8 +2,8 @@ name: Keep Supabase Project Active
 
 on:
   schedule:
-    # 這會讓腳本在每週一、週四的凌晨 0:00 (UTC) 自動執行
-    - cron: '0 0 * * 1,4'
+    # 每天 UTC 09:00 執行，等同於台灣時間 17:00
+    - cron: '0 9 * * *'
   workflow_dispatch: # 允許您在 GitHub 介面上手動點擊按鈕來測試
 
 jobs:
