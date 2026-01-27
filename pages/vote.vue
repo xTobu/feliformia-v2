@@ -79,8 +79,7 @@
                                                 'morning',
                                                 option.id
                                             )
-                                        ">：{{ displayName }}
-                                            {{
+                                        ">：{{
                                                 getTimeValue(
                                                     day.date,
                                                     'morning',
@@ -96,7 +95,7 @@
                                                     option.id,
                                                     'end'
                                                 )
-                                            }}</template>
+                                            }} <span class="self-name">{{ displayName }}</span></template>
                                     </el-checkbox>
 
                                     <!-- 只有自己沒投時才顯示時間選擇器 -->
@@ -151,7 +150,9 @@
                                     'morning',
                                     option.id
                                 )" :key="idx" class="other-voter">
-                                    {{ voter }}
+                                    <span v-if="voter.timeStart" class="voter-time">{{ voter.timeStart }} → {{
+                                        voter.timeEnd }}</span>
+                                    <span class="voter-name">{{ voter.name }}</span>
                                 </div>
                             </template>
 
@@ -228,8 +229,7 @@
                                                 'night',
                                                 option.id
                                             )
-                                        ">：{{ displayName }}
-                                            {{
+                                        ">：{{
                                                 getTimeValue(
                                                     day.date,
                                                     'night',
@@ -245,7 +245,7 @@
                                                     option.id,
                                                     'end'
                                                 )
-                                            }}</template>
+                                            }} <span class="self-name">{{ displayName }}</span></template>
                                     </el-checkbox>
 
                                     <!-- 只有自己沒投時才顯示時間選擇器 -->
@@ -300,7 +300,9 @@
                                     'night',
                                     option.id
                                 )" :key="idx" class="other-voter">
-                                    {{ voter }}
+                                    <span v-if="voter.timeStart" class="voter-time">{{ voter.timeStart }} → {{
+                                        voter.timeEnd }}</span>
+                                    <span class="voter-name">{{ voter.name }}</span>
                                 </div>
                             </template>
 
@@ -410,13 +412,9 @@
                                 <div class="stats-voters">
                                     <template v-if="day.voters.length">
                                         <div v-for="voter in day.voters" :key="voter.name" class="voter-item">
-                                            • {{ voter.name
-                                            }}<span v-if="
-                                                voter.timeStart &&
-                                                voter.timeEnd
-                                            " class="voter-time">
-                                                {{ voter.timeStart }} →
-                                                {{ voter.timeEnd }}</span>
+                                            <span class="voter-time" v-if="voter.timeStart && voter.timeEnd">{{
+                                                voter.timeStart }} → {{ voter.timeEnd }}</span>
+                                            <span class="voter-name">{{ voter.name }}</span>
                                         </div>
                                     </template>
                                     <span v-else class="no-voter">無人投票</span>
@@ -645,6 +643,15 @@ const weeklyStats = computed(() => {
                 }
             }
 
+            // 按時間排序（有時間的選項）
+            if (option.has_time_range && voters.length > 0) {
+                voters.sort((a, b) => {
+                    const timeA = a.timeStart || '99:99';
+                    const timeB = b.timeStart || '99:99';
+                    return timeA.localeCompare(timeB);
+                });
+            }
+
             days.push({
                 date: day.date,
                 dateText: day.dateText,
@@ -680,6 +687,15 @@ const weeklyStats = computed(() => {
                     };
                     voters.push(voterInfo);
                 }
+            }
+
+            // 按時間排序（有時間的選項）
+            if (option.has_time_range && voters.length > 0) {
+                voters.sort((a, b) => {
+                    const timeA = a.timeStart || '99:99';
+                    const timeB = b.timeStart || '99:99';
+                    return timeA.localeCompare(timeB);
+                });
             }
 
             days.push({
@@ -851,7 +867,7 @@ function isChecked(date, shift, optionId) {
 
 // 取得其他人的投票（不含自己，不含 Pass 的人）
 function getOtherVoters(date, shift, optionId) {
-    const voters = [];
+    const votersData = [];
 
     for (const vote of allVotes.value) {
         // 跳過自己
@@ -862,19 +878,22 @@ function getOtherVoters(date, shift, optionId) {
         const voteData = vote.data?.[date]?.[shift]?.[optionId];
         if (voteData?.checked) {
             const name = getNickname(vote.user_id);
-
-            // 如果有時間，加上時間資訊
-            if (voteData.time_start && voteData.time_end) {
-                voters.push(
-                    `${name} ${voteData.time_start} → ${voteData.time_end}`
-                );
-            } else {
-                voters.push(name);
-            }
+            votersData.push({
+                name,
+                timeStart: voteData.time_start || null,
+                timeEnd: voteData.time_end || null,
+            });
         }
     }
 
-    return voters;
+    // 按開始時間排序
+    votersData.sort((a, b) => {
+        const timeA = a.timeStart || '99:99';
+        const timeB = b.timeStart || '99:99';
+        return timeA.localeCompare(timeB);
+    });
+
+    return votersData;
 }
 
 // 取得所有投票者文字（用於 checkbox 旁邊顯示，不含 Pass 的人）
@@ -1254,12 +1273,27 @@ onUnmounted(() => {
 }
 
 .other-voter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     padding: 2px 0;
-    font-size: 14px;
-    font-weight: 500;
-    color: #666;
     text-align: left;
     margin-left: 68px;
+
+    .voter-time {
+        color: #000;
+        font-size: 14px;
+    }
+
+    .voter-name {
+        color: #666;
+        font-size: 13px;
+    }
+}
+
+.self-name {
+    color: #666;
+    font-size: 13px;
 }
 
 .time-inputs {
@@ -1416,16 +1450,22 @@ onUnmounted(() => {
     .stats-voters {
         padding-left: 8px;
         line-height: 1.6;
-        color: #555;
 
         .voter-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             margin-bottom: 2px;
         }
 
         .voter-time {
-            color: #888;
+            color: #000;
+            font-size: 14px;
+        }
+
+        .voter-name {
+            color: #666;
             font-size: 13px;
-            margin-left: 4px;
         }
 
         .no-voter {
