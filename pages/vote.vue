@@ -16,26 +16,23 @@
             <button @click="thisWeek" class="nav-btn today">本週</button>
             <button @click="nextWeek" class="nav-btn">下週 &gt;</button>
             <button @click="openDatePicker" class="nav-btn icon-btn">
-                <el-icon><Calendar /></el-icon>
+                <el-icon>
+                    <Calendar />
+                </el-icon>
             </button>
             <button @click="copyWeekLink" class="nav-btn icon-btn">
-                <el-icon><Share /></el-icon>
+                <el-icon>
+                    <Share />
+                </el-icon>
             </button>
         </div>
-        <el-date-picker
-            ref="datePickerRef"
-            v-model="jumpDate"
-            type="date"
-            value-format="YYYY-MM-DD"
-            style="
+        <el-date-picker ref="datePickerRef" v-model="jumpDate" type="date" value-format="YYYY-MM-DD" style="
                 position: absolute;
                 opacity: 0;
                 pointer-events: none;
                 width: 0;
                 height: 0;
-            "
-            @change="jumpToDate"
-        />
+            " @change="jumpToDate" />
 
         <!-- Loading -->
         <div v-if="loading" class="loading">載入中...</div>
@@ -51,30 +48,22 @@
                 <div class="shift-section">
                     <div class="shift-label">早班</div>
                     <div class="shift-options">
-                        <div
-                            v-for="option in morningOptions"
-                            :key="'morning-' + option.id"
-                            class="option-row"
-                            :class="{
-                                'no-votes': hasNoVotes(
-                                    day.date,
-                                    'morning',
-                                    option.id
-                                ),
-                            }"
-                        >
+                        <div v-for="option in morningOptions" :key="'morning-' + option.id" class="option-row" :class="{
+                            'no-votes': hasNoVotes(
+                                day.date,
+                                'morning',
+                                option.id
+                            ),
+                        }">
                             <!-- 有時間選擇的選項（如醫療） -->
                             <template v-if="option.has_time_range">
                                 <div class="option-main">
-                                    <el-checkbox
-                                        :model-value="
-                                            isChecked(
-                                                day.date,
-                                                'morning',
-                                                option.id
-                                            )
-                                        "
-                                        @change="
+                                    <el-checkbox :model-value="isChecked(
+                                        day.date,
+                                        'morning',
+                                        option.id
+                                    )
+                                        " @change="
                                             (val) =>
                                                 toggleOption(
                                                     day.date,
@@ -82,19 +71,15 @@
                                                     option,
                                                     val
                                                 )
-                                        "
-                                    >
+                                        ">
                                         {{ option.name
-                                        }}<template
-                                            v-if="
-                                                isChecked(
-                                                    day.date,
-                                                    'morning',
-                                                    option.id
-                                                )
-                                            "
-                                            >：{{ displayName }}
-                                            {{
+                                        }}<template v-if="
+                                            isChecked(
+                                                day.date,
+                                                'morning',
+                                                option.id
+                                            )
+                                        ">：{{
                                                 getTimeValue(
                                                     day.date,
                                                     'morning',
@@ -110,31 +95,24 @@
                                                     option.id,
                                                     'end'
                                                 )
-                                            }}</template
-                                        >
+                                            }} <span class="self-name">{{ displayName }}</span></template>
                                     </el-checkbox>
 
                                     <!-- 只有自己沒投時才顯示時間選擇器 -->
-                                    <div
-                                        v-if="
-                                            !isChecked(
-                                                day.date,
-                                                'morning',
-                                                option.id
-                                            )
-                                        "
-                                        class="time-inputs"
-                                    >
-                                        <el-time-select
-                                            :model-value="
-                                                getTimeValue(
-                                                    day.date,
-                                                    'morning',
-                                                    option.id,
-                                                    'start'
-                                                )
-                                            "
-                                            @update:model-value="
+                                    <div v-if="
+                                        !isChecked(
+                                            day.date,
+                                            'morning',
+                                            option.id
+                                        )
+                                    " class="time-inputs">
+                                        <el-time-select :model-value="getTimeValue(
+                                            day.date,
+                                            'morning',
+                                            option.id,
+                                            'start'
+                                        )
+                                            " @update:model-value="
                                                 (val) =>
                                                     setTimeSelectValue(
                                                         day.date,
@@ -143,24 +121,16 @@
                                                         'start',
                                                         val
                                                     )
-                                            "
-                                            prefix-icon=""
-                                            start="06:00"
-                                            step="00:15"
-                                            end="23:30"
-                                            placeholder="開始時間"
-                                        />
+                                            " prefix-icon="" start="06:00" step="00:15" end="23:30"
+                                            placeholder="開始時間" />
                                         <span>→</span>
-                                        <el-time-select
-                                            :model-value="
-                                                getTimeValue(
-                                                    day.date,
-                                                    'morning',
-                                                    option.id,
-                                                    'end'
-                                                )
-                                            "
-                                            @update:model-value="
+                                        <el-time-select :model-value="getTimeValue(
+                                            day.date,
+                                            'morning',
+                                            option.id,
+                                            'end'
+                                        )
+                                            " @update:model-value="
                                                 (val) =>
                                                     setTimeSelectValue(
                                                         day.date,
@@ -169,42 +139,32 @@
                                                         'end',
                                                         val
                                                     )
-                                            "
-                                            prefix-icon=""
-                                            start="06:00"
-                                            step="00:15"
-                                            end="23:30"
-                                            placeholder="結束時間"
-                                        />
+                                            " prefix-icon="" start="06:00" step="00:15" end="23:30"
+                                            placeholder="結束時間" />
                                     </div>
                                 </div>
 
                                 <!-- 其他人的投票（分行顯示） -->
-                                <div
-                                    v-for="(voter, idx) in getOtherVoters(
-                                        day.date,
-                                        'morning',
-                                        option.id
-                                    )"
-                                    :key="idx"
-                                    class="other-voter"
-                                >
-                                    {{ voter }}
+                                <div v-for="(voter, idx) in getOtherVoters(
+                                    day.date,
+                                    'morning',
+                                    option.id
+                                )" :key="idx" class="other-voter">
+                                    <span v-if="voter.timeStart" class="voter-time">{{ voter.timeStart }} → {{
+                                        voter.timeEnd }}</span>
+                                    <span class="voter-name">{{ voter.name }}</span>
                                 </div>
                             </template>
 
                             <!-- 一般選項（灌食、值班等） -->
                             <template v-else>
                                 <div class="option-main">
-                                    <el-checkbox
-                                        :model-value="
-                                            isChecked(
-                                                day.date,
-                                                'morning',
-                                                option.id
-                                            )
-                                        "
-                                        @change="
+                                    <el-checkbox :model-value="isChecked(
+                                        day.date,
+                                        'morning',
+                                        option.id
+                                    )
+                                        " @change="
                                             (val) =>
                                                 toggleOption(
                                                     day.date,
@@ -212,25 +172,21 @@
                                                     option,
                                                     val
                                                 )
-                                        "
-                                    >
+                                        ">
                                         {{ option.name
-                                        }}<template
-                                            v-if="
+                                        }}<template v-if="
+                                            getAllVotersText(
+                                                day.date,
+                                                'morning',
+                                                option
+                                            )
+                                        ">：{{
                                                 getAllVotersText(
                                                     day.date,
                                                     'morning',
                                                     option
                                                 )
-                                            "
-                                            >：{{
-                                                getAllVotersText(
-                                                    day.date,
-                                                    'morning',
-                                                    option
-                                                )
-                                            }}</template
-                                        >
+                                            }}</template>
                                     </el-checkbox>
                                 </div>
                             </template>
@@ -242,30 +198,22 @@
                 <div class="shift-section">
                     <div class="shift-label">晚班</div>
                     <div class="shift-options">
-                        <div
-                            v-for="option in nightOptions"
-                            :key="'night-' + option.id"
-                            class="option-row"
-                            :class="{
-                                'no-votes': hasNoVotes(
-                                    day.date,
-                                    'night',
-                                    option.id
-                                ),
-                            }"
-                        >
+                        <div v-for="option in nightOptions" :key="'night-' + option.id" class="option-row" :class="{
+                            'no-votes': hasNoVotes(
+                                day.date,
+                                'night',
+                                option.id
+                            ),
+                        }">
                             <!-- 有時間選擇的選項（如醫療） -->
                             <template v-if="option.has_time_range">
                                 <div class="option-main">
-                                    <el-checkbox
-                                        :model-value="
-                                            isChecked(
-                                                day.date,
-                                                'night',
-                                                option.id
-                                            )
-                                        "
-                                        @change="
+                                    <el-checkbox :model-value="isChecked(
+                                        day.date,
+                                        'night',
+                                        option.id
+                                    )
+                                        " @change="
                                             (val) =>
                                                 toggleOption(
                                                     day.date,
@@ -273,19 +221,15 @@
                                                     option,
                                                     val
                                                 )
-                                        "
-                                    >
+                                        ">
                                         {{ option.name
-                                        }}<template
-                                            v-if="
-                                                isChecked(
-                                                    day.date,
-                                                    'night',
-                                                    option.id
-                                                )
-                                            "
-                                            >：{{ displayName }}
-                                            {{
+                                        }}<template v-if="
+                                            isChecked(
+                                                day.date,
+                                                'night',
+                                                option.id
+                                            )
+                                        ">：{{
                                                 getTimeValue(
                                                     day.date,
                                                     'night',
@@ -301,31 +245,24 @@
                                                     option.id,
                                                     'end'
                                                 )
-                                            }}</template
-                                        >
+                                            }} <span class="self-name">{{ displayName }}</span></template>
                                     </el-checkbox>
 
                                     <!-- 只有自己沒投時才顯示時間選擇器 -->
-                                    <div
-                                        v-if="
-                                            !isChecked(
-                                                day.date,
-                                                'night',
-                                                option.id
-                                            )
-                                        "
-                                        class="time-inputs"
-                                    >
-                                        <el-time-select
-                                            :model-value="
-                                                getTimeValue(
-                                                    day.date,
-                                                    'night',
-                                                    option.id,
-                                                    'start'
-                                                )
-                                            "
-                                            @update:model-value="
+                                    <div v-if="
+                                        !isChecked(
+                                            day.date,
+                                            'night',
+                                            option.id
+                                        )
+                                    " class="time-inputs">
+                                        <el-time-select :model-value="getTimeValue(
+                                            day.date,
+                                            'night',
+                                            option.id,
+                                            'start'
+                                        )
+                                            " @update:model-value="
                                                 (val) =>
                                                     setTimeSelectValue(
                                                         day.date,
@@ -334,24 +271,16 @@
                                                         'start',
                                                         val
                                                     )
-                                            "
-                                            prefix-icon=""
-                                            start="06:00"
-                                            step="00:15"
-                                            end="23:30"
-                                            placeholder="開始時間"
-                                        />
+                                            " prefix-icon="" start="06:00" step="00:15" end="23:30"
+                                            placeholder="開始時間" />
                                         <span>→</span>
-                                        <el-time-select
-                                            :model-value="
-                                                getTimeValue(
-                                                    day.date,
-                                                    'night',
-                                                    option.id,
-                                                    'end'
-                                                )
-                                            "
-                                            @update:model-value="
+                                        <el-time-select :model-value="getTimeValue(
+                                            day.date,
+                                            'night',
+                                            option.id,
+                                            'end'
+                                        )
+                                            " @update:model-value="
                                                 (val) =>
                                                     setTimeSelectValue(
                                                         day.date,
@@ -360,42 +289,32 @@
                                                         'end',
                                                         val
                                                     )
-                                            "
-                                            prefix-icon=""
-                                            start="06:00"
-                                            step="00:15"
-                                            end="23:30"
-                                            placeholder="結束時間"
-                                        />
+                                            " prefix-icon="" start="06:00" step="00:15" end="23:30"
+                                            placeholder="結束時間" />
                                     </div>
                                 </div>
 
                                 <!-- 其他人的投票（分行顯示） -->
-                                <div
-                                    v-for="(voter, idx) in getOtherVoters(
-                                        day.date,
-                                        'night',
-                                        option.id
-                                    )"
-                                    :key="idx"
-                                    class="other-voter"
-                                >
-                                    {{ voter }}
+                                <div v-for="(voter, idx) in getOtherVoters(
+                                    day.date,
+                                    'night',
+                                    option.id
+                                )" :key="idx" class="other-voter">
+                                    <span v-if="voter.timeStart" class="voter-time">{{ voter.timeStart }} → {{
+                                        voter.timeEnd }}</span>
+                                    <span class="voter-name">{{ voter.name }}</span>
                                 </div>
                             </template>
 
                             <!-- 一般選項（灌食、值班等） -->
                             <template v-else>
                                 <div class="option-main">
-                                    <el-checkbox
-                                        :model-value="
-                                            isChecked(
-                                                day.date,
-                                                'night',
-                                                option.id
-                                            )
-                                        "
-                                        @change="
+                                    <el-checkbox :model-value="isChecked(
+                                        day.date,
+                                        'night',
+                                        option.id
+                                    )
+                                        " @change="
                                             (val) =>
                                                 toggleOption(
                                                     day.date,
@@ -403,25 +322,21 @@
                                                     option,
                                                     val
                                                 )
-                                        "
-                                    >
+                                        ">
                                         {{ option.name
-                                        }}<template
-                                            v-if="
+                                        }}<template v-if="
+                                            getAllVotersText(
+                                                day.date,
+                                                'night',
+                                                option
+                                            )
+                                        ">：{{
                                                 getAllVotersText(
                                                     day.date,
                                                     'night',
                                                     option
                                                 )
-                                            "
-                                            >：{{
-                                                getAllVotersText(
-                                                    day.date,
-                                                    'night',
-                                                    option
-                                                )
-                                            }}</template
-                                        >
+                                            }}</template>
                                     </el-checkbox>
                                 </div>
                             </template>
@@ -458,20 +373,12 @@
                 </div>
                 <div v-show="showEmptySlots" class="status-content">
                     <template v-if="emptySlots.length">
-                        <div
-                            v-for="day in emptySlots"
-                            :key="day.date"
-                            class="day"
-                        >
+                        <div v-for="day in emptySlots" :key="day.date" class="day">
                             <div class="date">
                                 {{ day.dateText }} ({{ day.weekday }})
                             </div>
                             <div class="list">
-                                <div
-                                    v-for="slot in day.slots"
-                                    :key="slot"
-                                    class="item"
-                                >
+                                <div v-for="slot in day.slots" :key="slot" class="item">
                                     • {{ slot }}
                                 </div>
                             </div>
@@ -490,58 +397,27 @@
                 </div>
                 <div v-show="showWeeklyStats" class="status-content">
                     <div class="stats-filter">
-                        <el-select
-                            v-model="selectedStats"
-                            multiple
-                            placeholder="全部顯示"
-                            clearable
-                        >
-                            <el-option
-                                v-for="option in weeklyStats"
-                                :key="option.id"
-                                :label="option.name"
-                                :value="option.id"
-                            />
+                        <el-select v-model="selectedStats" multiple placeholder="全部顯示" clearable>
+                            <el-option v-for="option in weeklyStats" :key="option.id" :label="option.name"
+                                :value="option.id" />
                         </el-select>
                     </div>
-                    <div
-                        v-for="option in filteredWeeklyStats"
-                        :key="option.id"
-                        class="stats-option"
-                    >
+                    <div v-for="option in filteredWeeklyStats" :key="option.id" class="stats-option">
                         <div class="stats-option-name">{{ option.name }}</div>
                         <div class="stats-days">
-                            <div
-                                v-for="day in option.days"
-                                :key="day.date"
-                                class="day"
-                            >
+                            <div v-for="day in option.days" :key="day.date" class="day">
                                 <div class="date">
                                     {{ day.dateText }} ({{ day.weekday }})
                                 </div>
                                 <div class="stats-voters">
                                     <template v-if="day.voters.length">
-                                        <div
-                                            v-for="voter in day.voters"
-                                            :key="voter.name"
-                                            class="voter-item"
-                                        >
-                                            • {{ voter.name
-                                            }}<span
-                                                v-if="
-                                                    voter.timeStart &&
-                                                    voter.timeEnd
-                                                "
-                                                class="voter-time"
-                                            >
-                                                {{ voter.timeStart }} →
-                                                {{ voter.timeEnd }}</span
-                                            >
+                                        <div v-for="voter in day.voters" :key="voter.name" class="voter-item">
+                                            <span class="voter-time" v-if="voter.timeStart && voter.timeEnd">{{
+                                                voter.timeStart }} → {{ voter.timeEnd }}</span>
+                                            <span class="voter-name">{{ voter.name }}</span>
                                         </div>
                                     </template>
-                                    <span v-else class="no-voter"
-                                        >無人投票</span
-                                    >
+                                    <span v-else class="no-voter">無人投票</span>
                                 </div>
                             </div>
                         </div>
@@ -767,6 +643,15 @@ const weeklyStats = computed(() => {
                 }
             }
 
+            // 按時間排序（有時間的選項）
+            if (option.has_time_range && voters.length > 0) {
+                voters.sort((a, b) => {
+                    const timeA = a.timeStart || '99:99';
+                    const timeB = b.timeStart || '99:99';
+                    return timeA.localeCompare(timeB);
+                });
+            }
+
             days.push({
                 date: day.date,
                 dateText: day.dateText,
@@ -802,6 +687,15 @@ const weeklyStats = computed(() => {
                     };
                     voters.push(voterInfo);
                 }
+            }
+
+            // 按時間排序（有時間的選項）
+            if (option.has_time_range && voters.length > 0) {
+                voters.sort((a, b) => {
+                    const timeA = a.timeStart || '99:99';
+                    const timeB = b.timeStart || '99:99';
+                    return timeA.localeCompare(timeB);
+                });
             }
 
             days.push({
@@ -973,7 +867,7 @@ function isChecked(date, shift, optionId) {
 
 // 取得其他人的投票（不含自己，不含 Pass 的人）
 function getOtherVoters(date, shift, optionId) {
-    const voters = [];
+    const votersData = [];
 
     for (const vote of allVotes.value) {
         // 跳過自己
@@ -984,19 +878,22 @@ function getOtherVoters(date, shift, optionId) {
         const voteData = vote.data?.[date]?.[shift]?.[optionId];
         if (voteData?.checked) {
             const name = getNickname(vote.user_id);
-
-            // 如果有時間，加上時間資訊
-            if (voteData.time_start && voteData.time_end) {
-                voters.push(
-                    `${name} ${voteData.time_start} → ${voteData.time_end}`
-                );
-            } else {
-                voters.push(name);
-            }
+            votersData.push({
+                name,
+                timeStart: voteData.time_start || null,
+                timeEnd: voteData.time_end || null,
+            });
         }
     }
 
-    return voters;
+    // 按開始時間排序
+    votersData.sort((a, b) => {
+        const timeA = a.timeStart || '99:99';
+        const timeB = b.timeStart || '99:99';
+        return timeA.localeCompare(timeB);
+    });
+
+    return votersData;
 }
 
 // 取得所有投票者文字（用於 checkbox 旁邊顯示，不含 Pass 的人）
@@ -1326,7 +1223,7 @@ onUnmounted(() => {
 }
 
 /* 早班和晚班之間的分隔線 */
-.shift-section + .shift-section {
+.shift-section+.shift-section {
     border-top: 1px solid #eee;
 }
 
@@ -1376,12 +1273,27 @@ onUnmounted(() => {
 }
 
 .other-voter {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     padding: 2px 0;
-    font-size: 14px;
-    font-weight: 500;
-    color: #666;
     text-align: left;
     margin-left: 68px;
+
+    .voter-time {
+        color: #000;
+        font-size: 14px;
+    }
+
+    .voter-name {
+        color: #666;
+        font-size: 13px;
+    }
+}
+
+.self-name {
+    color: #666;
+    font-size: 13px;
 }
 
 .time-inputs {
@@ -1393,11 +1305,13 @@ onUnmounted(() => {
     span {
         color: #999;
     }
+
     :deep(.el-select__wrapper) {
         justify-content: start;
         font-size: 12px;
         height: 40px;
         padding: 0px 6px 0 8px;
+
         .el-select__prefix {
             display: none;
         }
@@ -1453,19 +1367,24 @@ onUnmounted(() => {
             color: #666;
             text-align: left;
             padding-left: 80px;
+
             .stats-filter {
                 margin-bottom: 16px;
+
                 :deep(button) {
                     width: auto;
                 }
+
                 :deep(.el-tag) {
                     border-radius: 2px;
                     height: 30px;
                 }
             }
+
             :deep(.el-select__wrapper) {
                 height: auto;
             }
+
             .stats-option-name {
                 font-weight: 600;
                 color: #b33a39;
@@ -1531,16 +1450,22 @@ onUnmounted(() => {
     .stats-voters {
         padding-left: 8px;
         line-height: 1.6;
-        color: #555;
 
         .voter-item {
+            display: flex;
+            align-items: center;
+            gap: 6px;
             margin-bottom: 2px;
         }
 
         .voter-time {
-            color: #888;
+            color: #000;
+            font-size: 14px;
+        }
+
+        .voter-name {
+            color: #666;
             font-size: 13px;
-            margin-left: 4px;
         }
 
         .no-voter {
