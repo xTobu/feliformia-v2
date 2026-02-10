@@ -490,12 +490,10 @@ function subscribeToRealtime(recordId) {
                 filter: `id=eq.${recordId}`,
             },
             (payload) => {
-                console.log('Realtime update:', payload);
                 if (payload.new) {
                     // 是自己的更新就忽略
                     const currentUserId = getUserId();
                     if (payload.new.updated_by === currentUserId) {
-                        console.log('忽略自己的更新');
                         return;
                     }
 
@@ -513,7 +511,6 @@ function subscribeToRealtime(recordId) {
             }
         )
         .subscribe((status) => {
-            console.log('Realtime status:', status);
         });
 }
 
@@ -580,9 +577,22 @@ async function ManualNotifyLine() {
 function handleBeforeUnload(e) {
     if (isPending.value) {
         e.preventDefault();
-        e.returnValue = '';
+        e.returnValue = '你有未儲存的變更，確定要離開嗎？';
+        return e.returnValue;
     }
 }
+
+// Vue Router 導航離開前警告（手機滑動返回）
+onBeforeRouteLeave((to, from, next) => {
+    if (isPending.value) {
+        const answer = window.confirm('你有未儲存的變更，確定要離開嗎？');
+        if (!answer) {
+            next(false);
+            return;
+        }
+    }
+    next();
+});
 
 onMounted(async () => {
     window.addEventListener('beforeunload', handleBeforeUnload);
