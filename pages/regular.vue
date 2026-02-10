@@ -167,8 +167,7 @@
                         v-model="formData.note"
                         :disabled="isDisabled"
                         placeholder="額外狀況回報"
-                        @input="isPending = true"
-                        @change="onAutoSave"
+                        @input="onAutoSave"
                     />
                 </div>
 
