@@ -283,6 +283,7 @@ const saveStatus = ref('success');
 const lastUpdatedAt = ref(null);
 const lastSavedAt = ref(null);
 const realtimeChannel = ref(null);
+const isPending = ref(false); // 追蹤是否有待儲存的變更
 
 const shiftList = [
     { value: 'morning', label: '早班' },
@@ -346,6 +347,7 @@ const autoSave = debounce(UpdateRegular, 300);
 
 function onAutoSave() {
     if (formData.value.recordId) {
+        isPending.value = true;
         autoSave();
     }
 }
@@ -463,9 +465,11 @@ async function UpdateRegular() {
 
         saveStatus.value = 'success';
         lastSavedAt.value = new Date();
+        isPending.value = false;
     } catch (e) {
         console.error('UpdateRegular error:', e);
         saveStatus.value = 'error';
+        isPending.value = false;
     }
 }
 
@@ -486,10 +490,12 @@ function subscribeToRealtime(recordId) {
                 filter: `id=eq.${recordId}`,
             },
             (payload) => {
+                console.log('Realtime update:', payload);
                 if (payload.new) {
                     // 是自己的更新就忽略
                     const currentUserId = getUserId();
                     if (payload.new.updated_by === currentUserId) {
+                        console.log('忽略自己的更新');
                         return;
                     }
 
@@ -570,7 +576,17 @@ async function ManualNotifyLine() {
 }
 
 // Lifecycle
+// 頁面離開前警告
+function handleBeforeUnload(e) {
+    if (isPending.value) {
+        e.preventDefault();
+        e.returnValue = '';
+    }
+}
+
 onMounted(async () => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
     try {
         InitDateAndShift();
         await Promise.all([InitMemberList(), InitRegular()]);
@@ -582,6 +598,13 @@ onMounted(async () => {
         });
     } finally {
         loading.value = false;
+    }
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    if (realtimeChannel.value) {
+        supabase.removeChannel(realtimeChannel.value);
     }
 });
 
