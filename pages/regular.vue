@@ -167,6 +167,7 @@
                         v-model="formData.note"
                         :disabled="isDisabled"
                         placeholder="額外狀況回報"
+                        @input="isPending = true"
                         @change="onAutoSave"
                     />
                 </div>
@@ -346,8 +347,8 @@ const disabledDate = (time) => {
 const autoSave = debounce(UpdateRegular, 300);
 
 function onAutoSave() {
+    isPending.value = true;
     if (formData.value.recordId) {
-        isPending.value = true;
         autoSave();
     }
 }
@@ -510,8 +511,7 @@ function subscribeToRealtime(recordId) {
                 }
             }
         )
-        .subscribe((status) => {
-        });
+        .subscribe();
 }
 
 async function Submit() {

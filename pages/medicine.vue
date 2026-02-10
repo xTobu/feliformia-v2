@@ -81,6 +81,7 @@
                         v-model="formData.note"
                         :disabled="isDisabled"
                         placeholder="額外狀況回報"
+                        @input="isPending = true"
                         @change="onAutoSave"
                     />
                 </div>
@@ -264,8 +265,8 @@ function disableShift(fromShift) {
 const autoSave = debounce(UpdateMedicine, 800);
 
 function onAutoSave() {
+    isPending.value = true;
     if (formData.value.recordId) {
-        isPending.value = true;
         autoSave();
     }
 }
@@ -423,11 +424,7 @@ function subscribeToRealtime(recordId) {
                 }
             }
         )
-        .subscribe((status, err) => {
-            if (err) {
-                console.error('Medicine Realtime error:', err);
-            }
-        });
+        .subscribe();
 }
 
 async function Submit() {
