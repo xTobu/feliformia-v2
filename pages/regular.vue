@@ -257,7 +257,7 @@
 </template>
 
 <script setup>
-import { debounce, isEqual } from 'lodash-es';
+import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
 import FloatButton from '~/components/FloatButton.vue';
 
@@ -274,7 +274,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
-const { nickname } = useProfile();
+const { nickname, getUserId } = useProfile();
 
 // State
 const loading = ref(true);
@@ -486,43 +486,28 @@ function subscribeToRealtime(recordId) {
                 filter: `id=eq.${recordId}`,
             },
             (payload) => {
-                console.log('Realtime update:', payload);
                 if (payload.new) {
-                    const newData = {
-                        recordId: payload.new.id,
-                        date: new Date(payload.new.date),
-                        shift: payload.new.shift,
-                        cats:
-                            typeof payload.new.cats === 'string'
-                                ? JSON.parse(payload.new.cats)
-                                : payload.new.cats,
-                        note: payload.new.note,
-                        member: payload.new.member,
-                    };
-
-                    const oldData = {
-                        recordId: formData.value.recordId,
-                        date: formData.value.date,
-                        shift: formData.value.shift,
-                        cats: formData.value.cats,
-                        note: formData.value.note,
-                        member: formData.value.member,
-                    };
-
-                    if (!isEqual(oldData, newData)) {
-                        formData.value.recordId = newData.recordId;
-                        formData.value.date = newData.date;
-                        formData.value.shift = newData.shift;
-                        formData.value.cats = newData.cats;
-                        formData.value.note = newData.note;
-                        formData.value.member = newData.member;
-                        lastUpdatedAt.value = new Date();
+                    // 是自己的更新就忽略
+                    const currentUserId = getUserId();
+                    if (payload.new.updated_by === currentUserId) {
+                        return;
                     }
+
+                    // 別人的更新，直接套用
+                    const newCats =
+                        typeof payload.new.cats === 'string'
+                            ? JSON.parse(payload.new.cats)
+                            : payload.new.cats;
+
+                    formData.value.cats = newCats;
+                    formData.value.note = payload.new.note;
+                    formData.value.member = payload.new.member;
+                    lastUpdatedAt.value = new Date();
                 }
             }
         )
         .subscribe((status) => {
-            console.log('Realtime status:', status); // 加 log 檢查
+            console.log('Realtime status:', status);
         });
 }
 

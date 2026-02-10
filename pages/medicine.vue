@@ -172,7 +172,7 @@
 </template>
 
 <script setup>
-import { debounce, isEqual } from 'lodash-es';
+import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
 import FloatButton from '~/components/FloatButton.vue';
 
@@ -189,7 +189,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
-const { nickname } = useProfile();
+const { nickname, getUserId } = useProfile();
 
 // State
 const loading = ref(true);
@@ -401,8 +401,14 @@ function subscribeToRealtime(recordId) {
                 filter: `id=eq.${recordId}`,
             },
             (payload) => {
-                console.log('Medicine Realtime update:', payload);
                 if (payload.new) {
+                    // 是自己的更新就忽略
+                    const currentUserId = getUserId();
+                    if (payload.new.updated_by === currentUserId) {
+                        return;
+                    }
+
+                    // 別人的更新，直接套用
                     const newCats =
                         typeof payload.new.cats === 'string'
                             ? JSON.parse(payload.new.cats)
