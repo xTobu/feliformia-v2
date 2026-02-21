@@ -346,9 +346,6 @@
             </div>
         </div>
 
-        <!-- 提示 -->
-        <p class="medical-hint">★ 針劑班：皮下/胰島素</p>
-
         <!-- 值班概況 -->
         <div class="vote-status">
             <h2>值班概況</h2>
