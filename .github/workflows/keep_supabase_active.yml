@@ -1,0 +1,17 @@
+name: Keep Supabase Project Active
+
+on:
+  schedule:
+    # 每天 UTC 09:00 執行，等同於台灣時間 17:00
+    - cron: '0 9 * * *'
+  workflow_dispatch: # 允許您在 GitHub 介面上手動點擊按鈕來測試
+
+jobs:
+  ping_db:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send a request to Supabase
+        run: |
+          curl -i -X GET "${{ secrets.SUPABASE_URL }}/rest/v1/regulars?select=count" \
+          -H "apikey: ${{ secrets.SUPABASE_KEY }}" \
+          -H "Authorization: Bearer ${{ secrets.SUPABASE_KEY }}"

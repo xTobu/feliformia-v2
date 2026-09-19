@@ -81,7 +81,7 @@
                         v-model="formData.note"
                         :disabled="isDisabled"
                         placeholder="額外狀況回報"
-                        @change="onAutoSave"
+                        @input="onAutoSave"
                     />
                 </div>
 
@@ -172,7 +172,7 @@
 </template>
 
 <script setup>
-import { debounce, isEqual } from 'lodash-es';
+import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
 import FloatButton from '~/components/FloatButton.vue';
 
@@ -189,7 +189,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
-const { nickname } = useProfile();
+const { nickname, getUserId } = useProfile();
 
 // State
 const loading = ref(true);
@@ -198,6 +198,7 @@ const saveStatus = ref('success');
 const lastUpdatedAt = ref(null);
 const lastSavedAt = ref(null);
 const realtimeChannel = ref(null);
+const isPending = ref(false); // 追蹤是否有待儲存的變更
 
 const shiftList = [
     { value: 'morning', label: '早班' },
@@ -263,6 +264,7 @@ function disableShift(fromShift) {
 const autoSave = debounce(UpdateMedicine, 800);
 
 function onAutoSave() {
+    isPending.value = true;
     if (formData.value.recordId) {
         autoSave();
     }
@@ -377,9 +379,11 @@ async function UpdateMedicine() {
 
         saveStatus.value = 'success';
         lastSavedAt.value = new Date();
+        isPending.value = false;
     } catch (e) {
         console.error('UpdateMedicine error:', e);
         saveStatus.value = 'error';
+        isPending.value = false;
     }
 }
 
@@ -387,8 +391,6 @@ function subscribeToRealtime(recordId) {
     if (realtimeChannel.value) {
         supabase.removeChannel(realtimeChannel.value);
     }
-
-    console.log('訂閱 medicine recordId:', recordId);
 
     realtimeChannel.value = supabase
         .channel(`medicine-${recordId}`)
@@ -401,8 +403,14 @@ function subscribeToRealtime(recordId) {
                 filter: `id=eq.${recordId}`,
             },
             (payload) => {
-                console.log('Medicine Realtime update:', payload);
                 if (payload.new) {
+                    // 是自己的更新就忽略
+                    const currentUserId = getUserId();
+                    if (payload.new.updated_by === currentUserId) {
+                        return;
+                    }
+
+                    // 別人的更新，直接套用
                     const newCats =
                         typeof payload.new.cats === 'string'
                             ? JSON.parse(payload.new.cats)
@@ -415,12 +423,7 @@ function subscribeToRealtime(recordId) {
                 }
             }
         )
-        .subscribe((status, err) => {
-            console.log('Medicine Realtime status:', status);
-            if (err) {
-                console.error('Medicine Realtime error:', err);
-            }
-        });
+        .subscribe();
 }
 
 async function Submit() {
@@ -482,7 +485,30 @@ async function ManualNotifyLine() {
 }
 
 // Lifecycle
+// 頁面離開前警告
+function handleBeforeUnload(e) {
+    if (isPending.value) {
+        e.preventDefault();
+        e.returnValue = '你有未儲存的變更，確定要離開嗎？';
+        return e.returnValue;
+    }
+}
+
+// Vue Router 導航離開前警告（手機滑動返回）
+onBeforeRouteLeave((to, from, next) => {
+    if (isPending.value) {
+        const answer = window.confirm('你有未儲存的變更，確定要離開嗎？');
+        if (!answer) {
+            next(false);
+            return;
+        }
+    }
+    next();
+});
+
 onMounted(async () => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
     try {
         InitDateAndShift();
         await Promise.all([InitMemberList(), InitMedicine()]);
@@ -494,6 +520,13 @@ onMounted(async () => {
         });
     } finally {
         loading.value = false;
+    }
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    if (realtimeChannel.value) {
+        supabase.removeChannel(realtimeChannel.value);
     }
 });
 

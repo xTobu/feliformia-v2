@@ -167,7 +167,7 @@
                         v-model="formData.note"
                         :disabled="isDisabled"
                         placeholder="額外狀況回報"
-                        @change="onAutoSave"
+                        @input="onAutoSave"
                     />
                 </div>
 
@@ -257,7 +257,7 @@
 </template>
 
 <script setup>
-import { debounce, isEqual } from 'lodash-es';
+import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
 import FloatButton from '~/components/FloatButton.vue';
 
@@ -274,7 +274,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
-const { nickname } = useProfile();
+const { nickname, getUserId } = useProfile();
 
 // State
 const loading = ref(true);
@@ -283,6 +283,7 @@ const saveStatus = ref('success');
 const lastUpdatedAt = ref(null);
 const lastSavedAt = ref(null);
 const realtimeChannel = ref(null);
+const isPending = ref(false); // 追蹤是否有待儲存的變更
 
 const shiftList = [
     { value: 'morning', label: '早班' },
@@ -345,6 +346,7 @@ const disabledDate = (time) => {
 const autoSave = debounce(UpdateRegular, 300);
 
 function onAutoSave() {
+    isPending.value = true;
     if (formData.value.recordId) {
         autoSave();
     }
@@ -463,9 +465,11 @@ async function UpdateRegular() {
 
         saveStatus.value = 'success';
         lastSavedAt.value = new Date();
+        isPending.value = false;
     } catch (e) {
         console.error('UpdateRegular error:', e);
         saveStatus.value = 'error';
+        isPending.value = false;
     }
 }
 
@@ -486,44 +490,27 @@ function subscribeToRealtime(recordId) {
                 filter: `id=eq.${recordId}`,
             },
             (payload) => {
-                console.log('Realtime update:', payload);
                 if (payload.new) {
-                    const newData = {
-                        recordId: payload.new.id,
-                        date: new Date(payload.new.date),
-                        shift: payload.new.shift,
-                        cats:
-                            typeof payload.new.cats === 'string'
-                                ? JSON.parse(payload.new.cats)
-                                : payload.new.cats,
-                        note: payload.new.note,
-                        member: payload.new.member,
-                    };
-
-                    const oldData = {
-                        recordId: formData.value.recordId,
-                        date: formData.value.date,
-                        shift: formData.value.shift,
-                        cats: formData.value.cats,
-                        note: formData.value.note,
-                        member: formData.value.member,
-                    };
-
-                    if (!isEqual(oldData, newData)) {
-                        formData.value.recordId = newData.recordId;
-                        formData.value.date = newData.date;
-                        formData.value.shift = newData.shift;
-                        formData.value.cats = newData.cats;
-                        formData.value.note = newData.note;
-                        formData.value.member = newData.member;
-                        lastUpdatedAt.value = new Date();
+                    // 是自己的更新就忽略
+                    const currentUserId = getUserId();
+                    if (payload.new.updated_by === currentUserId) {
+                        return;
                     }
+
+                    // 別人的更新，直接套用
+                    const newCats =
+                        typeof payload.new.cats === 'string'
+                            ? JSON.parse(payload.new.cats)
+                            : payload.new.cats;
+
+                    formData.value.cats = newCats;
+                    formData.value.note = payload.new.note;
+                    formData.value.member = payload.new.member;
+                    lastUpdatedAt.value = new Date();
                 }
             }
         )
-        .subscribe((status) => {
-            console.log('Realtime status:', status); // 加 log 檢查
-        });
+        .subscribe();
 }
 
 async function Submit() {
@@ -585,7 +572,30 @@ async function ManualNotifyLine() {
 }
 
 // Lifecycle
+// 頁面離開前警告
+function handleBeforeUnload(e) {
+    if (isPending.value) {
+        e.preventDefault();
+        e.returnValue = '你有未儲存的變更，確定要離開嗎？';
+        return e.returnValue;
+    }
+}
+
+// Vue Router 導航離開前警告（手機滑動返回）
+onBeforeRouteLeave((to, from, next) => {
+    if (isPending.value) {
+        const answer = window.confirm('你有未儲存的變更，確定要離開嗎？');
+        if (!answer) {
+            next(false);
+            return;
+        }
+    }
+    next();
+});
+
 onMounted(async () => {
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    
     try {
         InitDateAndShift();
         await Promise.all([InitMemberList(), InitRegular()]);
@@ -597,6 +607,13 @@ onMounted(async () => {
         });
     } finally {
         loading.value = false;
+    }
+});
+
+onBeforeUnmount(() => {
+    window.removeEventListener('beforeunload', handleBeforeUnload);
+    if (realtimeChannel.value) {
+        supabase.removeChannel(realtimeChannel.value);
     }
 });
 
