@@ -332,7 +332,7 @@ IG 送養文待發               ← 內容，15px，不截斷、會換行
 
 ### 4.8 篩選與類型 legend
 
-**篩選**（月曆左上的 Setting icon）
+**篩選**（月曆左上的 Filter icon）
 
 點 icon 開 `el-dialog`，三個條件：
 

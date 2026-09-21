@@ -5,7 +5,7 @@
             <div class="cal-top">
                 <div class="cal-filter">
                     <button type="button" class="filter-btn" @click="openFilter">
-                        <el-icon><Setting /></el-icon>
+                        <el-icon><Filter /></el-icon>
                     </button>
                     <span class="filter-status" v-if="hasActiveFilter">篩選中</span>
                 </div>
@@ -443,7 +443,7 @@
 import Swal from 'sweetalert2';
 import { ElMessage } from 'element-plus';
 import { debounce } from 'lodash-es';
-import { WarningFilled, Setting, User } from '@element-plus/icons-vue';
+import { WarningFilled, Filter, User } from '@element-plus/icons-vue';
 import FloatButton from '~/components/FloatButton.vue';
 
 definePageMeta({
