@@ -1,15 +1,13 @@
-import { serverSupabaseUser } from '#supabase/server'
 import { supabase } from '~/server/utils/supabase'
+import { requireAdmin } from '~/server/utils/auth'
 
 // 有 recordId 就更新、沒有就新增
 export default defineEventHandler(async (event) => {
-    const user = await serverSupabaseUser(event)
-    if (!user) {
-        throw createError({ statusCode: 401, message: '請先登入' })
-    }
-
     const body = await readBody(event)
     const { recordId, date, timeStart, timeEnd, type, notifyRoles, owners, content } = body
+
+    // 新增與編輯都只有管理員可以做
+    const userId = await requireAdmin(event)
 
     if (!date) throw createError({ statusCode: 400, message: '缺少日期' })
     if (!timeStart || !timeEnd) throw createError({ statusCode: 400, message: '缺少活動時間' })
@@ -48,7 +46,7 @@ export default defineEventHandler(async (event) => {
 
     const { data, error } = await supabase
         .from('calendar_events')
-        .insert([{ ...payload, created_by: user.sub }])
+        .insert([{ ...payload, created_by: userId }])
         .select('id')
         .limit(1)
 

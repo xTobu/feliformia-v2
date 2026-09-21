@@ -90,7 +90,7 @@ votes.data
 ---
 
 ### calendar_events
-行事曆與備註（`/calendar`）
+行事曆（`/calendar`）
 
 | Column | Type | Description |
 |--------|------|-------------|

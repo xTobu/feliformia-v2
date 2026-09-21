@@ -1,12 +1,10 @@
-import { serverSupabaseUser } from '#supabase/server'
 import { supabase } from '~/server/utils/supabase'
+import { requireAdmin } from '~/server/utils/auth'
 
 // 軟刪除：不真的 DELETE，只標記 deleted_at / deleted_by
+// 只有管理員可以刪除
 export default defineEventHandler(async (event) => {
-    const user = await serverSupabaseUser(event)
-    if (!user) {
-        throw createError({ statusCode: 401, message: '請先登入' })
-    }
+    const userId = await requireAdmin(event)
 
     const { recordId } = await readBody(event)
 
@@ -18,7 +16,7 @@ export default defineEventHandler(async (event) => {
         .from('calendar_events')
         .update({
             deleted_at: new Date().toISOString(),
-            deleted_by: user.sub,
+            deleted_by: userId,
             updated_at: new Date().toISOString(),
         })
         .eq('id', recordId)

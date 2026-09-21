@@ -69,6 +69,7 @@
                         value-format="YYYY-MM-DD"
                         placeholder="請選擇上方日期"
                         :clearable="false"
+                        :disabled="!canEdit"
                         @change="onDateChange"
                     />
                     <div class="day-events" v-if="formData.date && dayEvents.length">
@@ -117,6 +118,7 @@
                             end="23:45"
                             step="00:15"
                             placeholder="開始時間"
+                            :disabled="!canEdit"
                             @change="onTimeStartChange"
                         />
                         <span class="time-sep">→</span>
@@ -127,6 +129,7 @@
                             step="00:15"
                             :min-time="formData.timeStart"
                             placeholder="結束時間"
+                            :disabled="!canEdit"
                         />
                     </div>
                 </div>
@@ -137,6 +140,7 @@
                     <el-select
                         v-model="formData.type"
                         placeholder="請選擇"
+                        :disabled="!canEdit"
                         :class="formData.type ? `type-text-${formData.type}` : ''"
                     >
                         <el-option
@@ -157,6 +161,7 @@
                         v-model="formData.notifyRoles"
                         multiple
                         placeholder="請選擇"
+                        :disabled="!canEdit"
                     >
                         <el-option
                             v-for="item in roleList"
@@ -204,6 +209,7 @@
                         filterable
                         clearable
                         placeholder="請選擇"
+                        :disabled="!canEdit"
                     >
                         <el-option
                             v-for="item in volunteerList"
@@ -221,18 +227,32 @@
                         type="textarea"
                         v-model="formData.content"
                         placeholder="請輸入備註內容"
+                        :disabled="!canEdit"
                     />
                 </div>
 
-                <button type="submit" class="btn" :disabled="saving">
+                <button
+                    type="submit"
+                    class="btn"
+                    v-if="!readOnly"
+                    :disabled="saving || !canEdit"
+                >
                     {{ saving ? '儲存中...' : formData.recordId ? '確認更新' : '確認送出' }}
                 </button>
+                <p class="perm-hint" v-if="readOnly">
+                    唯讀：只有管理員可以新增、編輯或刪除活動
+                </p>
 
                 <div class="edit-actions" v-if="formData.recordId">
                     <button type="button" class="link-btn" @click="resetForm">
                         取消編輯
                     </button>
-                    <button type="button" class="link-btn danger" @click="DeleteEvent">
+                    <button
+                        type="button"
+                        class="link-btn danger"
+                        v-if="canEdit"
+                        @click="DeleteEvent"
+                    >
                         刪除這筆
                     </button>
                 </div>
@@ -259,19 +279,19 @@ definePageMeta({
 });
 
 useHead({
-    title: '行事曆與備註區',
+    title: '行事曆',
 });
 
 const supabase = useSupabaseClient();
 const { $dayjs } = useNuxtApp();
-const { displayName, getUserId } = useProfile();
+const { getUserId, isAdmin, profileLoaded } = useProfile();
 const { get: getStorage, set: setStorage } = useLocalStorage();
 
 const typeList = [
-    { value: 'volunteer', label: '志工體驗', color: '#409eff' },
-    { value: 'supplies', label: '物資贈送', color: '#67c23a' },
+    { value: 'volunteer', label: '體驗', color: '#409eff' },
+    { value: 'supplies', label: '物資', color: '#67c23a' },
     { value: 'dispatch', label: '出車', color: '#e6a23c' },
-    { value: 'post', label: '發文', color: '#7c5cf0' },
+    { value: 'post', label: '社群', color: '#7c5cf0' },
     { value: 'other', label: '其他', color: '#303133' },
 ];
 
@@ -310,6 +330,13 @@ const formData = ref({
 });
 
 // Computed
+
+// 新增／編輯／刪除都只有管理員可以做，一般志工唯讀。
+// 這裡只決定欄位能不能動、按鈕要不要出現 ——
+// 真正擋得住的是 server/utils/auth.js 的 requireAdmin()
+const canEdit = computed(() => isAdmin.value);
+// 還沒載完 profile 前不要先跳「唯讀」，避免管理員看到一閃而過的提示
+const readOnly = computed(() => profileLoaded.value && !canEdit.value);
 
 // 我是不是這筆活動的人員。用 user id 比對，不能用暱稱（會撞名）
 function isMyEvent(ev) {
@@ -593,15 +620,24 @@ function goToday() {
     cursor.value = new Date();
 }
 
+// 換日期時如果正在編輯某一筆，整個表單都要清掉。
+// 只清 recordId 的話，舊活動的時間／類型／人員／內容會留在表單上，
+// 按下送出就變成「內容一模一樣的新活動」，等於默默複製一筆。
+//
+// 還在填新活動（沒有 recordId）時不清，不然使用者打到一半改日期會全沒了。
+function leaveEditMode() {
+    if (formData.value.recordId) resetForm();
+}
+
 function pickDate(day) {
     formData.value.date = day;
-    formData.value.recordId = '';
+    leaveEditMode();
 }
 
 function onDateChange(day) {
     if (day) {
         cursor.value = $dayjs(day).toDate();
-        formData.value.recordId = '';
+        leaveEditMode();
     }
 }
 
@@ -683,6 +719,10 @@ watch(
 async function Submit() {
     const { recordId, date, timeStart, timeEnd, type, notifyRoles, owners, content } = formData.value;
 
+    if (!canEdit.value) {
+        return ElMessage.error('只有管理員可以新增或編輯活動');
+    }
+
     errors.value = validate();
 
     const firstError = FIELD_ORDER.map((key) => errors.value[key]).find(Boolean);
@@ -719,8 +759,12 @@ async function Submit() {
 }
 
 async function DeleteEvent() {
+    if (!canEdit.value) {
+        return ElMessage.error('只有管理員可以刪除活動');
+    }
+
     const { isConfirmed } = await Swal.fire({
-        html: '確定要刪除這筆行事曆備註嗎？',
+        html: '確定要刪除這筆活動嗎？',
         showCancelButton: true,
         cancelButtonText: '取消',
         confirmButtonColor: '#b33a39',
@@ -789,10 +833,6 @@ $grey: #657181;
 
 #calendar {
     padding-bottom: 30px;
-
-    h1 {
-        text-align: left;
-    }
 }
 
 // 月曆
@@ -1046,8 +1086,7 @@ $types: (
 
             .more {
                 margin-left: 4px;
-                text-decoration: underline;
-                text-underline-offset: 2px;
+                color: #c0c4cc;
                 white-space: nowrap;
                 cursor: pointer;
             }
@@ -1101,6 +1140,13 @@ $types: (
         opacity: 0.6;
         cursor: not-allowed;
     }
+}
+
+.perm-hint {
+    margin-top: 8px;
+    color: #c0c4cc;
+    font-size: 13px;
+    text-align: center;
 }
 
 .edit-actions {

@@ -1,5 +1,5 @@
 -- ============================================================
--- 行事曆與備註區 calendar_events
+-- 行事曆 calendar_events
 -- 用途：/calendar 頁面的活動與備註
 --
 -- 執行方式：Supabase Dashboard → SQL Editor → 貼上執行
@@ -51,7 +51,7 @@ create index calendar_events_date_idx
     where deleted_at is null;
 
 -- ---------- 3. RLS ----------
--- 寫入一律走 server API（service key 繞過 RLS），
+-- 寫入一律走 server API（service key 繞過 RLS，權限在 server/utils/auth.js 擋），
 -- 前端只需要讀取權限：給 Realtime 訂閱與未來可能的直接查詢用。
 alter table public.calendar_events enable row level security;
 

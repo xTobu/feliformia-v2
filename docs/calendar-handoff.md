@@ -1,4 +1,4 @@
-# 行事曆與備註區 — 交接文件
+# 行事曆 — 交接文件
 
 `/calendar`（[pages/calendar.vue](../pages/calendar.vue)）
 
@@ -53,13 +53,17 @@
 
 | value | label | 顏色 | 實務上通常掛 |
 |---|---|---|---|
-| `volunteer` | 志工體驗 | `#409eff` 藍 | 早班／晚班 |
-| `supplies` | 物資贈送 | `#67c23a` 綠 | 早班／晚班 |
+| `volunteer` | 體驗 | `#409eff` 藍 | 早班／晚班 |
+| `supplies` | 物資 | `#67c23a` 綠 | 早班／晚班 |
 | `dispatch` | 出車 | `#e6a23c` 橘 | 負責人 |
-| `post` | 發文 | `#7c5cf0` 紫 | 負責人 |
+| `post` | 社群 | `#7c5cf0` 紫 | 負責人 |
 | `other` | 其他 | `#303133` 黑 | 混合 |
 
-志工體驗與物資贈送多半只掛早晚班，而排班要等日期接近才會催投票，
+> label 改過名（志工體驗→體驗、物資贈送→物資、發文→社群），
+> **但 `value` 沒動** —— DB 存的還是 `volunteer` / `supplies` / `post`，
+> 所以只是顯示文字，不需要搬資料。
+
+體驗與物資多半只掛早晚班，而排班要等日期接近才會催投票，
 所以這兩類**經常處於「還沒有人」的狀態**，月曆上會是紅色虛線框。這是正常的，不是 bug。
 
 ### 提示對象 `notifyRoles`
@@ -168,6 +172,24 @@
 左右箭頭走 `goto(type)` → `calendarRef.selectDate(type)`（Element Plus 的 API），
 「今天」則是獨立的 `goToday()`，因為 `selectDate('today')` 會連帶改動 selected day。
 
+#### 換日期時要把表單清乾淨
+
+`pickDate()`（點月曆格子）和 `onDateChange()`（用日期選擇器）都會呼叫 `leaveEditMode()`：
+
+```js
+function leaveEditMode() {
+    if (formData.value.recordId) resetForm();
+}
+```
+
+> ⚠️ 曾經這兩個函式只做 `formData.value.recordId = ''`。
+> 這樣「點某筆活動編輯 → 改點別天」之後，舊活動的時間／類型／人員／內容
+> 還留在表單上，而 `recordId` 已經空了 —— 按下送出就會
+> **新增一筆內容一模一樣的活動**，等於默默複製一筆。
+
+只在 `recordId` 有值（正在編輯既有活動）時才清。
+還在填新活動的話不清，不然打到一半改個日期就全沒了。
+
 ### 4.5 日期下方的活動列表
 
 一列的組成：
@@ -201,7 +223,43 @@
 
 月曆格子裡的色塊**不走這套**，還是用 `eventLabel()`（內容為空時退回類型名稱）。
 
-### 4.6 「只看我的」與類型 legend
+### 4.6 權限
+
+| 動作 | 誰可以做 |
+|---|---|
+| 看 | 所有登入者 |
+| 新增／編輯／刪除 | **只有管理員** |
+
+一般志工是**唯讀**：表單欄位全部 `:disabled`，送出按鈕不顯示，
+改成一行提示「唯讀：只有管理員可以新增、編輯或刪除活動」。
+仍然可以點月曆、點活動看細節 —— 表單同時也是細節檢視畫面。
+
+前端的 `canEdit`（看 `useProfile()` 的 `isAdmin`）**只決定欄位能不能動、按鈕要不要出現**，
+改個 JS 變數就繞過去了。真正擋得住的是後端：
+
+```js
+// server/utils/auth.js
+requireUser(event)    // 未登入 → 401
+requireAdmin(event)   // 非管理員 → 403（查 profiles.is_admin）
+```
+
+- `update.post.js`、`delete.post.js`：一律 `requireAdmin`
+- `list.get.js`：不擋，登入者都能讀
+
+`readOnly` 多包了一層 `profileLoaded`：
+
+```js
+const readOnly = computed(() => profileLoaded.value && !canEdit.value);
+```
+
+`isAdmin` 是 `layouts/default.vue` 掛載後才非同步載入的，
+不等 `profileLoaded` 的話管理員會先看到一閃而過的「唯讀」提示。
+
+> ⚠️ `server/api/admin/profiles.get.js` 目前**沒有**任何後端權限檢查，
+> 只靠 `middleware/admin.js` 擋頁面 —— 直接打那支 API 就拿得到全體志工資料。
+> 這是既有的問題，不在本次範圍內，但 `requireAdmin()` 已經寫成通用的，要補很容易。
+
+### 4.7 「只看我的」與類型 legend
 
 **只看我的**（月曆上方獨立一列）
 
@@ -400,7 +458,7 @@ CSS 不用另外處理，`element-plus/dist/index.css` 本來就在 `nuxt.config
 - [ ] LINE 通知：目前只顯示名單，沒有推播。要做的話可接 `/api/line/message/push`，
       決定是送出時自動發、還是比照 `/regular` 給一顆手動發送按鈕
 - [ ] 重複性活動（每週／每月）目前沒有支援
-- [ ] 沒有做權限區分，任何登入者都能編輯／刪除任何一筆（軟刪除保留了 `deleted_by`，事後查得到是誰）
+- [x] 權限：新增／編輯／刪除限管理員，一般志工唯讀（見 4.6）
 - [ ] `votes` 變動時紅色虛線框不會即時更新，要換月或重新整理
 - [ ] `votes.week_start` 的資料偏移（見 7.4）沒有修，只是繞過。`/vote` 可能也受影響
 
@@ -412,6 +470,7 @@ CSS 不用另外處理，`element-plus/dist/index.css` 本來就在 `nuxt.config
 |---|---|
 | [pages/calendar.vue](../pages/calendar.vue) | 本頁全部內容 |
 | [server/api/calendar/](../server/api/calendar/) | list / update / delete 三支 API |
+| [server/utils/auth.js](../server/utils/auth.js) | `requireUser()` / `requireAdmin()` |
 | [docs/sql/calendar_events.sql](sql/calendar_events.sql) | 建表 SQL（會先 drop 再重建） |
 | [pages/index.vue](../pages/index.vue) | 首頁入口連結 |
 | [plugins/dayjs.js](../plugins/dayjs.js) | `weekStart: 1`（見 7.2） |
