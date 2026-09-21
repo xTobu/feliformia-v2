@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
         timeEnd: record.time_end,
         type: record.type,
         notifyRoles: record.notify_roles || [],
-        owner: record.owner || '',
+        owners: record.owners || [],
         content: record.content || '',
     }))
 });

@@ -100,7 +100,7 @@ votes.data
 | time_end | TEXT | 結束時間 'HH:mm'，不做防呆 |
 | type | TEXT | volunteer / supplies / dispatch / post / other（有 CHECK 約束） |
 | notify_roles | JSONB | `['morning','night','owner']` 的子集合 |
-| owner | UUID | FK → profiles，僅 notify_roles 含 'owner' 時才有值 |
+| owners | JSONB | profiles.id 的陣列（可多人），僅 notify_roles 含 'owner' 時才有值 |
 | content | TEXT | 備註內容，必填 |
 | created_by | UUID | FK → auth.users |
 | created_at | TIMESTAMPTZ | 建立時間 |

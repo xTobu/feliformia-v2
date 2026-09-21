@@ -1,6 +1,12 @@
 <template>
     <ClientOnly>
         <div v-loading="loading" id="calendar">
+            <!-- 只看我的 -->
+            <div class="cal-filter">
+                <el-switch v-model="onlyMine" />
+                <span class="filter-label">只看我的</span>
+            </div>
+
             <!-- 月曆 -->
             <el-calendar ref="calendarRef" v-model="cursor">
                 <template #header>
@@ -41,6 +47,18 @@
                 </template>
             </el-calendar>
 
+            <!-- 類型配色說明 -->
+            <div class="cal-legend">
+                <span
+                    v-for="item in typeList"
+                    :key="item.value"
+                    class="legend-item"
+                    :class="`type-${item.value}`"
+                >
+                    {{ item.label }}
+                </span>
+            </div>
+
             <form @submit.prevent="Submit">
                 <!-- 日期 -->
                 <div class="field" :class="{ invalid: errors.date }">
@@ -68,7 +86,23 @@
                             ]"
                             @click="editEvent(ev)"
                         >
-                            {{ ev.timeStart }}-{{ ev.timeEnd }} {{ eventLabel(ev) }}
+                            <span class="ev-time">{{ ev.timeStart }} ~ {{ ev.timeEnd }}</span>
+                            <span class="ev-content">{{ ev.content }}</span>
+                            <span
+                                class="ev-people"
+                                :class="{ expanded: expandedPeople[ev.recordId] }"
+                            >
+                                <template v-if="!eventPeople(ev).length">無</template>
+                                <template v-else>{{ shownPeople(ev).join('、') }}<span
+                                        v-if="hiddenPeopleCount(ev)"
+                                        class="more"
+                                        @click.stop="togglePeople(ev.recordId)"
+                                    >+{{ hiddenPeopleCount(ev) }}</span><span
+                                        v-else-if="expandedPeople[ev.recordId]"
+                                        class="more"
+                                        @click.stop="togglePeople(ev.recordId)"
+                                    >收起</span></template>
+                            </span>
                         </button>
                     </div>
                 </div>
@@ -118,7 +152,7 @@
 
                 <!-- 提示該活動之人員 -->
                 <div class="field" :class="{ invalid: errors.notifyRoles }">
-                    <label>提示該活動之人員 <i>*</i></label>
+                    <label>活動人員 <i>*</i></label>
                     <el-select
                         v-model="formData.notifyRoles"
                         multiple
@@ -165,7 +199,8 @@
                 <div class="field" v-if="formData.notifyRoles.includes('owner')">
                     <label>負責人</label>
                     <el-select
-                        v-model="formData.owner"
+                        v-model="formData.owners"
+                        multiple
                         filterable
                         clearable
                         placeholder="請選擇"
@@ -229,7 +264,8 @@ useHead({
 
 const supabase = useSupabaseClient();
 const { $dayjs } = useNuxtApp();
-const { displayName } = useProfile();
+const { displayName, getUserId } = useProfile();
+const { get: getStorage, set: setStorage } = useLocalStorage();
 
 const typeList = [
     { value: 'volunteer', label: '志工體驗', color: '#409eff' },
@@ -259,6 +295,8 @@ const allUsers = ref([]); // 解 votes.user_id → 暱稱用
 const votes = ref([]); // 目前顯示範圍所涵蓋的週投票資料
 const realtimeChannel = ref(null);
 const errors = ref({}); // 哪些必填欄位沒填，key 見 FIELD_ORDER
+const expandedPeople = ref({}); // 活動列表右側的名字有沒有被展開，key 是 recordId
+const onlyMine = ref(false); // 只顯示我是活動人員的活動
 
 const formData = ref({
     recordId: '',
@@ -267,14 +305,34 @@ const formData = ref({
     timeEnd: '',
     type: '',
     notifyRoles: [],
-    owner: '',
+    owners: [],
     content: '',
 });
 
 // Computed
+
+// 我是不是這筆活動的人員。用 user id 比對，不能用暱稱（會撞名）
+function isMyEvent(ev) {
+    const me = getUserId();
+    if (!me) return false;
+
+    const roles = ev.notifyRoles || [];
+
+    if (roles.includes('owner') && (ev.owners || []).includes(me)) return true;
+    if (roles.includes('morning') && rosterEntries(ev.date, 'morning').some((e) => e.userId === me)) return true;
+    if (roles.includes('night') && rosterEntries(ev.date, 'night').some((e) => e.userId === me)) return true;
+
+    return false;
+}
+
+// 月曆格子與日期下方的列表都吃這份，兩邊數量才會一致
+const visibleEvents = computed(() =>
+    onlyMine.value ? events.value.filter(isMyEvent) : events.value
+);
+
 const eventsByDate = computed(() => {
     const map = {};
-    for (const ev of events.value) {
+    for (const ev of visibleEvents.value) {
         (map[ev.date] ||= []).push(ev);
     }
     for (const date in map) {
@@ -313,8 +371,10 @@ function shiftOptions(shift) {
     );
 }
 
-// 某天某班別的值班名單，格式為「選項名稱 - 暱稱」
-function roster(date, shift) {
+// 某天某班別的值班名單，回傳 [{ option: '值班', name: '小貝' }, ...]
+// 拆成兩層是因為兩種用途要的格式不同：
+//   早班人員的 chip 要「值班 - 小貝」，活動列表右側只要「小貝」
+function rosterEntries(date, shift) {
     if (!date) return [];
 
     const result = [];
@@ -327,11 +387,20 @@ function roster(date, shift) {
             // 直接用 data 的日期 key，不比對 week_start（原因見 loadVotes）
             if (!vote.data?.[date]?.[shift]?.[option.id]?.checked) continue;
 
-            result.push(`${option.name} - ${getNickname(vote.user_id)}`);
+            result.push({
+                option: option.name,
+                name: getNickname(vote.user_id),
+                userId: vote.user_id,
+            });
         }
     }
 
     return result;
+}
+
+// 格式為「選項名稱 - 暱稱」，給早班／晚班人員的 chip 用
+function roster(date, shift) {
+    return rosterEntries(date, shift).map((e) => `${e.option} - ${e.name}`);
 }
 
 /* ============================================================
@@ -468,10 +537,51 @@ function eventLabel(ev) {
 // 有指定對象卻沒人：負責人沒填、或該日該班別沒人值班
 function isUnstaffed(ev) {
     const roles = ev.notifyRoles || [];
-    if (roles.includes('owner') && !ev.owner) return true;
+    if (roles.includes('owner') && !ev.owners?.length) return true;
     if (roles.includes('morning') && !roster(ev.date, 'morning').length) return true;
     if (roles.includes('night') && !roster(ev.date, 'night').length) return true;
     return false;
+}
+
+// 活動列表右側最多先顯示幾個名字，其餘收在 +N 後面
+const PEOPLE_PREVIEW = 2;
+
+// 這筆活動要提示的人：負責人 + 當天早晚班值班的人，去重
+// 負責人用 userMap 而不是 volunteerList —— 後者濾掉了停用的志工，
+// 舊資料的負責人如果已停用會變成空白
+function eventPeople(ev) {
+    const roles = ev.notifyRoles || [];
+    const names = [];
+
+    for (const id of ev.owners || []) {
+        if (roles.includes('owner')) names.push(getNickname(id));
+    }
+    if (roles.includes('morning')) {
+        names.push(...rosterEntries(ev.date, 'morning').map((e) => e.name));
+    }
+    if (roles.includes('night')) {
+        names.push(...rosterEntries(ev.date, 'night').map((e) => e.name));
+    }
+
+    // 同一人早晚班都有就只出現一次
+    return [...new Set(names)];
+}
+
+function shownPeople(ev) {
+    const people = eventPeople(ev);
+    return expandedPeople.value[ev.recordId] ? people : people.slice(0, PEOPLE_PREVIEW);
+}
+
+function hiddenPeopleCount(ev) {
+    if (expandedPeople.value[ev.recordId]) return 0;
+    return Math.max(0, eventPeople(ev).length - PEOPLE_PREVIEW);
+}
+
+function togglePeople(recordId) {
+    expandedPeople.value = {
+        ...expandedPeople.value,
+        [recordId]: !expandedPeople.value[recordId],
+    };
 }
 
 function goto(type) {
@@ -512,7 +622,7 @@ function editEvent(ev) {
         timeEnd: ev.timeEnd,
         type: ev.type,
         notifyRoles: [...ev.notifyRoles],
-        owner: ev.owner || '',
+        owners: [...(ev.owners || [])],
         content: ev.content || '',
     };
 }
@@ -527,7 +637,7 @@ function resetForm() {
         timeEnd: '',
         type: '',
         notifyRoles: [],
-        owner: '',
+        owners: [],
         content: '',
     };
 }
@@ -544,7 +654,7 @@ function validate() {
     if (!date) found.date = '請選擇日期';
     if (!timeStart || !timeEnd) found.time = '請選擇活動時間';
     if (!type) found.type = '請選擇類型';
-    if (!notifyRoles.length) found.notifyRoles = '請選擇提示該活動之人員';
+    if (!notifyRoles.length) found.notifyRoles = '請選擇活動人員';
     if (!content?.trim()) found.content = '請輸入內容';
 
     return found;
@@ -571,7 +681,7 @@ watch(
 );
 
 async function Submit() {
-    const { recordId, date, timeStart, timeEnd, type, notifyRoles, owner, content } = formData.value;
+    const { recordId, date, timeStart, timeEnd, type, notifyRoles, owners, content } = formData.value;
 
     errors.value = validate();
 
@@ -585,7 +695,7 @@ async function Submit() {
         timeEnd,
         type,
         notifyRoles: [...notifyRoles],
-        owner: notifyRoles.includes('owner') ? owner : '',
+        owners: notifyRoles.includes('owner') ? [...owners] : [],
         content,
     };
 
@@ -638,6 +748,9 @@ async function DeleteEvent() {
     }
 }
 
+// 記住「只看我的」的選擇，下次進來維持一樣（比照 /vote 的篩選設定）
+watch(onlyMine, (value) => setStorage('calendar-only-mine', value));
+
 // 換月份就依新的顯示範圍重查
 watch(
     () => $dayjs(cursor.value).format('YYYY-MM'),
@@ -646,6 +759,7 @@ watch(
 
 // Lifecycle
 onMounted(async () => {
+    onlyMine.value = getStorage('calendar-only-mine', false);
     loading.value = true;
 
     try {
@@ -682,6 +796,32 @@ $grey: #657181;
 }
 
 // 月曆
+.cal-filter {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+
+    .filter-label {
+        font-size: 13px;
+        color: $grey;
+    }
+}
+
+.cal-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin: 10px 0 20px;
+
+    .legend-item {
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        line-height: 18px;
+    }
+}
+
 .cal-header {
     display: flex;
     align-items: center;
@@ -785,7 +925,8 @@ $types: (
 
 @each $name, $pair in $types {
     .tag.type-#{$name},
-    .day-event.type-#{$name} {
+    .day-event.type-#{$name},
+    .legend-item.type-#{$name} {
         color: list.nth($pair, 1);
         background-color: list.nth($pair, 2);
     }
@@ -860,7 +1001,10 @@ $types: (
     margin-top: 8px;
 
     .day-event {
-        display: block;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        gap: 6px;
         width: 100%;
         margin-bottom: 4px;
         padding: 4px 8px;
@@ -870,6 +1014,44 @@ $types: (
         line-height: 20px;
         text-align: left;
         cursor: pointer;
+
+        .ev-time {
+            flex-shrink: 0;
+            // 等寬數字，時間欄才不會左右跳動
+            font-variant-numeric: tabular-nums;
+        }
+
+        // 內容吃掉剩下的寬度，太長就截斷
+        .ev-content {
+            flex: 1;
+            min-width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+        }
+
+        // 負責人／值班人員，靠右
+        .ev-people {
+            flex-shrink: 0;
+            max-width: 45%;
+            text-align: right;
+            opacity: 0.7;
+
+            // 展開後名字整塊掉到第二行，不要把內容擠成幾個字
+            &.expanded {
+                flex-basis: 100%;
+                max-width: 100%;
+                white-space: normal;
+            }
+
+            .more {
+                margin-left: 4px;
+                text-decoration: underline;
+                text-underline-offset: 2px;
+                white-space: nowrap;
+                cursor: pointer;
+            }
+        }
 
         &.unstaffed {
             border-style: dashed;

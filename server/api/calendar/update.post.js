@@ -9,12 +9,12 @@ export default defineEventHandler(async (event) => {
     }
 
     const body = await readBody(event)
-    const { recordId, date, timeStart, timeEnd, type, notifyRoles, owner, content } = body
+    const { recordId, date, timeStart, timeEnd, type, notifyRoles, owners, content } = body
 
     if (!date) throw createError({ statusCode: 400, message: '缺少日期' })
     if (!timeStart || !timeEnd) throw createError({ statusCode: 400, message: '缺少活動時間' })
     if (!type) throw createError({ statusCode: 400, message: '缺少類型' })
-    if (!notifyRoles?.length) throw createError({ statusCode: 400, message: '缺少提示對象' })
+    if (!notifyRoles?.length) throw createError({ statusCode: 400, message: '缺少活動人員' })
     if (!content?.trim()) throw createError({ statusCode: 400, message: '缺少內容' })
 
     const roles = Array.isArray(notifyRoles) ? notifyRoles : []
@@ -25,8 +25,10 @@ export default defineEventHandler(async (event) => {
         time_end: timeEnd,
         type,
         notify_roles: roles,
-        // owner 是 uuid 欄位，空字串會讓 Postgres 噴錯，一律轉 null
-        owner: roles.includes('owner') && owner ? owner : null,
+        // 沒勾「負責人」就不存名單；濾掉空值避免塞進 null / ''
+        owners: roles.includes('owner') && Array.isArray(owners)
+            ? owners.filter(Boolean)
+            : [],
         content,
         updated_at: new Date().toISOString(),
     }

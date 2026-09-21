@@ -44,7 +44,7 @@
     timeEnd: '20:00',
     type: 'volunteer',                // 見下表
     notifyRoles: ['morning'],         // 'morning' | 'night' | 'owner' 的子集合
-    owner: '',                        // profiles.id (uuid)，只有 notifyRoles 含 'owner' 才有值
+    owners: [],                       // profiles.id 的陣列，只有 notifyRoles 含 'owner' 才有值
     content: '虎嚕媽打掃體驗',          // 必填
 }
 ```
@@ -64,17 +64,20 @@
 
 ### 提示對象 `notifyRoles`
 
-三個角色各自獨立，可複選。表單下方的區塊是 `v-if` 綁 `notifyRoles`：
+畫面上這欄的標題是「**活動人員**」。三個角色各自獨立，可複選。
+表單下方的區塊是 `v-if` 綁 `notifyRoles`：
 
 - 只勾「負責人」→ 不會出現早晚班資訊
 - 只勾早晚班 → 不會出現負責人欄位
 
-`owner` 只在勾了 `'owner'` 時才存值，送出時會清掉（`Submit()` 的 `payload`）。
-存的是 `profiles.id`（uuid），不是名字 —— 志工改暱稱時不會對不上。
+`owners` 只在勾了 `'owner'` 時才存值，送出時會清成 `[]`（`Submit()` 的 `payload`）。
+**可複選**，存的是 `profiles.id` 陣列而不是名字 —— 志工改暱稱時不會對不上。
 名單來自 `/api/volunteer/list`（已過濾 `is_active === false`）。
 
-> ⚠️ `owner` 在 DB 是 uuid 欄位，**空字串會讓 Postgres 噴錯**。
-> 前端送 `''`，由 `update.post.js` 統一轉成 `null`。
+> `owners` 在 DB 是 `jsonb` 不是 `uuid[]`，跟旁邊的 `notify_roles` 一致。
+> jsonb 沒有外鍵保護，但 id 只會從 `/api/volunteer/list` 來，
+> 顯示時對 `userMap` 查，查不到會顯示「未命名」而不是壞掉。
+
 
 ---
 
@@ -137,7 +140,7 @@
 
 符合任一條件就回 `true`：
 
-- 勾了負責人但 `owner` 是空的
+- 勾了負責人但 `owners` 是空的
 - 勾了早班但那天早班沒人
 - 勾了晚班但那天晚班沒人
 
@@ -164,6 +167,61 @@
 
 左右箭頭走 `goto(type)` → `calendarRef.selectDate(type)`（Element Plus 的 API），
 「今天」則是獨立的 `goToday()`，因為 `selectDate('today')` 會連帶改動 selected day。
+
+### 4.5 日期下方的活動列表
+
+一列的組成：
+
+```
+13:00 ~ 14:00  備註                           小萬、小貝 +2
+└─ ev-time ─┘  └─ ev-content ─┘               └─ ev-people ─┘
+                flex:1，截斷                   右對齊，最寬 45%
+```
+
+類型**不寫在列上**，靠底色表示，對照表在月曆下方的 legend（見 4.6）。
+
+右側名字由 `eventPeople(ev)` 算出，依 `notifyRoles`：
+
+- 勾了負責人 → `ev.owners` 逐個對 `userMap` 取暱稱
+- 勾了早班／晚班 → 當天該班別的值班人員
+- 同一人重複出現只算一次；完全沒人時顯示「無」
+
+負責人用 `userMap`（`/api/users/list`）而不是 `volunteerList` ——
+後者濾掉了停用的志工，舊資料的負責人如果已停用會變成空白。
+
+最多先顯示 `PEOPLE_PREVIEW`（2）個，其餘收在 `+N` 後面，點一下展開、再點「收起」。
+展開狀態存在 `expandedPeople`，key 是 `recordId`。
+
+> ⚠️ `+N` 是 `<span>` 不是 `<button>` —— 外層 `.day-event` 已經是 `<button>` 了，
+> 巢狀 button 是不合法的 HTML。它靠 `@click.stop` 擋住冒泡，
+> 所以點 `+N` 不會連帶打開編輯表單。
+
+> ⚠️ 展開時 `.ev-people` 要 `flex-basis: 100%` 整塊掉到第二行。
+> 不這樣做的話名字會把 `.ev-content` 擠到只剩兩三個字（手機寬度下特別明顯）。
+
+月曆格子裡的色塊**不走這套**，還是用 `eventLabel()`（內容為空時退回類型名稱）。
+
+### 4.6 「只看我的」與類型 legend
+
+**只看我的**（月曆上方獨立一列）
+
+`isMyEvent(ev)` 判斷我是不是這筆活動的人員。**用 user id 比對，不能用暱稱**（會撞名）：
+
+- `owners` 包含我的 id（且有勾負責人），或
+- 勾了早班／晚班，且我在當天該班別的名單裡（靠 `rosterEntries()` 帶出來的 `userId`）
+
+打開後 `visibleEvents` 會過濾 `events`，而 `eventsByDate` 吃的是 `visibleEvents`，
+所以**月曆格子與日期下方的列表會同時被篩**。只篩其中一邊的話，
+月曆顯示 3 個色塊、點下去只剩 1 筆，數量對不上會很困惑。
+
+狀態用 `useLocalStorage` 存在 `calendar-only-mine`，下次進來維持上次的選擇
+（比照 `/vote` 的篩選設定）。
+
+**類型 legend**（月曆下方）
+
+五個類型的顏色對照。配色只定義在 SCSS 的 `$types` map 一處，
+`@each` 迴圈同時產生 `.tag`、`.day-event`、`.legend-item` 三種選擇器，
+所以改顏色只要改 map。
 
 ---
 
@@ -209,7 +267,8 @@ end   = 該月最後一天所屬週的週日
 
 ### Table `calendar_events`
 
-建表 SQL：[docs/sql/calendar_events.sql](sql/calendar_events.sql)（可重複執行）
+建表 SQL：[docs/sql/calendar_events.sql](sql/calendar_events.sql)
+**⚠️ 這份會先 `drop table` 再重建，現有資料會全部消失。**
 欄位說明：[docs/database.md](database.md)
 
 重點：
@@ -353,7 +412,7 @@ CSS 不用另外處理，`element-plus/dist/index.css` 本來就在 `nuxt.config
 |---|---|
 | [pages/calendar.vue](../pages/calendar.vue) | 本頁全部內容 |
 | [server/api/calendar/](../server/api/calendar/) | list / update / delete 三支 API |
-| [docs/sql/calendar_events.sql](sql/calendar_events.sql) | 建表 SQL |
+| [docs/sql/calendar_events.sql](sql/calendar_events.sql) | 建表 SQL（會先 drop 再重建） |
 | [pages/index.vue](../pages/index.vue) | 首頁入口連結 |
 | [plugins/dayjs.js](../plugins/dayjs.js) | `weekStart: 1`（見 7.2） |
 | [pages/vote.vue](../pages/vote.vue) | 值班投票，`roster()` 的算法參考它 |
