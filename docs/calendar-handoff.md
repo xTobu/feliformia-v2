@@ -232,7 +232,23 @@ function leaveEditMode() {
 
 一般志工是**唯讀**：表單欄位全部 `:disabled`，送出按鈕不顯示，
 改成一行提示「唯讀：只有管理員可以新增、編輯或刪除活動」。
-仍然可以點月曆、點活動看細節 —— 表單同時也是細節檢視畫面。
+
+表單對唯讀使用者是**漸進顯示**的，不然給他一張什麼都不能填的表單只會造成困惑：
+
+| 狀態 | 看得到什麼 |
+|---|---|
+| 沒選日期也沒選活動 | 表單整個不顯示 |
+| 選了日期 | 日期欄位 ＋ 當天活動列表 |
+| 選了活動 | 全部欄位（唯讀）＋ 唯讀提示 |
+
+```js
+// 表單本身
+v-if="!readOnly || formData.date || formData.recordId"
+// 日期以外的欄位
+const showDetailFields = computed(() => !readOnly.value || !!formData.value.recordId);
+```
+
+管理員不受影響，表單一直都在。
 
 前端的 `canEdit`（看 `useProfile()` 的 `isAdmin`）**只決定欄位能不能動、按鈕要不要出現**，
 改個 JS 變數就繞過去了。真正擋得住的是後端：

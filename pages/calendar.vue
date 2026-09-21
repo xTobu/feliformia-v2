@@ -231,7 +231,13 @@
                 </span>
             </div>
 
-            <form @submit.prevent="Submit">
+            <!-- 唯讀使用者在還沒選日期、也沒選活動時不顯示表單 ——
+                 給他一張什麼都不能填的表單只會造成困惑。
+                 選了日期就出現「日期 + 當天活動列表」，選了活動才出現其餘欄位 -->
+            <form
+                @submit.prevent="Submit"
+                v-if="!readOnly || formData.date || formData.recordId"
+            >
                 <!-- 日期 -->
                 <div class="field" :class="{ invalid: errors.date }">
                     <label>日期 <i>*</i></label>
@@ -244,7 +250,7 @@
                         :disabled="!canEdit"
                         @change="onDateChange"
                     />
-                    <div class="day-events" v-if="formData.date && dayEvents.length">
+                    <div class="day-events" v-if="!isListView && formData.date && dayEvents.length">
                         <button
                             type="button"
                             v-for="ev in dayEvents"
@@ -280,154 +286,156 @@
                     </div>
                 </div>
 
-                <!-- 活動時間 -->
-                <div class="field" :class="{ invalid: errors.time }">
-                    <label>活動時間 <i>*</i></label>
-                    <div class="time-row">
-                        <el-time-select
-                            v-model="formData.timeStart"
-                            start="06:00"
-                            end="23:45"
-                            step="00:15"
-                            placeholder="開始時間"
-                            :disabled="!canEdit"
-                            @change="onTimeStartChange"
-                        />
-                        <span class="time-sep">→</span>
-                        <el-time-select
-                            v-model="formData.timeEnd"
-                            start="06:00"
-                            end="23:45"
-                            step="00:15"
-                            :min-time="formData.timeStart"
-                            placeholder="結束時間"
-                            :disabled="!canEdit"
-                        />
+                <template v-if="showDetailFields">
+                    <!-- 活動時間 -->
+                    <div class="field" :class="{ invalid: errors.time }">
+                        <label>活動時間 <i>*</i></label>
+                        <div class="time-row">
+                            <el-time-select
+                                v-model="formData.timeStart"
+                                start="06:00"
+                                end="23:45"
+                                step="00:15"
+                                placeholder="開始時間"
+                                :disabled="!canEdit"
+                                @change="onTimeStartChange"
+                            />
+                            <span class="time-sep">→</span>
+                            <el-time-select
+                                v-model="formData.timeEnd"
+                                start="06:00"
+                                end="23:45"
+                                step="00:15"
+                                :min-time="formData.timeStart"
+                                placeholder="結束時間"
+                                :disabled="!canEdit"
+                            />
+                        </div>
                     </div>
-                </div>
 
-                <!-- 類型 -->
-                <div class="field" :class="{ invalid: errors.type }">
-                    <label>類型 <i>*</i></label>
-                    <el-select
-                        v-model="formData.type"
-                        placeholder="請選擇活動類型"
-                        :disabled="!canEdit"
-                        :class="formData.type ? `type-text-${formData.type}` : ''"
-                    >
-                        <el-option
-                            v-for="item in typeList"
-                            :key="item.value"
-                            :label="item.label"
-                            :value="item.value"
+                    <!-- 類型 -->
+                    <div class="field" :class="{ invalid: errors.type }">
+                        <label>類型 <i>*</i></label>
+                        <el-select
+                            v-model="formData.type"
+                            placeholder="請選擇活動類型"
+                            :disabled="!canEdit"
+                            :class="formData.type ? `type-text-${formData.type}` : ''"
                         >
-                            <span :style="{ color: item.color }">{{ item.label }}</span>
-                        </el-option>
-                    </el-select>
-                </div>
+                            <el-option
+                                v-for="item in typeList"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                            >
+                                <span :style="{ color: item.color }">{{ item.label }}</span>
+                            </el-option>
+                        </el-select>
+                    </div>
 
-                <!-- 提示該活動之人員 -->
-                <div class="field" :class="{ invalid: errors.notifyRoles }">
-                    <label>活動人員 <i>*</i></label>
-                    <el-select
-                        v-model="formData.notifyRoles"
-                        multiple
-                        placeholder="請選擇相關人員"
-                        :disabled="!canEdit"
-                    >
-                        <el-option
-                            v-for="item in roleList"
-                            :key="item.value"
-                            :label="item.label"
-                            :value="item.value"
+                    <!-- 提示該活動之人員 -->
+                    <div class="field" :class="{ invalid: errors.notifyRoles }">
+                        <label>活動人員 <i>*</i></label>
+                        <el-select
+                            v-model="formData.notifyRoles"
+                            multiple
+                            placeholder="請選擇相關人員"
+                            :disabled="!canEdit"
+                        >
+                            <el-option
+                                v-for="item in roleList"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                            />
+                        </el-select>
+                    </div>
+
+                    <!-- 早班人員 -->
+                    <div class="field" v-if="formData.notifyRoles.includes('morning')">
+                        <label>早班人員</label>
+                        <div class="hint" v-if="!formData.date">請先選擇日期</div>
+                        <div class="roster" v-else-if="rosterMorning.length">
+                            <span class="chip" v-for="name in rosterMorning" :key="name">
+                                {{ name }}
+                            </span>
+                        </div>
+                        <div class="warn" v-else>
+                            <el-icon><WarningFilled /></el-icon> 無人值班
+                        </div>
+                    </div>
+
+                    <!-- 晚班人員 -->
+                    <div class="field" v-if="formData.notifyRoles.includes('night')">
+                        <label>晚班人員</label>
+                        <div class="hint" v-if="!formData.date">請先選擇日期</div>
+                        <div class="roster" v-else-if="rosterNight.length">
+                            <span class="chip" v-for="name in rosterNight" :key="name">
+                                {{ name }}
+                            </span>
+                        </div>
+                        <div class="warn" v-else>
+                            <el-icon><WarningFilled /></el-icon> 無人值班
+                        </div>
+                    </div>
+
+                    <!-- 負責人 -->
+                    <div class="field" v-if="formData.notifyRoles.includes('owner')">
+                        <label>負責人</label>
+                        <el-select
+                            v-model="formData.owners"
+                            multiple
+                            filterable
+                            clearable
+                            placeholder="請選擇負責人"
+                            :disabled="!canEdit"
+                        >
+                            <el-option
+                                v-for="item in volunteerList"
+                                :key="item.value"
+                                :label="item.label"
+                                :value="item.value"
+                            />
+                        </el-select>
+                    </div>
+
+                    <!-- 內容 -->
+                    <div class="field" :class="{ invalid: errors.content }">
+                        <label>內容 <i>*</i></label>
+                        <el-input
+                            type="textarea"
+                            v-model="formData.content"
+                            placeholder="請描述活動內容"
+                            :disabled="!canEdit"
                         />
-                    </el-select>
-                </div>
-
-                <!-- 早班人員 -->
-                <div class="field" v-if="formData.notifyRoles.includes('morning')">
-                    <label>早班人員</label>
-                    <div class="hint" v-if="!formData.date">請先選擇日期</div>
-                    <div class="roster" v-else-if="rosterMorning.length">
-                        <span class="chip" v-for="name in rosterMorning" :key="name">
-                            {{ name }}
-                        </span>
                     </div>
-                    <div class="warn" v-else>
-                        <el-icon><WarningFilled /></el-icon> 無人值班
-                    </div>
-                </div>
 
-                <!-- 晚班人員 -->
-                <div class="field" v-if="formData.notifyRoles.includes('night')">
-                    <label>晚班人員</label>
-                    <div class="hint" v-if="!formData.date">請先選擇日期</div>
-                    <div class="roster" v-else-if="rosterNight.length">
-                        <span class="chip" v-for="name in rosterNight" :key="name">
-                            {{ name }}
-                        </span>
-                    </div>
-                    <div class="warn" v-else>
-                        <el-icon><WarningFilled /></el-icon> 無人值班
-                    </div>
-                </div>
-
-                <!-- 負責人 -->
-                <div class="field" v-if="formData.notifyRoles.includes('owner')">
-                    <label>負責人</label>
-                    <el-select
-                        v-model="formData.owners"
-                        multiple
-                        filterable
-                        clearable
-                        placeholder="請選擇負責人"
-                        :disabled="!canEdit"
-                    >
-                        <el-option
-                            v-for="item in volunteerList"
-                            :key="item.value"
-                            :label="item.label"
-                            :value="item.value"
-                        />
-                    </el-select>
-                </div>
-
-                <!-- 內容 -->
-                <div class="field" :class="{ invalid: errors.content }">
-                    <label>內容 <i>*</i></label>
-                    <el-input
-                        type="textarea"
-                        v-model="formData.content"
-                        placeholder="請描述活動內容"
-                        :disabled="!canEdit"
-                    />
-                </div>
-
-                <button
-                    type="submit"
-                    class="btn"
-                    v-if="!readOnly"
-                    :disabled="saving || !canEdit"
-                >
-                    {{ saving ? '儲存中...' : formData.recordId ? '確認更新' : '確認送出' }}
-                </button>
-                <p class="perm-hint" v-if="readOnly">
-                    唯讀：只有管理員可以新增、編輯或刪除活動
-                </p>
-
-                <div class="edit-actions" v-if="formData.recordId">
-                    <button type="button" class="link-btn" @click="resetForm">
-                        取消編輯
-                    </button>
                     <button
-                        type="button"
-                        class="link-btn danger"
-                        v-if="canEdit"
-                        @click="DeleteEvent"
+                        type="submit"
+                        class="btn"
+                        v-if="!readOnly"
+                        :disabled="saving || !canEdit"
                     >
-                        刪除這筆
+                        {{ saving ? '儲存中...' : formData.recordId ? '確認更新' : '確認送出' }}
                     </button>
-                </div>
+                    <p class="perm-hint" v-if="readOnly">
+                        唯讀：只有管理員可以新增、編輯或刪除活動
+                    </p>
+
+                    <div class="edit-actions" v-if="formData.recordId">
+                        <button type="button" class="link-btn" @click="resetForm">
+                            取消編輯
+                        </button>
+                        <button
+                            type="button"
+                            class="link-btn danger"
+                            v-if="canEdit"
+                            @click="DeleteEvent"
+                        >
+                            刪除這筆
+                        </button>
+                    </div>
+                </template>
             </form>
 
             <FloatButton />
@@ -516,6 +524,9 @@ const formData = ref({
 const canEdit = computed(() => isAdmin.value);
 // 還沒載完 profile 前不要先跳「唯讀」，避免管理員看到一閃而過的提示
 const readOnly = computed(() => profileLoaded.value && !canEdit.value);
+// 唯讀使用者只有在點開某一筆活動時才看得到細節欄位。
+// 只選了日期的話，表單只顯示「日期 + 當天活動列表」，其餘留白
+const showDetailFields = computed(() => !readOnly.value || !!formData.value.recordId);
 
 const myId = computed(() => getUserId());
 
@@ -932,6 +943,13 @@ function leaveEditMode() {
     if (formData.value.recordId) resetForm();
 }
 
+// 選了日期就順手選起當天最早的那筆活動。
+// eventsByDate 已經依 timeStart 排序，取第一筆即可。
+function selectFirstEventOf(day) {
+    const first = (eventsByDate.value[day] || [])[0];
+    if (first) editEvent(first);
+}
+
 function pickDate(day) {
     // 再點一次同一天就取消選取，跟活動卡片的行為一致。
     // 先把 date 清掉再 resetForm() —— resetForm 會保留當下的 date
@@ -943,12 +961,14 @@ function pickDate(day) {
 
     formData.value.date = day;
     leaveEditMode();
+    selectFirstEventOf(day);
 }
 
 function onDateChange(day) {
     if (day) {
         cursor.value = $dayjs(day).toDate();
         leaveEditMode();
+        selectFirstEventOf(day);
     }
 }
 
@@ -1643,6 +1663,7 @@ $types: (
     }
 }
 
+// 選取日期當天的活動，接在日期欄位下方
 .day-events {
     margin-top: 8px;
 
