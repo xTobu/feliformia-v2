@@ -259,23 +259,118 @@ const readOnly = computed(() => profileLoaded.value && !canEdit.value);
 > 只靠 `middleware/admin.js` 擋頁面 —— 直接打那支 API 就拿得到全體志工資料。
 > 這是既有的問題，不在本次範圍內，但 `requireAdmin()` 已經寫成通用的，要補很容易。
 
-### 4.7 「只看我的」與類型 legend
+### 4.7 兩種檢視：月曆與列表
 
-**只看我的**（月曆上方獨立一列）
+右上角的 `el-switch` 切換 `isListView`，選擇存在 localStorage 的 `calendar-list-view`。
 
-`isMyEvent(ev)` 判斷我是不是這筆活動的人員。**用 user id 比對，不能用暱稱**（會撞名）：
+| | 月曆 | 列表 |
+|---|---|---|
+| 元件 | `el-calendar` | 自己刻的 `.month-list` |
+| 月份導覽 | `el-calendar` 的 `#header` slot，走 `goto()` → `calendarRef.selectDate()` | 自己的 `.list-nav`，走 `shiftMonth()` 直接算 `cursor` |
+| 範圍 | 月曆格子（含前後月補滿的那幾天） | **只有 `cursor` 那個月** |
 
-- `owners` 包含我的 id（且有勾負責人），或
-- 勾了早班／晚班，且我在當天該班別的名單裡（靠 `rosterEntries()` 帶出來的 `userId`）
+> ⚠️ `el-calendar` 是 `v-if` 不是 `v-show`，切到列表時 `calendarRef` 是 `null`。
+> 所以列表的導覽**不能**用 `goto()`，要用 `shiftMonth()` 自己算 dayjs。
 
-打開後 `visibleEvents` 會過濾 `events`，而 `eventsByDate` 吃的是 `visibleEvents`，
-所以**月曆格子與日期下方的列表會同時被篩**。只篩其中一邊的話，
-月曆顯示 3 個色塊、點下去只剩 1 筆，數量對不上會很困惑。
+`monthGroups` 吃的是 `eventsByDate`（來自 `visibleEvents`），
+所以**篩選條件在兩種檢視都生效**，看到的筆數一致。
+當月沒有活動時顯示「本月沒有活動」。
 
-狀態用 `useLocalStorage` 存在 `calendar-only-mine`，下次進來維持上次的選擇
-（比照 `/vote` 的篩選設定）。
+**日期標題**是 `<button>`，點下去等同在月曆上點那格（走同一支 `pickDate()`）：
 
-**類型 legend**（月曆下方）
+```
+8  週三                    1 個活動
+```
+
+- 大數字是日，右邊是當天筆數
+- `today` → **淺紅底 `#fde2e2` + 深紅字 `#b33a39`**
+- `picked`（表單正在編輯這一天）→ **藍底白字** + 藍色底線
+
+> 兩個狀態**刻意用不同顏色**，同時成立時 `picked` 蓋過 `today`（規則寫在後面）。
+> 配色跟月曆格子的 `.cell.today .num` / `.cell.picked .num` 是同一套，
+> 兩種檢視看起來才一致。
+- `position: sticky; top: 0` 吸在捲動容器頂端，捲很長也知道讀到哪一天
+
+**`.list-body` 有 `max-height: 50vh` + `overflow-y: auto`**，
+資料多的時候在框內捲動，不會把下方表單推到看不見的地方。
+
+> `padding-right: 8px` 是留給捲軸的，不然日期右邊的「N 個活動」會被切掉。
+
+#### 自動捲到今天附近
+
+`scrollListToToday()` 在**切到列表、換月份、第一次載入**時觸發
+（**不**在 realtime 重載時觸發 —— 讀到一半被捲走很煩）。
+
+`nearestGroupDate()` 決定捲到哪一天：
+
+- 看的不是當月 → 回 `null`，捲到最上面（「今天」根本不在那個月裡）
+- 今天有活動 → 今天
+- 否則取**距離今天最近**的那天；距離相同時取**比較晚**的（接下來要發生的比較重要）
+
+> ⚠️ 量位置前要 `await document.fonts?.ready`。
+> 這頁用 Google Fonts 的 Noto Sans TC，字體載入會改變卡片高度，
+> 只等 `nextTick()` 會量到舊高度 —— 實測會直接捲到底而不是正確位置。
+
+> 位移用 `getBoundingClientRect()` 的差值而不是 `offsetTop`，
+> 後者要看有沒有 positioned 祖先，容易踩雷。
+
+列表的每一列是 `.list-item` 卡片，跟月曆下方的 `.day-event` 是**兩套不同的東西**：
+
+```
+[社群] 13:00 ~ 14:00        ← 類型 badge ＋ 時間
+IG 送養文待發               ← 內容，15px，不截斷、會換行
+👤 小萬、小貝 +2             ← 活動人員
+```
+
+左側 3px 色條依類型上色，未指定人員時上／右／下變紅色虛線（左側色條保持實心）。
+
+> ⚠️ 色條的規則刻意寫成 `.month-list .list-item.type-x` 多包一層。
+> 只寫 `.list-item.type-x` 的話會跟 `.month-list .list-item` 的底色**特異性打平**，
+> 變成誰寫在後面誰贏 —— 樣式一重排就默默壞掉。這個坑我踩過。
+
+> `.list-date` 要自己 `text-align: left`，`#calendar` 是置中的。
+
+### 4.8 篩選與類型 legend
+
+**篩選**（月曆左上的 Setting icon）
+
+點 icon 開 `el-dialog`，三個條件：
+
+| 條件 | 控制項 | 比對 |
+|---|---|---|
+| 活動人員 | 多選 | `eventPeopleIds(ev)` 與所選集合有交集 |
+| 類型 | 多選 | `ev.type` 在所選集合裡 |
+| 內容 | 文字 | `ev.content` 包含關鍵字，不分大小寫；只有空白視為不篩 |
+
+**條件之間 AND，單一條件內多選是 OR。**
+例如「活動人員=小萬、小貝」+「類型=社群」= 小萬或小貝參與的社群活動。
+
+`eventPeopleIds(ev)` 用 **user id** 比對不是暱稱（會撞名），
+內容是 `owners` + 當天早晚班名單，依 `notifyRoles` 決定取哪幾項。
+`eventPeople()`（列表右側顯示的名字）也改成走它 —— 先去重 id 再轉暱稱，
+反過來做的話兩個同名的人會被併成一個。
+
+**`filter` 與 `filterDraft` 是兩個東西。** 因為有「套用」按鈕：
+`filterDraft` 是 modal 裡編輯中的草稿，改到一半關掉 modal 不該影響畫面；
+按下套用才複製進 `filter`，並寫進 localStorage 的 `calendar-filter`。
+`openFilter()` 開啟時是**深拷貝**，不然在 modal 裡改多選會直接動到已套用的條件。
+
+「清除」只清草稿、不關 modal，使用者還是要按「套用」才生效。
+
+`hasActiveFilter` 為真時 icon 旁邊顯示「篩選中」。
+**這個提示不能省** —— 篩選開著但看不出來的話，使用者會以為活動憑空消失。
+
+「只看我的」是活動人員欄位右邊的小灰字捷徑，點了把 `filterDraft.people` 設成 `[myId]`。
+
+> ⚠️ `el-dialog` 的 label 會被 Element Plus 算一個固定寬度（剛好包住文字），
+> 裡面的 `.label-row` 就撐不滿，「只看我的」會黏在標題右邊而不是推到最右。
+> 要 `:deep(.el-form-item__label) { width: 100% }`。
+
+> ⚠️ dialog 沒有被 teleport 到 body，還在頁面 root 底下（帶 `data-v`），
+> 所以 `:deep()` 打得到。footer 的按鈕一樣中了全域 `button { width: 100% }`，
+> 要 `.el-button { width: auto !important }`。
+
+**類型 legend**（月曆下方，靠右）
 
 五個類型的顏色對照。配色只定義在 SCSS 的 `$types` map 一處，
 `@each` 迴圈同時產生 `.tag`、`.day-event`、`.legend-item` 三種選擇器，
