@@ -1,8 +1,6 @@
 <template>
     <ClientOnly>
         <div v-loading="loading" id="calendar">
-            <h1>Hi, {{ displayName }}！這裡是行事曆與備註區</h1>
-
             <!-- 月曆 -->
             <el-calendar ref="calendarRef" v-model="cursor">
                 <template #header>
@@ -45,7 +43,7 @@
 
             <form @submit.prevent="Submit">
                 <!-- 日期 -->
-                <div class="field">
+                <div class="field" :class="{ invalid: errors.date }">
                     <label>日期 <i>*</i></label>
                     <el-date-picker
                         v-model="formData.date"
@@ -76,29 +74,31 @@
                 </div>
 
                 <!-- 活動時間 -->
-                <div class="field">
+                <div class="field" :class="{ invalid: errors.time }">
                     <label>活動時間 <i>*</i></label>
                     <div class="time-row">
                         <el-time-select
                             v-model="formData.timeStart"
-                            start="00:00"
+                            start="06:00"
                             end="23:45"
                             step="00:15"
                             placeholder="開始時間"
+                            @change="onTimeStartChange"
                         />
                         <span class="time-sep">→</span>
                         <el-time-select
                             v-model="formData.timeEnd"
-                            start="00:00"
+                            start="06:00"
                             end="23:45"
                             step="00:15"
+                            :min-time="formData.timeStart"
                             placeholder="結束時間"
                         />
                     </div>
                 </div>
 
                 <!-- 類型 -->
-                <div class="field">
+                <div class="field" :class="{ invalid: errors.type }">
                     <label>類型 <i>*</i></label>
                     <el-select
                         v-model="formData.type"
@@ -117,7 +117,7 @@
                 </div>
 
                 <!-- 提示該活動之人員 -->
-                <div class="field">
+                <div class="field" :class="{ invalid: errors.notifyRoles }">
                     <label>提示該活動之人員 <i>*</i></label>
                     <el-select
                         v-model="formData.notifyRoles"
@@ -180,7 +180,7 @@
                 </div>
 
                 <!-- 內容 -->
-                <div class="field">
+                <div class="field" :class="{ invalid: errors.content }">
                     <label>內容 <i>*</i></label>
                     <el-input
                         type="textarea"
@@ -214,6 +214,8 @@
 
 <script setup>
 import Swal from 'sweetalert2';
+import { ElMessage } from 'element-plus';
+import { debounce } from 'lodash-es';
 import { WarningFilled } from '@element-plus/icons-vue';
 import FloatButton from '~/components/FloatButton.vue';
 
@@ -225,6 +227,7 @@ useHead({
     title: '行事曆與備註區',
 });
 
+const supabase = useSupabaseClient();
 const { $dayjs } = useNuxtApp();
 const { displayName } = useProfile();
 
@@ -242,76 +245,6 @@ const roleList = [
     { value: 'owner', label: '負責人' },
 ];
 
-/* ============================================================
- * Mock data（純切版用，不接任何 API）
- * 之後接後端時，把這一整塊換成 API 呼叫即可：
- *   events        <- GET  活動列表
- *   roster()      <- 依日期從 votes 算出的當班名單
- *   volunteerList <- GET  志工名單
- *   Submit / DeleteEvent 內的陣列操作 <- POST
- * ========================================================== */
-
-// 每月固定這幾筆，方便檢視版面
-// 出車／發文多半會指定負責人；物資贈送／志工體驗通常只掛早晚班，
-// 而排班要等日期接近才會催投票，所以常常是還沒有人的狀態（月曆上會是紅色虛線）
-const MOCK_EVENTS = [
-    // 志工體驗／物資贈送：只掛早晚班
-    { day: 1, timeStart: '14:00', timeEnd: '16:00', type: 'volunteer', notifyRoles: ['morning'], owner: '', content: 'Apple 志工體驗' },
-    { day: 3, timeStart: '18:00', timeEnd: '20:00', type: 'volunteer', notifyRoles: ['night'], owner: '', content: '虎嚕媽打掃體驗' },
-    { day: 3, timeStart: '20:30', timeEnd: '21:00', type: 'supplies', notifyRoles: ['night'], owner: '', content: '阿璇捐籠子' },
-    { day: 5, timeStart: '10:00', timeEnd: '12:00', type: 'volunteer', notifyRoles: ['morning'], owner: '', content: '佽二次體驗' },
-    { day: 7, timeStart: '13:00', timeEnd: '15:00', type: 'supplies', notifyRoles: ['morning', 'night'], owner: '', content: '多筆物資寄放' },
-    { day: 9, timeStart: '19:00', timeEnd: '21:00', type: 'volunteer', notifyRoles: ['night'], owner: '', content: '佳潔-二次體驗' },
-    { day: 10, timeStart: '11:00', timeEnd: '12:00', type: 'supplies', notifyRoles: ['morning'], owner: '', content: '小姨捐物資' },
-    { day: 11, timeStart: '15:00', timeEnd: '17:00', type: 'volunteer', notifyRoles: ['morning'], owner: '', content: 'Katie 體驗' },
-    // 出車／發文：指定負責人
-    { day: 15, timeStart: '09:00', timeEnd: '11:00', type: 'dispatch', notifyRoles: ['owner'], owner: '小萬', content: '雪兒＼老屋出車' },
-    { day: 18, timeStart: '19:00', timeEnd: '20:00', type: 'dispatch', notifyRoles: ['night', 'owner'], owner: '小貝', content: '貓咪去新家(借籠子組)' },
-    { day: 22, timeStart: '20:00', timeEnd: '21:00', type: 'post', notifyRoles: ['owner'], owner: '', content: '送養文待發' },
-    { day: 25, timeStart: '19:00', timeEnd: '20:00', type: 'dispatch', notifyRoles: ['owner'], owner: 'Summer', content: 'TNR' },
-    { day: 28, timeStart: '20:00', timeEnd: '21:00', type: 'post', notifyRoles: ['owner'], owner: '思芸', content: '認養回報發文' },
-    { day: 30, timeStart: '13:00', timeEnd: '14:00', type: 'other', notifyRoles: ['morning', 'owner'], owner: '小萬', content: '結紮預約' },
-];
-
-// 有人投票的日子，其餘日子當作還沒人排班
-const MOCK_MORNING_DAYS = [3, 5, 10, 15, 22];
-const MOCK_NIGHT_DAYS = [3, 9, 18, 25];
-
-const MOCK_ROSTER_MORNING = ['值班 - 小貝', '快閃/協助 - Summer'];
-const MOCK_ROSTER_NIGHT = ['值班 - 阿璇'];
-
-const volunteerList = ref(
-    ['小萬', '小貝', 'Summer', '阿璇', '思芸', 'Katie'].map((name) => ({
-        label: name,
-        value: name,
-    }))
-);
-
-function buildMockEvents(monthDate) {
-    const base = $dayjs(monthDate).startOf('month');
-    const daysInMonth = base.daysInMonth();
-
-    return MOCK_EVENTS.filter((item) => item.day <= daysInMonth).map((item) => ({
-        ...item,
-        recordId: `mock-${base.format('YYYYMM')}-${item.day}-${item.timeStart}`,
-        date: base.date(item.day).format('YYYY-MM-DD'),
-    }));
-}
-
-// 某天某班別的值班名單，格式為「選項名稱 - 暱稱」
-function roster(date, shift) {
-    if (!date) return [];
-
-    const day = Number(date.slice(-2));
-
-    if (shift === 'morning') {
-        return MOCK_MORNING_DAYS.includes(day) ? MOCK_ROSTER_MORNING : [];
-    }
-    return MOCK_NIGHT_DAYS.includes(day) ? MOCK_ROSTER_NIGHT : [];
-}
-
-/* ========================= Mock data 結束 ====================== */
-
 // State
 const loading = ref(true);
 const saving = ref(false);
@@ -320,6 +253,12 @@ const cursor = ref(new Date());
 const today = $dayjs().format('YYYY-MM-DD');
 
 const events = ref([]);
+const volunteerList = ref([]);
+const voteOptions = ref([]);
+const allUsers = ref([]); // 解 votes.user_id → 暱稱用
+const votes = ref([]); // 目前顯示範圍所涵蓋的週投票資料
+const realtimeChannel = ref(null);
+const errors = ref({}); // 哪些必填欄位沒填，key 見 FIELD_ORDER
 
 const formData = ref({
     recordId: '',
@@ -348,6 +287,174 @@ const dayEvents = computed(() => eventsByDate.value[formData.value.date] || []);
 
 const rosterMorning = computed(() => roster(formData.value.date, 'morning'));
 const rosterNight = computed(() => roster(formData.value.date, 'night'));
+
+/* ============================================================
+ * 值班名單：從 votes 即時算出來，不存進 calendar_events
+ * 存一份會跟 /vote 的投票結果不同步
+ * ========================================================== */
+
+// votes 只存 user_id，暱稱要另外對（與 /vote 的 getNickname 相同）
+const userMap = computed(() => {
+    const map = new Map();
+    for (const user of allUsers.value) {
+        map.set(user.id, user.nickname || user.email || '未命名');
+    }
+    return map;
+});
+
+function getNickname(userId) {
+    return userMap.value.get(userId) || '未命名';
+}
+
+// 該班別可用的選項；shift 缺值視同 'both'，與 /vote 的處理一致
+function shiftOptions(shift) {
+    return voteOptions.value.filter(
+        (opt) => !opt.shift || opt.shift === 'both' || opt.shift === shift
+    );
+}
+
+// 某天某班別的值班名單，格式為「選項名稱 - 暱稱」
+function roster(date, shift) {
+    if (!date) return [];
+
+    const result = [];
+
+    // 依 sort_order 逐個選項掃，名單順序才會跟 /vote 一致
+    for (const option of shiftOptions(shift)) {
+        for (const vote of votes.value) {
+            // 勾了「本週Pass」的人等於整週請假，data 裡的舊勾選不算數
+            if (vote.is_pass) continue;
+            // 直接用 data 的日期 key，不比對 week_start（原因見 loadVotes）
+            if (!vote.data?.[date]?.[shift]?.[option.id]?.checked) continue;
+
+            result.push(`${option.name} - ${getNickname(vote.user_id)}`);
+        }
+    }
+
+    return result;
+}
+
+/* ============================================================
+ * 資料載入
+ * ========================================================== */
+
+// 月曆實際顯示的範圍：格子會補滿前後月份，所以要含頭尾那幾天
+function displayRange() {
+    const base = $dayjs(cursor.value);
+    return {
+        start: base.startOf('month').startOf('week').format('YYYY-MM-DD'),
+        end: base.endOf('month').endOf('week').format('YYYY-MM-DD'),
+    };
+}
+
+async function loadEvents() {
+    const { start, end } = displayRange();
+
+    try {
+        events.value = await $fetch('/api/calendar/list', {
+            query: { start, end },
+        });
+    } catch (error) {
+        console.error('載入行事曆失敗:', error);
+        ElMessage.error('載入行事曆失敗');
+    }
+}
+
+// votes 以 week_start 分列，但真正的日期在 data 的 key 上。
+//
+// ⚠️ 不要用 .in('week_start', [一串週一]) 來查。
+// 資料庫裡現存的 week_start 有不少是「星期二」（例如 2025-12-02 那筆，
+// 它的 data key 其實是 2025-12-01 星期一），精準比對會整批漏掉。
+// 所以這裡用區間查、前後各多抓一週當緩衝，
+// 再由 roster() 直接用 data 的日期 key 對，不管 week_start 準不準。
+async function loadVotes() {
+    const { start, end } = displayRange();
+
+    const { data, error } = await supabase
+        .from('votes')
+        .select('user_id, week_start, is_pass, data')
+        .gte('week_start', $dayjs(start).subtract(7, 'day').format('YYYY-MM-DD'))
+        .lte('week_start', $dayjs(end).add(7, 'day').format('YYYY-MM-DD'));
+
+    if (error) {
+        console.error('載入投票失敗:', error);
+        return;
+    }
+
+    votes.value = data || [];
+}
+
+// 所有使用者（含已停用的），只用來把 votes.user_id 轉成暱稱。
+// 跟 volunteerList 不同：那個是負責人下拉選單，只收有效志工。
+async function loadUsers() {
+    try {
+        allUsers.value = await $fetch('/api/users/list');
+    } catch (error) {
+        console.error('載入使用者失敗:', error);
+    }
+}
+
+async function loadVoteOptions() {
+    const { data, error } = await supabase
+        .from('vote_options')
+        .select('*')
+        .eq('is_active', true)
+        .order('sort_order');
+
+    if (error) {
+        console.error('載入投票選項失敗:', error);
+        return;
+    }
+
+    voteOptions.value = data || [];
+}
+
+// 負責人用的志工名單，value 是 user id
+async function loadVolunteers() {
+    try {
+        const list = await $fetch('/api/volunteer/list');
+        volunteerList.value = list.map((item) => ({
+            label: item.name,
+            value: item.recordId,
+        }));
+    } catch (error) {
+        console.error('載入志工名單失敗:', error);
+    }
+}
+
+// 換月份時重新查，events 與 votes 都要跟著範圍走
+async function loadRange() {
+    await Promise.all([loadEvents(), loadVotes()]);
+}
+
+/* ============================================================
+ * Realtime：多位志工同時開著頁面時彼此看得到變更
+ * ========================================================== */
+
+// 短時間內多筆變更只重載一次
+const reloadEvents = debounce(() => loadEvents(), 300);
+
+function subscribeToRealtime() {
+    if (realtimeChannel.value) {
+        supabase.removeChannel(realtimeChannel.value);
+    }
+
+    realtimeChannel.value = supabase
+        .channel('calendar-events')
+        .on(
+            'postgres_changes',
+            {
+                // 軟刪除在 Realtime 眼中是 UPDATE 不是 DELETE，所以聽 '*'
+                event: '*',
+                schema: 'public',
+                table: 'calendar_events',
+            },
+            () => {
+                reloadEvents();
+            }
+        )
+        .subscribe();
+}
 
 // Methods
 function typeLabel(type) {
@@ -388,7 +495,16 @@ function onDateChange(day) {
     }
 }
 
+// 改了開始時間之後，原本的結束時間可能已經不合法，直接清掉
+function onTimeStartChange() {
+    const { timeStart, timeEnd } = formData.value;
+    if (timeStart && timeEnd && timeEnd <= timeStart) {
+        formData.value.timeEnd = '';
+    }
+}
+
 function editEvent(ev) {
+    errors.value = {};
     formData.value = {
         recordId: ev.recordId,
         date: ev.date,
@@ -402,6 +518,7 @@ function editEvent(ev) {
 }
 
 function resetForm() {
+    errors.value = {};
     const { date } = formData.value;
     formData.value = {
         recordId: '',
@@ -415,16 +532,54 @@ function resetForm() {
     };
 }
 
-function Submit() {
+// 錯誤訊息要照畫面由上而下報，不能依賴物件的 key 順序
+const FIELD_ORDER = ['date', 'time', 'type', 'notifyRoles', 'content'];
+
+// 一次檢查全部必填，回傳 { 欄位: 訊息 }。
+// 不在第一個錯誤就停，否則使用者要按五次送出才知道有五個欄位沒填。
+function validate() {
+    const { date, timeStart, timeEnd, type, notifyRoles, content } = formData.value;
+    const found = {};
+
+    if (!date) found.date = '請選擇日期';
+    if (!timeStart || !timeEnd) found.time = '請選擇活動時間';
+    if (!type) found.type = '請選擇類型';
+    if (!notifyRoles.length) found.notifyRoles = '請選擇提示該活動之人員';
+    if (!content?.trim()) found.content = '請輸入內容';
+
+    return found;
+}
+
+// 欄位一有值就把紅框拿掉，不必等重新送出
+watch(
+    formData,
+    () => {
+        if (!Object.keys(errors.value).length) return;
+
+        const next = { ...errors.value };
+        const { date, timeStart, timeEnd, type, notifyRoles, content } = formData.value;
+
+        if (date) delete next.date;
+        if (timeStart && timeEnd) delete next.time;
+        if (type) delete next.type;
+        if (notifyRoles.length) delete next.notifyRoles;
+        if (content?.trim()) delete next.content;
+
+        errors.value = next;
+    },
+    { deep: true }
+);
+
+async function Submit() {
     const { recordId, date, timeStart, timeEnd, type, notifyRoles, owner, content } = formData.value;
 
-    if (!date) return ElMessage.error('請選擇日期');
-    if (!timeStart || !timeEnd) return ElMessage.error('請選擇活動時間');
-    if (!type) return ElMessage.error('請選擇類型');
-    if (!notifyRoles.length) return ElMessage.error('請選擇提示該活動之人員');
-    if (!content?.trim()) return ElMessage.error('請輸入內容');
+    errors.value = validate();
+
+    const firstError = FIELD_ORDER.map((key) => errors.value[key]).find(Boolean);
+    if (firstError) return ElMessage.error(firstError);
 
     const payload = {
+        recordId,
         date,
         timeStart,
         timeEnd,
@@ -436,18 +591,21 @@ function Submit() {
 
     saving.value = true;
 
-    if (recordId) {
-        const index = events.value.findIndex((ev) => ev.recordId === recordId);
-        if (index > -1) {
-            events.value[index] = { ...events.value[index], ...payload };
-        }
-    } else {
-        events.value.push({ recordId: `mock-new-${Date.now()}`, ...payload });
-    }
+    try {
+        await $fetch('/api/calendar/update', {
+            method: 'POST',
+            body: payload,
+        });
 
-    saving.value = false;
-    resetForm();
-    ElMessage.success('已儲存（mock，重新整理就會還原）');
+        await loadEvents();
+        resetForm();
+        ElMessage.success('已儲存');
+    } catch (error) {
+        console.error('儲存失敗:', error);
+        ElMessage.error(error.data?.message || '儲存失敗');
+    } finally {
+        saving.value = false;
+    }
 }
 
 async function DeleteEvent() {
@@ -461,22 +619,51 @@ async function DeleteEvent() {
 
     if (!isConfirmed) return;
 
-    events.value = events.value.filter(
-        (ev) => ev.recordId !== formData.value.recordId
-    );
-    resetForm();
-    ElMessage.success('已刪除（mock）');
+    saving.value = true;
+
+    try {
+        await $fetch('/api/calendar/delete', {
+            method: 'POST',
+            body: { recordId: formData.value.recordId },
+        });
+
+        await loadEvents();
+        resetForm();
+        ElMessage.success('已刪除');
+    } catch (error) {
+        console.error('刪除失敗:', error);
+        ElMessage.error(error.data?.message || '刪除失敗');
+    } finally {
+        saving.value = false;
+    }
 }
 
+// 換月份就依新的顯示範圍重查
+watch(
+    () => $dayjs(cursor.value).format('YYYY-MM'),
+    () => loadRange()
+);
+
 // Lifecycle
-onMounted(() => {
-    // 產生前後各兩個月的 mock 活動，切換月份時都看得到內容
-    const list = [];
-    for (let offset = -2; offset <= 2; offset++) {
-        list.push(...buildMockEvents($dayjs().add(offset, 'month')));
+onMounted(async () => {
+    loading.value = true;
+
+    try {
+        // 志工名單與投票選項只需要載一次
+        await Promise.all([loadVolunteers(), loadUsers(), loadVoteOptions()]);
+        await loadRange();
+    } finally {
+        loading.value = false;
     }
-    events.value = list;
-    loading.value = false;
+
+    subscribeToRealtime();
+});
+
+onBeforeUnmount(() => {
+    reloadEvents.cancel();
+    if (realtimeChannel.value) {
+        supabase.removeChannel(realtimeChannel.value);
+    }
 });
 </script>
 
@@ -633,6 +820,23 @@ $types: (
     .hint {
         font-size: 13px;
         color: #c0c4cc;
+    }
+
+    // 送出時沒填的必填欄位。這頁沒用 el-form-item，
+    // 所以 Element Plus 內建的 .is-error 用不上，要自己蓋 box-shadow。
+    &.invalid {
+        :deep(.el-input__wrapper),
+        :deep(.el-select__wrapper),
+        :deep(.el-textarea__inner) {
+            box-shadow: 0 0 0 1px #f56c6c inset;
+
+            // hover / focus 時不要被 Element Plus 蓋回藍色或灰色
+            &:hover,
+            &.is-focus,
+            &.is-hovering {
+                box-shadow: 0 0 0 1px #f56c6c inset;
+            }
+        }
     }
 }
 

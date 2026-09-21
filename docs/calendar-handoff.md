@@ -2,8 +2,8 @@
 
 `/calendar`（[pages/calendar.vue](../pages/calendar.vue)）
 
-目前狀態：**純前端切版完成，完全沒有接 API，所有資料都是頁面內的 mock。**
-後端與串接由下一位工程師接手。
+目前狀態：**已接 Supabase，功能完整可用。**
+（第一版由前一位工程師完成純切版，後端與串接已補上。）
 
 ---
 
@@ -25,9 +25,9 @@
 |---|---|
 | 用 Element Plus 的 `el-calendar`，**不裝 ant-design-vue** | 專案只有 element-plus 2.13。多裝一套 UI 庫會多 300KB+ 且兩套 reset 樣式會打架。原始需求是想用 antd 的行事曆元件，評估後改用 el-calendar |
 | **不發 LINE 通知**，只顯示名單 | 第一版先確認版面與流程。`/api/line/message/push` 已存在，之後要接很容易 |
-| 頁面不碰任何 API | 後端獨立處理，前端只負責切版 |
-| 結束時間**不做防呆** | 與 `/vote` 一致，那邊也沒擋。可以選早於開始時間的結束時間 |
-| 活動時間只到 15 分鐘刻度 | 不需要精準到分鐘。用 `el-time-select` 的 `step="00:15"` |
+| 讀 `votes` 走 supabase client，寫 `calendar_events` 走 server API | 讀取 `votes` 的 RLS 本來就開給登入者（`/vote` 也是這樣讀），不必多包一層 API。寫入要擋未登入、要 service key，走 server API 比較穩 |
+| 結束時間**只能選開始時間之後** | `el-time-select` 的 `min-time` 綁 `formData.timeStart`。改了開始時間後若結束時間變得不合法，`onTimeStartChange()` 會清掉它。（`/vote` 沒擋，但這頁擋） |
+| 活動時間 06:00–23:45，15 分鐘刻度 | 不需要精準到分鐘，也沒人半夜來貓屋。用 `el-time-select` 的 `start="06:00"` + `step="00:15"` |
 | 早晚班名單是**算出來的，不存** | 名單來源是 `votes`，存一份會不同步 |
 
 ---
@@ -38,13 +38,13 @@
 
 ```js
 {
-    recordId: 'mock-202609-3-18:00',  // 接 API 後換成 DB 的 id
+    recordId: 'b1f2...',              // calendar_events.id (uuid)
     date: '2026-09-03',               // YYYY-MM-DD
     timeStart: '18:00',               // HH:mm，15 分鐘刻度
     timeEnd: '20:00',
     type: 'volunteer',                // 見下表
     notifyRoles: ['morning'],         // 'morning' | 'night' | 'owner' 的子集合
-    owner: '',                        // 只有 notifyRoles 含 'owner' 才有值
+    owner: '',                        // profiles.id (uuid)，只有 notifyRoles 含 'owner' 才有值
     content: '虎嚕媽打掃體驗',          // 必填
 }
 ```
@@ -70,6 +70,11 @@
 - 只勾早晚班 → 不會出現負責人欄位
 
 `owner` 只在勾了 `'owner'` 時才存值，送出時會清掉（`Submit()` 的 `payload`）。
+存的是 `profiles.id`（uuid），不是名字 —— 志工改暱稱時不會對不上。
+名單來自 `/api/volunteer/list`（已過濾 `is_active === false`）。
+
+> ⚠️ `owner` 在 DB 是 uuid 欄位，**空字串會讓 Postgres 噴錯**。
+> 前端送 `''`，由 `update.post.js` 統一轉成 `null`。
 
 ---
 
@@ -77,23 +82,58 @@
 
 ### 4.1 `roster(date, shift)` — 當班名單
 
-**接 API 時要改寫的重點函式。** 回傳字串陣列，格式 `選項名稱 - 暱稱`，例如 `['值班 - 小貝', '快閃/協助 - Summer']`。
+本頁最核心的函式。回傳字串陣列，格式 `選項名稱 - 暱稱`，例如 `['值班 - 小貝', '快閃/協助 - Summer']`。
 
-正式邏輯應該照 [pages/vote.vue](../pages/vote.vue) 的算法從 `votes` 撈：
+照 [pages/vote.vue](../pages/vote.vue) 的算法從 `votes` 撈：
 
 ```js
 // votes.data[date][shift][optionId].checked === true 的人
 // option 名稱來自 vote_options（依 sort_order 排序、is_active）
 // 要跳過 is_pass 的人
-// week_start 是該日所屬週的「週一」
+// 日期直接用 data 的 key，不要比對 week_start（原因見 7.4）
 ```
 
-`votes` 是以 `week_start`（週一）為 key 的週資料，所以查某一天要先換算出那週的週一。
+> ⚠️ `votes` **沒有 nickname 欄位**（舊版 database.md 寫錯了，已修正）。
+> 名字要用 `user_id` 對 `/api/users/list` 建出來的 `userMap`，
+> 跟 `/vote` 的 `getNickname()` 同一套做法。
+> `volunteerList` 不能拿來做這件事 —— 它過濾掉了停用的志工，
+> 而停用的志工可能還留著舊投票。
+
+`votes` 表面上是以 `week_start` 分列的週資料，但**實際日期在 `data` 的 key 上**，
+`roster()` 只看 key、不比對 `week_start`（理由見 [7.4](#74-votesweek_start-有不少是星期二不能拿來精準比對)）。
+`loadVotes()` 只負責用區間把可能相關的列撈進來，前後各多抓一週當緩衝。
+
 `vote_options` 有 `shift` 欄位（`'both' | 'morning' | 'night'`），缺值時視同 `both`（vote.vue 就是這樣處理的）。
 
 資料結構詳見 [docs/database.md](database.md)。
 
-### 4.2 `isUnstaffed(ev)` — 紅色虛線框
+### 4.2 送出檢查與紅色邊框
+
+`validate()` 一次檢查全部五個必填欄位，回傳 `{ 欄位: 訊息 }`，
+**不在第一個錯誤就停** —— 否則使用者要按五次送出才知道有五個欄位沒填。
+
+結果存進 `errors`，每個 `.field` 綁 `:class="{ invalid: errors.xxx }"`，
+`ElMessage` 只報 `FIELD_ORDER` 裡的第一個（照畫面由上而下，不依賴物件 key 順序）。
+
+紅框在欄位一有值時就消失，靠一個 deep watch `formData`，不用等重新送出。
+`resetForm()` 與 `editEvent()` 會清掉 `errors`。
+
+樣式寫在 `.field.invalid`：這頁沒有用 `el-form-item`，
+所以 Element Plus 內建的 `.is-error` 用不上，得自己蓋 `box-shadow`。
+要蓋三種 wrapper：
+
+```scss
+:deep(.el-input__wrapper)     // el-date-picker
+:deep(.el-select__wrapper)    // el-select、以及 el-time-select（它不是 input wrapper）
+:deep(.el-textarea__inner)    // el-input type="textarea"
+```
+
+`&:hover / &.is-focus / &.is-hovering` 也要一起蓋，不然滑過或聚焦時會被還原成灰藍色。
+
+「負責人」**不納入檢查** —— 勾了負責人卻沒指定人是合法的，
+月曆上會用紅色虛線框表示「還沒有人」（見 4.3）。
+
+### 4.3 `isUnstaffed(ev)` — 紅色虛線框
 
 符合任一條件就回 `true`：
 
@@ -106,7 +146,7 @@
 
 套用在兩個地方：月曆格子的 `.tag`、日期欄位下方的 `.day-event`。
 
-### 4.3 `cursor` 與 `formData.date` 是兩件事
+### 4.4 `cursor` 與 `formData.date` 是兩件事
 
 **這裡踩過坑，接手時請留意。**
 
@@ -127,80 +167,73 @@
 
 ---
 
-## 5. Mock data 在哪、怎麼換掉
+## 5. 資料來源
 
-`<script setup>` 裡有一整塊用註解框起來的區域：
+Mock 已全部移除。現在頁面的四個資料來源：
 
-```
-/* ===== Mock data（純切版用，不接任何 API）===== */
-...
-/* ===== Mock data 結束 ===== */
-```
-
-要換掉的四個點：
-
-| Mock | 換成 |
+| 資料 | 來源 |
 |---|---|
-| `MOCK_EVENTS` + `buildMockEvents()` → `events` | GET 活動列表（依月曆顯示範圍的起訖日期查） |
-| `roster(date, shift)` | 依日期從 `votes` 算當班名單（見 4.1） |
-| `volunteerList` | GET 志工名單，可直接用現成的 `/api/volunteer/list` |
-| `Submit()` / `DeleteEvent()` 裡的陣列操作 | POST 新增／更新／刪除 |
+| `events` | `GET /api/calendar/list?start=&end=`（依月曆顯示範圍） |
+| `roster(date, shift)` | supabase client 直接讀 `votes` + `vote_options`（見 4.1） |
+| `userMap` | `GET /api/users/list`，把 `votes.user_id` 轉成暱稱 |
+| `volunteerList` | `GET /api/volunteer/list`，`value` 是 `profiles.id` |
+| `Submit()` / `DeleteEvent()` | `POST /api/calendar/update`、`POST /api/calendar/delete` |
 
-Mock 的 `MOCK_MORNING_DAYS` / `MOCK_NIGHT_DAYS` 是「那幾號有人投票」的假設，
-故意讓其他日子沒人，好讓紅色虛線框在切版時看得到。接 API 後整個拿掉。
+### 顯示範圍與換月
 
-目前 `onMounted` 一次產生**前後各兩個月**的 mock 活動。
-接 API 後應該改成 watch `cursor` 的月份變化、依範圍重新查：
+月曆格子會補滿前後月份，所以查詢範圍要含頭尾那幾天 —— `displayRange()` 負責算：
 
 ```js
-// 月曆格子會補滿前後月份，所以查詢範圍要含頭尾那幾天
-const rangeStart = 該月 1 號所屬週的週一
-const rangeEnd   = 該月最後一天所屬週的週一 + 6 天
+start = 該月 1 號所屬週的週一
+end   = 該月最後一天所屬週的週日
 ```
 
-> 注意：現在沒有這個 watch，所以往前／往後翻超過兩個月會是空的。這是 mock 階段的預期行為。
+`watch` 盯著 `cursor` 的 `YYYY-MM`，換月就 `loadRange()` 重查 `events` 與 `votes`。
+
+`votes` 是以 `week_start`（週一）為 key 的週資料，所以 `loadVotes()` 會把顯示範圍
+換算成一串週一，用 `.in('week_start', weeks)` 一次撈回來。
+
+### Realtime
+
+訂閱 `calendar_events` 整張表，收到變更就 debounce 300ms 後重載當前範圍。
+
+聽的是 `event: '*'` 而不是分別聽 INSERT/UPDATE/DELETE —— 因為**軟刪除在 Realtime
+眼中是 UPDATE 不是 DELETE**，只聽 DELETE 會漏掉。
+
+`votes` 的變動（有人投票了、紅框該消失）**不即時同步**，要換月或重新整理才會更新。
+要做的話再加一個 `votes` 的 channel 即可。
 
 ---
 
-## 6. 建議的後端（尚未實作，僅供參考）
+## 6. 後端
 
 ### Table `calendar_events`
 
-```sql
-create table if not exists public.calendar_events (
-    id uuid primary key default gen_random_uuid(),
-    date date not null,
-    time_start text not null,          -- 'HH:mm'
-    time_end text not null,
-    type text not null,                -- volunteer / supplies / dispatch / post / other
-    notify_roles jsonb not null default '[]'::jsonb,
-    owner text,                        -- 僅 notify_roles 含 owner 時才存
-    content text not null,
-    created_by uuid references auth.users (id) on delete set null,
-    created_at timestamptz not null default now(),
-    updated_at timestamptz not null default now()
-);
+建表 SQL：[docs/sql/calendar_events.sql](sql/calendar_events.sql)（可重複執行）
+欄位說明：[docs/database.md](database.md)
 
-create index if not exists calendar_events_date_idx on public.calendar_events (date);
+重點：
 
-alter table public.calendar_events enable row level security;
-
--- 寫入走 server API（service key 繞過 RLS），前端只需要讀取
-create policy "calendar_events_select" on public.calendar_events
-    for select to authenticated using (true);
-```
-
-早晚班人員**不要存進這張表**，依 `date` 對到 `votes` 即時算。
+- **軟刪除**：`deleted_at` / `deleted_by`，所有查詢帶 `.is('deleted_at', null)`
+- `type` 有 CHECK 約束，新增類型要同步改 `pages/calendar.vue` 的 `typeList`
+- 早晚班人員不存進這張表，依 `date` 對到 `votes` 即時算
+- RLS 只開 `select`（給 Realtime 訂閱用），寫入走 service key
 
 ### API
 
-照專案現有慣例（`server/api/regular/`、`server/api/volunteer/`）：
+`server/api/calendar/`，照 `server/api/regular/` 的慣例：
 
-- `server/utils/supabase.js` 的 service client 做讀寫
-- 寫入端用 `serverSupabaseUser(event)` 擋未登入
-- 回傳時把 snake_case 轉成前端的 camelCase（`time_start` → `timeStart`）
+| 檔案 | 說明 |
+|---|---|
+| `list.get.js` | query `start` / `end`，過濾軟刪除，snake_case → camelCase |
+| `update.post.js` | 有 `recordId` 就 update、沒有就 insert |
+| `delete.post.js` | 軟刪除，不是真的 DELETE |
 
-建議三支：`list.get.js`（帶 `start` / `end` query）、`update.post.js`（有 `recordId` 就 update、沒有就 insert）、`delete.post.js`。
+寫入端都用 `serverSupabaseUser(event)` 擋未登入。
+
+> 注意：這版 `@nuxtjs/supabase` 的 `serverSupabaseUser` 回傳的是 **JWT claims**
+> （內部是 `auth.getClaims()`），所以取 user id 要用 `user.sub`，不是 `user.id`。
+> `server/api/regular/update.post.js` 也是這樣寫的。
 
 ---
 
@@ -247,16 +280,70 @@ dayjs.updateLocale('zh-tw', { weekStart: 1 })
 `.el-select__wrapper` 要用 `min-height` 不能用 `height`，
 標籤換到第二行時才不會被裁掉。
 
+### 7.4 `votes.week_start` 有不少是「星期二」，不能拿來精準比對
+
+**這是接後端時踩到最大的坑。**
+
+`/vote` 存檔時送的明明是週一字串（`initWeek()` 手算的），但資料庫裡實際長這樣：
+
+```
+2025-12-02  星期二  ← data 的 key 卻是 2025-12-01（星期一）
+2025-12-09  星期二
+2025-12-22  星期一  ← 只有這筆是對的
+2025-12-23  星期二
+2025-12-30  星期二
+2026-01-06  星期二
+2026-01-13  星期二
+2026-01-26  星期一
+```
+
+已確認 `week_start` 是 `date` 型別（不會時區轉換），寫入讀出一致，
+所以是**既有資料本身就偏移了一天**，推測是早期從 Airtable／NocoDB 搬過來時造成的。
+
+實測影響：如果 `roster()` 用 `week_start === 該日的週一` 來比對，
+39 筆值班紀錄只找得到 **1 筆**。
+
+解法：**完全不比對 `week_start`**。`votes.data` 本來就是以真實日期當 key，
+直接 `vote.data[date][shift][optionId].checked` 就好。
+`loadVotes()` 只負責用區間把可能相關的列撈進來（前後各多抓一週當緩衝）。
+
+> 這個偏移也代表 `/vote` 自己可能有讀不到舊投票的問題（它是 `.eq('week_start', 週一)`）。
+> 不在本次範圍內，但值得另外查。
+
+---
+
+### 7.5 `ElMessage` 沒有被 auto-import，提示全部是啞的
+
+專案只在 [plugins/element-plus.js](../plugins/element-plus.js) 做 `app.use(ElementPlus)`，
+那只註冊**元件**，不會讓 `ElMessage` 這個**函式**變成可用的識別字。
+Nuxt 的 auto-import 也沒涵蓋它（`.nuxt/` 裡查不到任何註冊）。
+
+結果是 `ElMessage.error('請選擇日期')` 直接丟 `ReferenceError`，
+**驗證沒過時畫面上完全沒反應**，使用者只會以為按鈕壞了。
+存檔成功時的 `ElMessage.success` 也一樣炸，而且會被自己的 `catch` 再炸一次。
+
+解法就是明確 import：
+
+```js
+import { ElMessage } from 'element-plus';
+```
+
+`/regular`、`/medicine` 也踩到同一個坑，已一併補上。
+CSS 不用另外處理，`element-plus/dist/index.css` 本來就在 `nuxt.config.js` 全域載入。
+
 ---
 
 ## 8. 還沒做的事
 
-- [ ] 建表 + 三支 API + 前端串接（見第 5、6 節）
-- [ ] 換月份時依範圍重新查資料（目前只有 mock 的前後兩個月）
+- [x] 建表 + 三支 API + 前端串接（見第 5、6 節）
+- [x] 換月份時依範圍重新查資料
+- [x] Realtime（訂閱 `calendar_events`，見第 5 節）
 - [ ] LINE 通知：目前只顯示名單，沒有推播。要做的話可接 `/api/line/message/push`，
       決定是送出時自動發、還是比照 `/regular` 給一顆手動發送按鈕
 - [ ] 重複性活動（每週／每月）目前沒有支援
-- [ ] 沒有做權限區分，任何登入者都能編輯／刪除任何一筆
+- [ ] 沒有做權限區分，任何登入者都能編輯／刪除任何一筆（軟刪除保留了 `deleted_by`，事後查得到是誰）
+- [ ] `votes` 變動時紅色虛線框不會即時更新，要換月或重新整理
+- [ ] `votes.week_start` 的資料偏移（見 7.4）沒有修，只是繞過。`/vote` 可能也受影響
 
 ---
 
@@ -265,8 +352,10 @@ dayjs.updateLocale('zh-tw', { weekStart: 1 })
 | 檔案 | 說明 |
 |---|---|
 | [pages/calendar.vue](../pages/calendar.vue) | 本頁全部內容 |
+| [server/api/calendar/](../server/api/calendar/) | list / update / delete 三支 API |
+| [docs/sql/calendar_events.sql](sql/calendar_events.sql) | 建表 SQL |
 | [pages/index.vue](../pages/index.vue) | 首頁入口連結 |
 | [plugins/dayjs.js](../plugins/dayjs.js) | `weekStart: 1`（見 7.2） |
 | [pages/vote.vue](../pages/vote.vue) | 值班投票，`roster()` 的算法參考它 |
-| [docs/database.md](database.md) | `votes` / `vote_options` 的資料結構 |
+| [docs/database.md](database.md) | `votes` / `vote_options` / `calendar_events` 的資料結構 |
 | [pages/regular.vue](../pages/regular.vue) | 表單頁的既有慣例（自動儲存、realtime、LINE 推播） |
