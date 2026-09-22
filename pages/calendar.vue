@@ -196,9 +196,12 @@
                             <div class="li-content">{{ ev.content }}</div>
 
                             <div class="li-people">
-                                <el-icon><User /></el-icon>
+                                <el-icon>
+                                    <WarningFilled v-if="isUnstaffed(ev)" />
+                                    <UserFilled v-else />
+                                </el-icon>
                                 <span class="li-names">
-                                    <template v-if="!eventPeople(ev).length">無</template>
+                                    <template v-if="!eventPeople(ev).length"><span class="li-none">無</span></template>
                                     <template v-else>{{ shownPeople(ev).join('、') }}<span
                                             v-if="hiddenPeopleCount(ev)"
                                             class="more"
@@ -451,7 +454,7 @@
 import Swal from 'sweetalert2';
 import { ElMessage } from 'element-plus';
 import { debounce } from 'lodash-es';
-import { WarningFilled, Filter, User } from '@element-plus/icons-vue';
+import { WarningFilled, Filter, UserFilled } from '@element-plus/icons-vue';
 import FloatButton from '~/components/FloatButton.vue';
 
 definePageMeta({
@@ -1189,6 +1192,9 @@ onBeforeUnmount(() => {
 
 $blue: #6da2c2;
 $grey: #657181;
+// 列表卡片的浮起陰影。box-shadow 不會跨規則疊加，
+// 要另外加 inset 的地方（.list-item.active）必須把這個一起寫上
+$card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 
 #calendar {
     padding-bottom: 30px;
@@ -1282,7 +1288,7 @@ $grey: #657181;
     .list-nav {
         margin-bottom: 12px;
         padding: 8px 12px;
-        border: 1px solid #ebeef5;
+        border: 1px solid #dadada;
         border-radius: 4px;
     }
 
@@ -1296,7 +1302,7 @@ $grey: #657181;
 
     .list-group {
         // 日期之間要拉開，不然一整個月的卡片會黏成一片
-        margin-bottom: 28px;
+        margin-bottom: 20px;
 
         &:last-child {
             margin-bottom: 0;
@@ -1308,10 +1314,8 @@ $grey: #657181;
         align-items: baseline;
         gap: 6px;
         width: 100%;
-        margin-bottom: 10px;
-        padding: 4px 2px 8px;
+        margin-bottom: 6px;
         border: none;
-        border-bottom: 1px solid #ebeef5;
         background: #fff;
         // #calendar 是置中的，日期標題要自己拉回靠左
         text-align: left;
@@ -1329,7 +1333,7 @@ $grey: #657181;
             border-radius: 14px;
             color: #303133;
             font-size: 18px;
-            font-weight: 600;
+            font-weight: 700;
             line-height: 28px;
             text-align: center;
             // 等寬數字，日期才不會左右跳動
@@ -1375,27 +1379,28 @@ $grey: #657181;
         width: 100%;
         margin-bottom: 8px;
         padding: 10px 12px;
-        border: 1px solid #ebeef5;
+        border: 1px solid #d0d0d0;
         // 左側色條，顏色由 .list-item.type-x 決定（見 $types 的 @each）
         border-left-width: 3px;
         border-left-color: #dcdfe6;
         border-radius: 4px;
-        background: #fff;
+        // 每種類型各自一個底色太花，統一用淡灰，靠陰影把卡片撐起來
+        background: #fafafa;
+        box-shadow: $card-shadow;
         text-align: left;
         cursor: pointer;
 
-        // 有指定對象卻沒人。只改三邊，左邊的色條維持實心
-        &.unstaffed {
-            border-top-color: #f56c6c;
-            border-right-color: #f56c6c;
-            border-bottom-color: #f56c6c;
-            border-top-style: dashed;
-            border-right-style: dashed;
-            border-bottom-style: dashed;
+        // 有指定對象卻沒人。列表用人員列的紅色驚嘆號提示就夠了，
+        // 一個月幾十張卡片都套虛線框會太吵（月曆格子的 .tag 才用虛線）
+        &.unstaffed .li-people {
+            :deep(.el-icon),
+            .li-none {
+                color: #f56c6c;
+            }
         }
 
         &.active {
-            box-shadow: 0 0 0 1px $blue inset;
+            box-shadow: 0 0 0 1px $blue inset, $card-shadow;
         }
 
         .li-head {
@@ -1424,15 +1429,15 @@ $grey: #657181;
         .li-content {
             margin-bottom: 6px;
             color: #303133;
-            font-size: 15px;
-            line-height: 22px;
+            font-size: 14px;
+            line-height: 18px;
             word-break: break-word;
         }
 
         .li-people {
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 2px;
             color: #909399;
             font-size: 12px;
             line-height: 18px;
@@ -1465,7 +1470,7 @@ $grey: #657181;
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
-    margin: 10px 0 20px;
+    margin: 10px 0;
 
     .legend-item {
         padding: 2px 8px;
@@ -1798,33 +1803,53 @@ $types: (
 }
 
 :deep(.el-calendar) {
-    margin-bottom: 24px;
-    border: 1px solid #ebeef5;
     border-radius: 4px;
 }
 
 :deep(.el-calendar__header) {
     padding: 8px 12px;
+    border: solid 1px #d0d0d0;
 }
 
 :deep(.el-calendar__body) {
-    padding: 0 0 12px;
+    padding: 0;
 }
 
 :deep(.el-calendar-table) {
+    tr {
+        &:first-child {
+            td {
+                border-color: #d0d0d0;
+            }
+
+        }
+    }
+
     th {
-        padding: 10px 0;
+        padding: 5px 0;
         color: $grey;
         font-size: 12px;
         font-weight: 500;
+        // background-color: #f3f3f3;
+
+        &:first-child {
+            border-left: 1px solid #d0d0d0;
+        }
+
+        &:last-child {
+            border-right: 1px solid #d0d0d0;
+        }
     }
 
     td {
-        border-color: #ebeef5;
-
+        border-color: #d0d0d0;
+        &:first-child, &:last-child {
+                border-color: #d0d0d0;
+            }
         // 選取狀態改由 .cell.picked 控制，才會跟表單的日期一致
         &.is-selected {
             background-color: transparent;
+            
         }
     }
 
@@ -1832,10 +1857,7 @@ $types: (
         height: auto;
         min-height: 58px;
         padding: 4px;
-
-        &:hover {
-            background-color: #f5f7fa;
-        }
+        background-color: transparent !important;
     }
 }
 
