@@ -8,7 +8,7 @@
         <NuxtLink class="btn" to="/medicine">餵藥及特殊飲食紀錄</NuxtLink> 
         <div class="or">OR</div>
         <NuxtLink class="btn" to="/vote">值班投票</NuxtLink>
-        <NuxtLink class="btn" to="/calendar">行事曆與備註區</NuxtLink>
+        <NuxtLink class="btn" to="/calendar">行事曆</NuxtLink>
         <!-- <a
             href="/weekly"
             target="_blank"
