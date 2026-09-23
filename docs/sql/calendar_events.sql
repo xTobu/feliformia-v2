@@ -19,7 +19,7 @@ create table public.calendar_events (
     time_start   text not null,                          -- 'HH:mm'，15 分鐘刻度
     time_end     text not null,                          -- 'HH:mm'，只能晚於 time_start（前端擋）
 
-    type         text not null,                          -- volunteer / supplies / dispatch / post / other
+    type         text not null,                          -- 見 pages/calendar.vue 的 typeList
     notify_roles jsonb not null default '[]'::jsonb,      -- ['morning','night','owner'] 的子集合
     owners       jsonb not null default '[]'::jsonb,      -- profiles.id 的陣列（負責人可多選），
                                                           -- 僅 notify_roles 含 'owner' 時才有值。
@@ -37,12 +37,17 @@ create table public.calendar_events (
 
     -- 軟刪除：不真的 DELETE，保留誰刪的、什麼時候刪
     deleted_at   timestamptz,
-    deleted_by   uuid references auth.users (id) on delete set null,
-
-    -- 類型白名單。日後要新增類型，記得同步 pages/calendar.vue 的 typeList
-    constraint calendar_events_type_check
-        check (type in ('volunteer', 'supplies', 'dispatch', 'post', 'other'))
+    deleted_by   uuid references auth.users (id) on delete set null
 );
+
+-- 註：type 刻意「不」加 CHECK 約束。
+-- 類型會隨貓屋的實務一直增加（領藥、帶看…），每次都要改 DB 太麻煩。
+-- 唯一的真相來源是 pages/calendar.vue 的 typeList；
+-- 代價是資料庫擋不住打錯的 type，那筆活動在畫面上會沒有顏色。
+--
+-- 早期版本有這個約束。既有的資料庫要拿掉的話，單獨跑：
+--   alter table public.calendar_events
+--       drop constraint if exists calendar_events_type_check;
 
 -- ---------- 2. 索引 ----------
 -- 主要查詢是「依日期區間撈未刪除的活動」

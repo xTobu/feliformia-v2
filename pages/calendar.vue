@@ -498,6 +498,8 @@ const typeList = [
     { value: 'volunteer', label: '體驗', color: '#409eff' },
     { value: 'supplies', label: '物資', color: '#67c23a' },
     { value: 'dispatch', label: '出車', color: '#e6a23c' },
+    { value: 'medicine', label: '領藥', color: '#13c2c2' },
+    { value: 'viewing', label: '帶看', color: '#eb2f96' },
     { value: 'post', label: '社群', color: '#7c5cf0' },
     { value: 'other', label: '其他', color: '#303133' },
 ];
@@ -1216,6 +1218,9 @@ onBeforeUnmount(() => {
 <style lang="scss" scoped>
 @use 'sass:list';
 
+// X 按鈕的點擊區大小，同時也是標題左側要補的留白
+$close-box: 32px;
+
 $blue: #6da2c2;
 $grey: #657181;
 // 列表卡片的浮起陰影。box-shadow 不會跨規則疊加，
@@ -1289,6 +1294,43 @@ $card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 :deep(.el-dialog) {
+    // 標題置中 ＋ X 與標題同一條水平線。
+    //
+    // Element Plus 預設：標題靠繼承的 text-align 置中，header 只在右邊留
+    // close 的空間（左右不對稱 → 標題偏左）；X 是 position: absolute; top: 0
+    // 的 48px 方塊，中心固定在 24px，跟標題的中心（padding + 行高/2）對不上。
+    //
+    // 與其算位移，不如直接改成 flex 排版：
+    // [左側等寬留白][標題 flex:1][X]，水平置中與垂直對齊都由版面決定，
+    // 不依賴 padding、行高、按鈕尺寸這些會被主題或全域樣式改掉的值。
+    .el-dialog__header.show-close {
+        display: flex;
+        align-items: center;
+        padding-left: $close-box;
+        padding-right: 0;
+    }
+
+    .el-dialog__title {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .el-dialog__headerbtn {
+        // 脫離 absolute，變成 flex 的一員
+        position: static;
+        flex-shrink: 0;
+        width: $close-box;
+        height: $close-box;
+        // 按鈕預設是 display: block + line-height: normal，
+        // 裡面的 SVG 走 inline 排版靠基線對齊，會比方框中心高 2px。
+        // 方框對齊了但圖示沒對齊，看起來還是歪的 —— 這裡讓圖示也置中
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        // 點擊區比行高大，用負 margin 避免把 header 撐高
+        margin: calc((var(--el-dialog-font-line-height) - #{$close-box}) * 0.5) 0;
+    }
+
     // Element Plus 會給 label 算一個固定寬度（剛好包住文字），
     // 裡面的 .label-row 就撐不滿，「只看我的」會黏在標題右邊而不是推到最右
     .el-form-item__label {
@@ -1604,6 +1646,8 @@ $types: (
     'volunteer': #409eff #ecf5ff,
     'supplies': #67c23a #f0f9eb,
     'dispatch': #e6a23c #fdf6ec,
+    'medicine': #13c2c2 #e6fffb,
+    'viewing': #eb2f96 #fff0f6,
     'post': #7c5cf0 #f1eefe,
     'other': #303133 #f4f4f5
 );
