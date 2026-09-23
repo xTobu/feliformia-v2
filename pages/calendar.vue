@@ -113,7 +113,7 @@
                         :class="{
                             other: data.type !== 'current-month',
                             today: data.day === today,
-                            picked: data.day === formData.date,
+                            picked: data.day === selectedDate,
                         }"
                         @click="pickDate(data.day)"
                     >
@@ -159,7 +159,7 @@
                             type="button"
                             class="list-date"
                             :class="{
-                                picked: group.date === formData.date,
+                                picked: group.date === selectedDate,
                                 today: group.isToday,
                             }"
                             @click="pickDate(group.date)"
@@ -178,12 +178,9 @@
                             class="list-item"
                             :class="[
                                 `type-${ev.type}`,
-                                {
-                                    active: ev.recordId === formData.recordId,
-                                    unstaffed: isUnstaffed(ev),
-                                },
+                                { unstaffed: isUnstaffed(ev) },
                             ]"
-                            @click="editEvent(ev)"
+                            @click="openEvent(ev)"
                         >
                             <div class="li-head">
                                 <span class="li-badge">{{ typeLabel(ev.type) }}</span>
@@ -196,9 +193,12 @@
                             <div class="li-content">{{ ev.content }}</div>
 
                             <div class="li-people">
-                                <el-icon><User /></el-icon>
+                                <el-icon>
+                                    <WarningFilled v-if="isUnstaffed(ev)" />
+                                    <UserFilled v-else />
+                                </el-icon>
                                 <span class="li-names">
-                                    <template v-if="!eventPeople(ev).length">無</template>
+                                    <template v-if="!eventPeople(ev).length"><span class="li-none">無</span></template>
                                     <template v-else>{{ shownPeople(ev).join('、') }}<span
                                             v-if="hiddenPeopleCount(ev)"
                                             class="more"
@@ -231,214 +231,242 @@
                 </span>
             </div>
 
-            <!-- 唯讀使用者在還沒選日期、也沒選活動時不顯示表單 ——
-                 給他一張什麼都不能填的表單只會造成困惑。
-                 選了日期就出現「日期 + 當天活動列表」，選了活動才出現其餘欄位 -->
-            <form
-                @submit.prevent="Submit"
-                v-if="!readOnly || formData.date || formData.recordId"
-            >
-                <!-- 日期 -->
-                <div class="field" :class="{ invalid: errors.date }">
-                    <label>日期 <i>*</i></label>
-                    <el-date-picker
-                        v-model="formData.date"
-                        type="date"
-                        value-format="YYYY-MM-DD"
-                        placeholder="請選擇上方日期"
-                        :clearable="false"
-                        :disabled="!canEdit"
-                        @change="onDateChange"
-                    />
-                    <div class="day-events" v-if="!isListView && formData.date && dayEvents.length">
-                        <button
-                            type="button"
-                            v-for="ev in dayEvents"
-                            :key="ev.recordId"
-                            class="day-event"
-                            :class="[
-                                `type-${ev.type}`,
-                                {
-                                    active: ev.recordId === formData.recordId,
-                                    unstaffed: isUnstaffed(ev),
-                                },
-                            ]"
-                            @click="editEvent(ev)"
-                        >
-                            <span class="ev-time">{{ ev.timeStart }} ~ {{ ev.timeEnd }}</span>
-                            <span class="ev-content">{{ ev.content }}</span>
-                            <span
-                                class="ev-people"
-                                :class="{ expanded: expandedPeople[ev.recordId] }"
-                            >
-                                <template v-if="!eventPeople(ev).length">無</template>
-                                <template v-else>{{ shownPeople(ev).join('、') }}<span
-                                        v-if="hiddenPeopleCount(ev)"
-                                        class="more"
-                                        @click.stop="togglePeople(ev.recordId)"
-                                    >+{{ hiddenPeopleCount(ev) }}</span><span
-                                        v-else-if="expandedPeople[ev.recordId]"
-                                        class="more"
-                                        @click.stop="togglePeople(ev.recordId)"
-                                    >收起</span></template>
-                            </span>
-                        </button>
-                    </div>
+            <!-- 新增入口。固定位置、兩種檢視都一樣，
+                 不用再靠「取消選取某一筆」來達成新增 -->
+            <div class="add-bar" v-if="canEdit">
+                <button type="button" class="btn add-btn" @click="openCreate">
+                    ＋
+                    {{ selectedDate ? `在 ${$dayjs(selectedDate).format('M/D')} 新增活動` : '新增活動' }}
+                </button>
+            </div>
+
+            <!-- 當天活動：月曆模式點了日期才出現，純檢視。
+                 點卡片是「打開來看／改」，不會靜靜把資料塞進某張常駐表單 -->
+            <div class="day-panel" v-if="!isListView && selectedDate">
+                <div class="day-panel-head">
+                    <span class="dp-date">{{ dayPanelLabel }}</span>
+                    <span class="dp-count">{{ dayEvents.length }} 個活動</span>
                 </div>
 
-                <template v-if="showDetailFields">
-                    <!-- 活動時間 -->
-                    <div class="field" :class="{ invalid: errors.time }">
-                        <label>活動時間 <i>*</i></label>
-                        <div class="time-row">
-                            <el-time-select
-                                v-model="formData.timeStart"
-                                start="06:00"
-                                end="23:45"
-                                step="00:15"
-                                placeholder="開始時間"
-                                :disabled="!canEdit"
-                                @change="onTimeStartChange"
-                            />
-                            <span class="time-sep">→</span>
-                            <el-time-select
-                                v-model="formData.timeEnd"
-                                start="06:00"
-                                end="23:45"
-                                step="00:15"
-                                :min-time="formData.timeStart"
-                                placeholder="結束時間"
-                                :disabled="!canEdit"
-                            />
-                        </div>
-                    </div>
-
-                    <!-- 類型 -->
-                    <div class="field" :class="{ invalid: errors.type }">
-                        <label>類型 <i>*</i></label>
-                        <el-select
-                            v-model="formData.type"
-                            placeholder="請選擇活動類型"
-                            :disabled="!canEdit"
-                            :class="formData.type ? `type-text-${formData.type}` : ''"
+                <div class="day-events" v-if="dayEvents.length">
+                    <button
+                        type="button"
+                        v-for="ev in dayEvents"
+                        :key="ev.recordId"
+                        class="day-event"
+                        :class="[
+                            `type-${ev.type}`,
+                            { unstaffed: isUnstaffed(ev) },
+                        ]"
+                        @click="openEvent(ev)"
+                    >
+                        <span class="ev-time">{{ ev.timeStart }} ~ {{ ev.timeEnd }}</span>
+                        <span class="ev-content">{{ ev.content }}</span>
+                        <span
+                            class="ev-people"
+                            :class="{ expanded: expandedPeople[ev.recordId] }"
                         >
-                            <el-option
-                                v-for="item in typeList"
-                                :key="item.value"
-                                :label="item.label"
-                                :value="item.value"
-                            >
-                                <span :style="{ color: item.color }">{{ item.label }}</span>
-                            </el-option>
-                        </el-select>
-                    </div>
+                            <template v-if="!eventPeople(ev).length">無</template>
+                            <template v-else>{{ shownPeople(ev).join('、') }}<span
+                                    v-if="hiddenPeopleCount(ev)"
+                                    class="more"
+                                    @click.stop="togglePeople(ev.recordId)"
+                                >+{{ hiddenPeopleCount(ev) }}</span><span
+                                    v-else-if="expandedPeople[ev.recordId]"
+                                    class="more"
+                                    @click.stop="togglePeople(ev.recordId)"
+                                >收起</span></template>
+                        </span>
+                    </button>
+                </div>
 
-                    <!-- 提示該活動之人員 -->
-                    <div class="field" :class="{ invalid: errors.notifyRoles }">
-                        <label>活動人員 <i>*</i></label>
-                        <el-select
-                            v-model="formData.notifyRoles"
-                            multiple
-                            placeholder="請選擇相關人員"
+                <p class="day-empty" v-else>這天沒有活動</p>
+            </div>
+
+            <!-- 活動表單。做成 dialog 是為了把「檢視 / 新增 / 編輯」分開：
+                 表單只在明確要新增、或要看某一筆時才出現，關掉就等於取消。
+                 標題直接寫明現在是哪一種模式 -->
+            <el-dialog
+                v-model="formVisible"
+                :title="formTitle"
+                @closed="resetForm"
+                width="390px"
+            >
+                <div class="dialog-form">
+                    <!-- 日期 -->
+                    <div class="field" :class="{ invalid: errors.date }">
+                        <label>日期 <i>*</i></label>
+                        <el-date-picker
+                            v-model="formData.date"
+                            type="date"
+                            value-format="YYYY-MM-DD"
+                            placeholder="請選擇日期"
+                            :clearable="false"
                             :disabled="!canEdit"
-                        >
-                            <el-option
-                                v-for="item in roleList"
-                                :key="item.value"
-                                :label="item.label"
-                                :value="item.value"
-                            />
-                        </el-select>
-                    </div>
-
-                    <!-- 早班人員 -->
-                    <div class="field" v-if="formData.notifyRoles.includes('morning')">
-                        <label>早班人員</label>
-                        <div class="hint" v-if="!formData.date">請先選擇日期</div>
-                        <div class="roster" v-else-if="rosterMorning.length">
-                            <span class="chip" v-for="name in rosterMorning" :key="name">
-                                {{ name }}
-                            </span>
-                        </div>
-                        <div class="warn" v-else>
-                            <el-icon><WarningFilled /></el-icon> 無人值班
-                        </div>
-                    </div>
-
-                    <!-- 晚班人員 -->
-                    <div class="field" v-if="formData.notifyRoles.includes('night')">
-                        <label>晚班人員</label>
-                        <div class="hint" v-if="!formData.date">請先選擇日期</div>
-                        <div class="roster" v-else-if="rosterNight.length">
-                            <span class="chip" v-for="name in rosterNight" :key="name">
-                                {{ name }}
-                            </span>
-                        </div>
-                        <div class="warn" v-else>
-                            <el-icon><WarningFilled /></el-icon> 無人值班
-                        </div>
-                    </div>
-
-                    <!-- 負責人 -->
-                    <div class="field" v-if="formData.notifyRoles.includes('owner')">
-                        <label>負責人</label>
-                        <el-select
-                            v-model="formData.owners"
-                            multiple
-                            filterable
-                            clearable
-                            placeholder="請選擇負責人"
-                            :disabled="!canEdit"
-                        >
-                            <el-option
-                                v-for="item in volunteerList"
-                                :key="item.value"
-                                :label="item.label"
-                                :value="item.value"
-                            />
-                        </el-select>
-                    </div>
-
-                    <!-- 內容 -->
-                    <div class="field" :class="{ invalid: errors.content }">
-                        <label>內容 <i>*</i></label>
-                        <el-input
-                            type="textarea"
-                            v-model="formData.content"
-                            placeholder="請描述活動內容"
-                            :disabled="!canEdit"
+                            @change="onDateChange"
                         />
                     </div>
 
-                    <button
-                        type="submit"
-                        class="btn"
-                        v-if="!readOnly"
-                        :disabled="saving || !canEdit"
-                    >
-                        {{ saving ? '儲存中...' : formData.recordId ? '確認更新' : '確認送出' }}
-                    </button>
-                    <p class="perm-hint" v-if="readOnly">
-                        唯讀：只有管理員可以新增、編輯或刪除活動
-                    </p>
-
-                    <div class="edit-actions" v-if="formData.recordId">
-                        <button type="button" class="link-btn" @click="resetForm">
-                            取消編輯
-                        </button>
-                        <button
-                            type="button"
-                            class="link-btn danger"
-                            v-if="canEdit"
-                            @click="DeleteEvent"
-                        >
-                            刪除這筆
-                        </button>
+                <!-- 活動時間 -->
+                <div class="field" :class="{ invalid: errors.time }">
+                    <label>活動時間 <i>*</i></label>
+                    <div class="time-row">
+                        <el-time-select
+                            v-model="formData.timeStart"
+                            start="06:00"
+                            end="23:45"
+                            step="00:15"
+                            placeholder="開始時間"
+                            :disabled="!canEdit"
+                            @change="onTimeStartChange"
+                        />
+                        <span class="time-sep">→</span>
+                        <el-time-select
+                            v-model="formData.timeEnd"
+                            start="06:00"
+                            end="23:45"
+                            step="00:15"
+                            :min-time="formData.timeStart"
+                            placeholder="結束時間"
+                            :disabled="!canEdit"
+                        />
                     </div>
-                </template>
-            </form>
+                </div>
 
-            <FloatButton />
+                <!-- 類型 -->
+                <div class="field" :class="{ invalid: errors.type }">
+                    <label>類型 <i>*</i></label>
+                    <el-select
+                        v-model="formData.type"
+                        placeholder="請選擇活動類型"
+                        :disabled="!canEdit"
+                        :class="formData.type ? `type-text-${formData.type}` : ''"
+                    >
+                        <el-option
+                            v-for="item in typeList"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        >
+                            <span :style="{ color: item.color }">{{ item.label }}</span>
+                        </el-option>
+                    </el-select>
+                </div>
+
+                <!-- 提示該活動之人員 -->
+                <div class="field" :class="{ invalid: errors.notifyRoles }">
+                    <label>活動人員 <i>*</i></label>
+                    <el-select
+                        v-model="formData.notifyRoles"
+                        multiple
+                        placeholder="請選擇相關人員"
+                        :disabled="!canEdit"
+                    >
+                        <el-option
+                            v-for="item in roleList"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        />
+                    </el-select>
+                </div>
+
+                <!-- 早班人員 -->
+                <div class="field" v-if="formData.notifyRoles.includes('morning')">
+                    <label>早班人員</label>
+                    <div class="hint" v-if="!formData.date">請先選擇日期</div>
+                    <div class="roster" v-else-if="rosterMorning.length">
+                        <span class="chip" v-for="name in rosterMorning" :key="name">
+                            {{ name }}
+                        </span>
+                    </div>
+                    <div class="warn" v-else>
+                        <el-icon><WarningFilled /></el-icon> 無人值班
+                    </div>
+                </div>
+
+                <!-- 晚班人員 -->
+                <div class="field" v-if="formData.notifyRoles.includes('night')">
+                    <label>晚班人員</label>
+                    <div class="hint" v-if="!formData.date">請先選擇日期</div>
+                    <div class="roster" v-else-if="rosterNight.length">
+                        <span class="chip" v-for="name in rosterNight" :key="name">
+                            {{ name }}
+                        </span>
+                    </div>
+                    <div class="warn" v-else>
+                        <el-icon><WarningFilled /></el-icon> 無人值班
+                    </div>
+                </div>
+
+                <!-- 負責人 -->
+                <div class="field" v-if="formData.notifyRoles.includes('owner')">
+                    <label>負責人</label>
+                    <el-select
+                        v-model="formData.owners"
+                        multiple
+                        filterable
+                        clearable
+                        placeholder="請選擇負責人"
+                        :disabled="!canEdit"
+                    >
+                        <el-option
+                            v-for="item in volunteerList"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        />
+                    </el-select>
+                </div>
+
+                <!-- 內容 -->
+                <div class="field" :class="{ invalid: errors.content }">
+                    <label>內容 <i>*</i></label>
+                    <el-input
+                        type="textarea"
+                        v-model="formData.content"
+                        placeholder="請描述活動內容"
+                        :disabled="!canEdit"
+                    />
+                </div>
+                </div>
+
+                <template #footer>
+                    <div class="dialog-actions" v-if="canEdit">
+                        <!-- 左右各包一個自己的容器。直接對 el-button 下 :deep()
+                             在這個 slot 裡沒吃到，用自家元素排版最保險 -->
+                        <span class="da-left">
+                            <el-button
+                                type="danger"
+                                plain
+                                v-if="formData.recordId"
+                                @click="DeleteEvent"
+                            >
+                                刪除
+                            </el-button>
+                        </span>
+
+                        <span class="da-right">
+                            <el-button @click="formVisible = false">取消</el-button>
+                            <el-button
+                                type="primary"
+                                :loading="saving"
+                                @click="Submit"
+                            >
+                                {{ formData.recordId ? '確認更新' : '確認送出' }}
+                            </el-button>
+                        </span>
+                    </div>
+
+                    <template v-else>
+                        <p class="perm-hint">
+                            唯讀：只有管理員可以新增、編輯或刪除活動
+                        </p>
+                        <el-button @click="formVisible = false">關閉</el-button>
+                    </template>
+                </template>
+            </el-dialog>
+
         </div>
 
         <template #fallback>
@@ -451,8 +479,7 @@
 import Swal from 'sweetalert2';
 import { ElMessage } from 'element-plus';
 import { debounce } from 'lodash-es';
-import { WarningFilled, Filter, User } from '@element-plus/icons-vue';
-import FloatButton from '~/components/FloatButton.vue';
+import { WarningFilled, Filter, UserFilled } from '@element-plus/icons-vue';
 
 definePageMeta({
     middleware: 'auth',
@@ -506,6 +533,11 @@ const filter = ref({ ...EMPTY_FILTER });
 const filterDraft = ref({ ...EMPTY_FILTER });
 const filterVisible = ref(false);
 const isListView = ref(false); // false = 月曆、true = 列表
+// 檢視中選的那一天。跟 formData.date 刻意分開 ——
+// 前者是「我在看哪天」，後者是「我正在編輯的那筆活動是哪天」。
+// 以前共用一個值，導致點日期就等於進入編輯狀態
+const selectedDate = ref('');
+const formVisible = ref(false); // 活動表單 dialog
 
 const formData = ref({
     recordId: '',
@@ -526,9 +558,11 @@ const formData = ref({
 const canEdit = computed(() => isAdmin.value);
 // 還沒載完 profile 前不要先跳「唯讀」，避免管理員看到一閃而過的提示
 const readOnly = computed(() => profileLoaded.value && !canEdit.value);
-// 唯讀使用者只有在點開某一筆活動時才看得到細節欄位。
-// 只選了日期的話，表單只顯示「日期 + 當天活動列表」，其餘留白
-const showDetailFields = computed(() => !readOnly.value || !!formData.value.recordId);
+// dialog 標題直接講清楚現在是哪一種模式，不用從送出按鈕的字去猜
+const formTitle = computed(() => {
+    if (readOnly.value) return '活動詳情';
+    return formData.value.recordId ? '編輯活動' : '新增活動';
+});
 
 const myId = computed(() => getUserId());
 
@@ -583,9 +617,15 @@ const eventsByDate = computed(() => {
     return map;
 });
 
-const dayEvents = computed(() => eventsByDate.value[formData.value.date] || []);
-
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
+const dayEvents = computed(() => eventsByDate.value[selectedDate.value] || []);
+
+const dayPanelLabel = computed(() => {
+    if (!selectedDate.value) return '';
+    const d = $dayjs(selectedDate.value);
+    return `${d.format('M/D')}（週${WEEKDAY_LABELS[d.day()]}）`;
+});
 
 // 列表檢視：cursor 那個月的活動，依日期分組。
 // 吃的是 eventsByDate（來自 visibleEvents），所以篩選條件一樣生效，
@@ -931,64 +971,37 @@ function goto(type) {
     calendarRef.value?.selectDate(type);
 }
 
-// 只把月曆切回本月，不動表單已選的日期
+// 只把月曆切回本月，不動檢視中選的日期
 function goToday() {
     cursor.value = new Date();
 }
 
-// 換日期時如果正在編輯某一筆，整個表單都要清掉。
-// 只清 recordId 的話，舊活動的時間／類型／人員／內容會留在表單上，
-// 按下送出就變成「內容一模一樣的新活動」，等於默默複製一筆。
-//
-// 還在填新活動（沒有 recordId）時不清，不然使用者打到一半改日期會全沒了。
-function leaveEditMode() {
-    if (formData.value.recordId) resetForm();
-}
-
-// 選了日期就順手選起當天最早的那筆活動。
-// eventsByDate 已經依 timeStart 排序，取第一筆即可。
-function selectFirstEventOf(day) {
-    const first = (eventsByDate.value[day] || [])[0];
-    if (first) editEvent(first);
-}
-
+// 點日期就只是「我要看這天」，不會順帶打開任何一筆活動的表單。
+// 再點一次同一天取消選取。
 function pickDate(day) {
-    // 再點一次同一天就取消選取，跟活動卡片的行為一致。
-    // 先把 date 清掉再 resetForm() —— resetForm 會保留當下的 date
-    if (formData.value.date === day) {
-        formData.value.date = '';
-        resetForm();
-        return;
-    }
-
-    formData.value.date = day;
-    leaveEditMode();
-    selectFirstEventOf(day);
+    selectedDate.value = selectedDate.value === day ? '' : day;
 }
 
-function onDateChange(day) {
-    if (day) {
-        cursor.value = $dayjs(day).toDate();
-        leaveEditMode();
-        selectFirstEventOf(day);
-    }
+// 新增：開一張空白表單，日期預填目前在看的那天
+function openCreate() {
+    if (!canEdit.value) return;
+
+    errors.value = {};
+    formData.value = {
+        recordId: '',
+        date: selectedDate.value || today,
+        timeStart: '',
+        timeEnd: '',
+        type: '',
+        notifyRoles: [],
+        owners: [],
+        content: '',
+    };
+    formVisible.value = true;
 }
 
-// 改了開始時間之後，原本的結束時間可能已經不合法，直接清掉
-function onTimeStartChange() {
-    const { timeStart, timeEnd } = formData.value;
-    if (timeStart && timeEnd && timeEnd <= timeStart) {
-        formData.value.timeEnd = '';
-    }
-}
-
-function editEvent(ev) {
-    // 再點一次已經選取的活動就取消選取，不要卡在編輯狀態
-    if (formData.value.recordId === ev.recordId) {
-        resetForm();
-        return;
-    }
-
+// 打開某一筆活動。管理員是編輯，一般志工是看詳情（欄位都 disabled）
+function openEvent(ev) {
     errors.value = {};
     formData.value = {
         recordId: ev.recordId,
@@ -1000,14 +1013,30 @@ function editEvent(ev) {
         owners: [...(ev.owners || [])],
         content: ev.content || '',
     };
+    formVisible.value = true;
 }
 
+// dialog 裡改日期：早晚班名單是依日期從 votes 算的，
+// 挑到別的月份就要把 cursor 帶過去，範圍才會重查（見 watch cursor）
+function onDateChange(day) {
+    if (day) cursor.value = $dayjs(day).toDate();
+}
+
+// 改了開始時間之後，原本的結束時間可能已經不合法，直接清掉
+function onTimeStartChange() {
+    const { timeStart, timeEnd } = formData.value;
+    if (timeStart && timeEnd && timeEnd <= timeStart) {
+        formData.value.timeEnd = '';
+    }
+}
+
+// dialog 的 @closed 會呼叫，關掉就等於取消。
+// 日期不保留 —— 下次開表單一定是走 openCreate 或 openEvent，兩邊都會指定日期
 function resetForm() {
     errors.value = {};
-    const { date } = formData.value;
     formData.value = {
         recordId: '',
-        date,
+        date: '',
         timeStart: '',
         timeEnd: '',
         type: '',
@@ -1087,7 +1116,7 @@ async function Submit() {
         });
 
         await loadEvents();
-        resetForm();
+        formVisible.value = false;
         ElMessage.success('已儲存');
     } catch (error) {
         console.error('儲存失敗:', error);
@@ -1121,7 +1150,7 @@ async function DeleteEvent() {
         });
 
         await loadEvents();
-        resetForm();
+        formVisible.value = false;
         ElMessage.success('已刪除');
     } catch (error) {
         console.error('刪除失敗:', error);
@@ -1191,9 +1220,13 @@ onBeforeUnmount(() => {
 
 $blue: #6da2c2;
 $grey: #657181;
+// 列表卡片的浮起陰影。box-shadow 不會跨規則疊加，
+// 要另外加 inset 的地方（.list-item.active）必須把這個一起寫上
+$card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 
 #calendar {
-    padding-bottom: 30px;
+    // 底部固定的「新增活動」會蓋住內容，留出它的高度
+    padding-bottom: 80px;
 }
 
 // 月曆
@@ -1284,13 +1317,13 @@ $grey: #657181;
     .list-nav {
         margin-bottom: 12px;
         padding: 8px 12px;
-        border: 1px solid #ebeef5;
+        border: 1px solid #dadada;
         border-radius: 4px;
     }
 
     // 資料多的時候在框內捲動，不要把表單推到看不見的地方
     .list-body {
-        max-height: 50vh;
+        // max-height: 50vh;
         overflow-y: auto;
         // 留出捲軸的寬度，不然日期右邊的「N 個活動」會被切到
         padding-right: 8px;
@@ -1298,7 +1331,7 @@ $grey: #657181;
 
     .list-group {
         // 日期之間要拉開，不然一整個月的卡片會黏成一片
-        margin-bottom: 28px;
+        margin-bottom: 20px;
 
         &:last-child {
             margin-bottom: 0;
@@ -1310,10 +1343,8 @@ $grey: #657181;
         align-items: baseline;
         gap: 6px;
         width: 100%;
-        margin-bottom: 10px;
-        padding: 4px 2px 8px;
+        margin-bottom: 6px;
         border: none;
-        border-bottom: 1px solid #ebeef5;
         background: #fff;
         // #calendar 是置中的，日期標題要自己拉回靠左
         text-align: left;
@@ -1331,7 +1362,7 @@ $grey: #657181;
             border-radius: 14px;
             color: #303133;
             font-size: 18px;
-            font-weight: 600;
+            font-weight: 700;
             line-height: 28px;
             text-align: center;
             // 等寬數字，日期才不會左右跳動
@@ -1377,27 +1408,28 @@ $grey: #657181;
         width: 100%;
         margin-bottom: 8px;
         padding: 10px 12px;
-        border: 1px solid #ebeef5;
+        border: 1px solid #d0d0d0;
         // 左側色條，顏色由 .list-item.type-x 決定（見 $types 的 @each）
         border-left-width: 3px;
         border-left-color: #dcdfe6;
         border-radius: 4px;
-        background: #fff;
+        // 每種類型各自一個底色太花，統一用淡灰，靠陰影把卡片撐起來
+        background: #fafafa;
+        box-shadow: $card-shadow;
         text-align: left;
         cursor: pointer;
 
-        // 有指定對象卻沒人。只改三邊，左邊的色條維持實心
-        &.unstaffed {
-            border-top-color: #f56c6c;
-            border-right-color: #f56c6c;
-            border-bottom-color: #f56c6c;
-            border-top-style: dashed;
-            border-right-style: dashed;
-            border-bottom-style: dashed;
+        // 有指定對象卻沒人。列表用人員列的紅色驚嘆號提示就夠了，
+        // 一個月幾十張卡片都套虛線框會太吵（月曆格子的 .tag 才用虛線）
+        &.unstaffed .li-people {
+            :deep(.el-icon),
+            .li-none {
+                color: #f56c6c;
+            }
         }
 
         &.active {
-            box-shadow: 0 0 0 1px $blue inset;
+            box-shadow: 0 0 0 1px $blue inset, $card-shadow;
         }
 
         .li-head {
@@ -1426,15 +1458,15 @@ $grey: #657181;
         .li-content {
             margin-bottom: 6px;
             color: #303133;
-            font-size: 15px;
-            line-height: 22px;
+            font-size: 14px;
+            line-height: 18px;
             word-break: break-word;
         }
 
         .li-people {
             display: flex;
             align-items: center;
-            gap: 4px;
+            gap: 2px;
             color: #909399;
             font-size: 12px;
             line-height: 18px;
@@ -1467,7 +1499,7 @@ $grey: #657181;
     align-items: center;
     justify-content: flex-end;
     gap: 6px;
-    margin: 10px 0 20px;
+    margin: 10px 0;
 
     .legend-item {
         padding: 2px 8px;
@@ -1728,10 +1760,6 @@ $types: (
             border-style: dashed;
             border-color: #f56c6c;
         }
-
-        &.active {
-            box-shadow: inset 0 0 0 1px currentColor;
-        }
     }
 }
 
@@ -1765,7 +1793,7 @@ $types: (
 .btn {
     display: block;
     width: 100%;
-    background-color: #409eff;
+    background-color: #6da2c2;
     border-radius: 4px;
 
     &:disabled {
@@ -1775,60 +1803,146 @@ $types: (
 }
 
 .perm-hint {
-    margin-top: 8px;
+    margin: 0 0 8px;
     color: #c0c4cc;
     font-size: 13px;
     text-align: center;
 }
 
-.edit-actions {
-    display: flex;
-    justify-content: center;
-    gap: 20px;
+// 新增入口。固定在畫面最下方，月曆與列表兩種檢視都在同一個位置
+.add-bar {
+    position: fixed;
+    bottom: 0;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 10; // 要低於 el-dialog（~2000）
+    width: 100%;
+    max-width: 450px;
+    padding: 10px 16px;
+    border-top: 1px solid #ebeef5;
+    background: #fff;
 
-    .link-btn {
-        width: auto;
-        border: none;
-        background: none;
-        color: $grey;
-        font-size: 13px;
-        text-decoration: underline;
-        cursor: pointer;
+    .add-btn {
+        margin: 0;
+        font-size: 15px;
+        line-height: 44px;
+    }
+}
 
-        &.danger {
-            color: #b33a39;
+
+// 選了日期之後的「當天活動」，純檢視
+.day-panel {
+    margin-bottom: 20px;
+    padding: 12px;
+    border: 1px solid #d0d0d0;
+    border-radius: 4px;
+    text-align: left;
+
+    .day-panel-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        margin-bottom: 8px;
+
+        .dp-date {
+            color: #303133;
+            font-size: 15px;
+            font-weight: 600;
         }
+
+        .dp-count {
+            color: #c0c4cc;
+            font-size: 12px;
+        }
+    }
+
+    // 面板自己有標題了，卡片不用再往下推
+    .day-events {
+        margin-top: 0;
+    }
+
+    .day-empty {
+        margin: 0;
+        color: #c0c4cc;
+        font-size: 13px;
+    }
+}
+
+// dialog footer：垃圾桶固定 30px，取消與確認平分剩下的寬度
+// dialog footer：刪除靠左，取消與送出靠右。
+// 刪除跟送出隔得遠一點，不容易誤按。
+// 新增活動時左邊是空的 span，space-between 一樣把右邊那組推到底
+.dialog-actions {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+
+    // 兩顆之間的間距交給 element-variables.css 的
+    // .el-button + .el-button { margin-left: 8px }，這裡不要再加 gap
+    .da-right {
+        display: flex;
+        align-items: center;
+    }
+}
+
+// dialog 裡的表單
+.dialog-form {
+    text-align: left;
+
+    .field:last-child {
+        margin-bottom: 0;
     }
 }
 
 :deep(.el-calendar) {
-    margin-bottom: 24px;
-    border: 1px solid #ebeef5;
     border-radius: 4px;
 }
 
 :deep(.el-calendar__header) {
     padding: 8px 12px;
+    border: solid 1px #d0d0d0;
 }
 
 :deep(.el-calendar__body) {
-    padding: 0 0 12px;
+    padding: 0;
 }
 
 :deep(.el-calendar-table) {
+    tr {
+        &:first-child {
+            td {
+                border-color: #d0d0d0;
+            }
+
+        }
+    }
+
     th {
-        padding: 10px 0;
+        padding: 5px 0;
         color: $grey;
         font-size: 12px;
         font-weight: 500;
+        // background-color: #f3f3f3;
+
+        &:first-child {
+            border-left: 1px solid #d0d0d0;
+        }
+
+        &:last-child {
+            border-right: 1px solid #d0d0d0;
+        }
     }
 
     td {
-        border-color: #ebeef5;
-
+        border-color: #d0d0d0;
+        &:first-child, &:last-child {
+                border-color: #d0d0d0;
+            }
         // 選取狀態改由 .cell.picked 控制，才會跟表單的日期一致
         &.is-selected {
             background-color: transparent;
+            
         }
     }
 
@@ -1836,10 +1950,7 @@ $types: (
         height: auto;
         min-height: 58px;
         padding: 4px;
-
-        &:hover {
-            background-color: #f5f7fa;
-        }
+        background-color: transparent !important;
     }
 }
 

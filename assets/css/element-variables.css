@@ -66,3 +66,9 @@ form {
 .el-textarea__inner {
   min-height: 100px !important;
 }
+
+/* SweetAlert2 預設 z-index 是 1060，會被 el-dialog（2000 起跳、每開一次往上加）壓住。
+   Swal 的容器是它自己 append 到 body 的，不帶 data-v，scoped 樣式碰不到，只能寫全域 */
+.swal2-container {
+  z-index: 10000;
+}
