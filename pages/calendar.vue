@@ -467,6 +467,63 @@
                 </template>
             </el-dialog>
 
+            <!-- 重複活動提醒。用 el-dialog 而不是 Swal，
+                 才能直接重用列表那張卡片的 markup 與樣式 -->
+            <el-dialog
+                v-model="duplicateVisible"
+                title="這個時段已經有一樣的活動"
+                width="340px"
+                append-to-body
+                @closed="answerDuplicate(false)"
+            >
+                <div
+                    class="list-item is-static"
+                    v-if="duplicateEvent"
+                    :class="[
+                        `type-${duplicateEvent.type}`,
+                        { unstaffed: isUnstaffed(duplicateEvent) },
+                    ]"
+                >
+                    <div class="li-head">
+                        <span class="li-badge">
+                            {{ typeLabel(duplicateEvent.type) }}
+                        </span>
+                        <span class="li-time">
+                            {{ duplicateEvent.timeStart }} ~ {{ duplicateEvent.timeEnd }}
+                        </span>
+                    </div>
+
+                    <div class="li-content">{{ duplicateEvent.content }}</div>
+
+                    <div class="li-people">
+                        <el-icon>
+                            <WarningFilled v-if="isUnstaffed(duplicateEvent)" />
+                            <UserFilled v-else />
+                        </el-icon>
+                        <span class="li-names">
+                            <template v-if="!eventPeople(duplicateEvent).length"><span class="li-none">無</span></template>
+                            <template v-else>{{ eventPeople(duplicateEvent).join('、') }}</template>
+                        </span>
+                    </div>
+                </div>
+
+                <p class="dup-ask">可能是別人已經登記過了，還是要繼續嗎？</p>
+
+                <template #footer>
+                    <div class="dialog-actions">
+                        <span class="da-left"></span>
+                        <span class="da-right">
+                            <el-button @click="answerDuplicate(false)">
+                                取消
+                            </el-button>
+                            <el-button type="primary" @click="answerDuplicate(true)">
+                                {{ formData.recordId ? '仍要更新' : '仍要新增' }}
+                            </el-button>
+                        </span>
+                    </div>
+                </template>
+            </el-dialog>
+
         </div>
 
         <template #fallback>
@@ -538,6 +595,12 @@ const isListView = ref(false); // false = 月曆、true = 列表
 // 以前共用一個值，導致點日期就等於進入編輯狀態
 const selectedDate = ref('');
 const formVisible = ref(false); // 活動表單 dialog
+
+// 重複活動提醒。duplicateResolve 不用 ref —— 它只是暫存 promise 的 resolve，
+// 不參與畫面渲染
+const duplicateVisible = ref(false);
+const duplicateEvent = ref(null);
+let duplicateResolve = null;
 
 const formData = ref({
     recordId: '',
@@ -1084,6 +1147,39 @@ watch(
     { deep: true }
 );
 
+// 同一天、同類型、同開始時間，很可能是兩個人各自登記了同一件事。
+// 編輯時要排除自己那筆
+function findDuplicate() {
+    const { recordId, date, type, timeStart } = formData.value;
+
+    return events.value.find(
+        (ev) =>
+            ev.recordId !== recordId &&
+            ev.date === date &&
+            ev.type === type &&
+            ev.timeStart === timeStart
+    );
+}
+
+// 用 el-dialog 而不是 Swal：Swal 的 DOM 是它自己 append 到 body 的，
+// 不帶 data-v，scoped 樣式碰不到，要做成列表卡片的樣子就得把 CSS 複製一份。
+// 這裡把「等使用者回答」包成 promise，Submit 才能直接 await
+function confirmDuplicate(ev) {
+    duplicateEvent.value = ev;
+    duplicateVisible.value = true;
+
+    return new Promise((resolve) => {
+        duplicateResolve = resolve;
+    });
+}
+
+function answerDuplicate(ok) {
+    duplicateVisible.value = false;
+    // 關閉動畫結束時 @closed 會再呼叫一次，resolve 清掉就不會重複回答
+    duplicateResolve?.(ok);
+    duplicateResolve = null;
+}
+
 async function Submit() {
     const { recordId, date, timeStart, timeEnd, type, notifyRoles, owners, content } = formData.value;
 
@@ -1110,6 +1206,13 @@ async function Submit() {
     saving.value = true;
 
     try {
+        // 先重抓一次。整個提醒就是為了接住「兩個人同時登記」，
+        // 只看本機的 events 有可能還沒收到對方那筆（realtime 有 300ms debounce）
+        await loadEvents();
+
+        const duplicate = findDuplicate();
+        if (duplicate && !(await confirmDuplicate(duplicate))) return;
+
         await $fetch('/api/calendar/update', {
             method: 'POST',
             body: payload,
@@ -1443,92 +1546,106 @@ $card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
         }
     }
 
-    .list-item {
-        display: block;
-        width: 100%;
-        margin-bottom: 8px;
-        padding: 10px 12px;
-        border: 1px solid #d0d0d0;
-        // 左側色條，顏色由 .list-item.type-x 決定（見 $types 的 @each）
-        border-left-width: 3px;
-        border-left-color: #dcdfe6;
-        border-radius: 4px;
-        // 每種類型各自一個底色太花，統一用淡灰，靠陰影把卡片撐起來
-        background: #fafafa;
-        box-shadow: $card-shadow;
-        text-align: left;
-        cursor: pointer;
-
-        // 有指定對象卻沒人。列表用人員列的紅色驚嘆號提示就夠了，
-        // 一個月幾十張卡片都套虛線框會太吵（月曆格子的 .tag 才用虛線）
-        &.unstaffed .li-people {
-            :deep(.el-icon),
-            .li-none {
-                color: #f56c6c;
-            }
-        }
-
-        &.active {
-            box-shadow: 0 0 0 1px $blue inset, $card-shadow;
-        }
-
-        .li-head {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            margin-bottom: 6px;
-        }
-
-        .li-badge {
-            flex-shrink: 0;
-            padding: 1px 6px;
-            border-radius: 3px;
-            font-size: 11px;
-            line-height: 16px;
-        }
-
-        .li-time {
-            color: $grey;
-            font-size: 13px;
-            // 等寬數字，時間才不會左右跳動
-            font-variant-numeric: tabular-nums;
-        }
-
-        // 列表就是拿來好好讀的，內容不截斷，讓它換行
-        .li-content {
-            margin-bottom: 6px;
-            color: #303133;
-            font-size: 14px;
-            line-height: 18px;
-            word-break: break-word;
-        }
-
-        .li-people {
-            display: flex;
-            align-items: center;
-            gap: 2px;
-            color: #909399;
-            font-size: 12px;
-            line-height: 18px;
-
-            .li-names {
-                min-width: 0;
-            }
-
-            .more {
-                margin-left: 4px;
-                color: #c0c4cc;
-                white-space: nowrap;
-                cursor: pointer;
-            }
-        }
-    }
-
     .list-empty {
         padding: 32px 0;
         color: #c0c4cc;
         font-size: 13px;
         text-align: center;
+    }
+}
+
+// 提醒視窗裡的卡片只是拿來看的，不要有可點擊的手勢
+.list-item.is-static {
+    margin-bottom: 0;
+    cursor: default;
+}
+
+.dup-ask {
+    margin: 16px 0 0;
+    color: #303133;
+    font-size: 14px;
+    text-align: left;
+}
+
+// 活動卡片。列表與「重複活動」提醒共用，所以放在 .month-list 外面
+.list-item {
+    display: block;
+    width: 100%;
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    border: 1px solid #d0d0d0;
+    // 左側色條，顏色由 .list-item.type-x 決定（見 $types 的 @each）
+    border-left-width: 3px;
+    border-left-color: #dcdfe6;
+    border-radius: 4px;
+    // 每種類型各自一個底色太花，統一用淡灰，靠陰影把卡片撐起來
+    background: #fafafa;
+    box-shadow: $card-shadow;
+    text-align: left;
+    cursor: pointer;
+
+    // 有指定對象卻沒人。列表用人員列的紅色驚嘆號提示就夠了，
+    // 一個月幾十張卡片都套虛線框會太吵（月曆格子的 .tag 才用虛線）
+    &.unstaffed .li-people {
+        :deep(.el-icon),
+        .li-none {
+            color: #f56c6c;
+        }
+    }
+
+    &.active {
+        box-shadow: 0 0 0 1px $blue inset, $card-shadow;
+    }
+
+    .li-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 6px;
+    }
+
+    .li-badge {
+        flex-shrink: 0;
+        padding: 1px 6px;
+        border-radius: 3px;
+        font-size: 11px;
+        line-height: 16px;
+    }
+
+    .li-time {
+        color: $grey;
+        font-size: 13px;
+        // 等寬數字，時間才不會左右跳動
+        font-variant-numeric: tabular-nums;
+    }
+
+    // 列表就是拿來好好讀的，內容不截斷，讓它換行
+    .li-content {
+        margin-bottom: 6px;
+        color: #303133;
+        font-size: 14px;
+        line-height: 18px;
+        word-break: break-word;
+    }
+
+    .li-people {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        color: #909399;
+        font-size: 12px;
+        line-height: 18px;
+
+        .li-names {
+            min-width: 0;
+        }
+
+        .more {
+            margin-left: 4px;
+            color: #c0c4cc;
+            white-space: nowrap;
+            cursor: pointer;
+        }
     }
 }
 
@@ -1660,11 +1777,9 @@ $types: (
         background-color: list.nth($pair, 2);
     }
 
-    // 列表卡片：白底 + 左側色條 + 類型 badge。
-    // 這裡刻意多寫一層 .month-list 把特異性拉高 ——
-    // 不然會跟 .month-list .list-item 的底色打平，變成誰寫在後面誰贏，
-    // 樣式一重排就會默默壞掉
-    .month-list .list-item.type-#{$name} {
+    // 活動卡片：左側色條 + 類型 badge。
+    // 兩個 class 的特異性本來就高過 .list-item，不用另外墊選擇器
+    .list-item.type-#{$name} {
         border-left-color: list.nth($pair, 1);
 
         .li-badge {
