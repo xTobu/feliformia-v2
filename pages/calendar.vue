@@ -1329,6 +1329,15 @@ $card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
         justify-content: center;
         // 點擊區比行高大，用負 margin 避免把 header 撐高
         margin: calc((var(--el-dialog-font-line-height) - #{$close-box}) * 0.5) 0;
+
+        // 視覺微調。到這裡「幾何」已經完全對齊（標題 line box 中心＝按鈕中心
+        // ＝圖示中心），但 Noto Sans TC 的 ascent/descent 很不對稱
+        //（18px/24px 下是 15.3 / 1.6），中文字的墨水中心比 line box 中心低 1.1px。
+        // 量得到的是框、看得到的是字，所以圖示也要往下挪 1px 才真的齊。
+        // 用 transform 不影響版面配置
+        .el-icon {
+            transform: translateY(1px);
+        }
     }
 
     // Element Plus 會給 label 算一個固定寬度（剛好包住文字），
