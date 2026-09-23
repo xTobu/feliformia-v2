@@ -471,6 +471,8 @@ const typeList = [
     { value: 'volunteer', label: '體驗', color: '#409eff' },
     { value: 'supplies', label: '物資', color: '#67c23a' },
     { value: 'dispatch', label: '出車', color: '#e6a23c' },
+    { value: 'medicine', label: '領藥', color: '#13c2c2' },
+    { value: 'viewing', label: '帶看', color: '#eb2f96' },
     { value: 'post', label: '社群', color: '#7c5cf0' },
     { value: 'other', label: '其他', color: '#303133' },
 ];
@@ -1572,6 +1574,8 @@ $types: (
     'volunteer': #409eff #ecf5ff,
     'supplies': #67c23a #f0f9eb,
     'dispatch': #e6a23c #fdf6ec,
+    'medicine': #13c2c2 #e6fffb,
+    'viewing': #eb2f96 #fff0f6,
     'post': #7c5cf0 #f1eefe,
     'other': #303133 #f4f4f5
 );

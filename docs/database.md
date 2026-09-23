@@ -98,7 +98,7 @@ votes.data
 | date | DATE | 活動日期 |
 | time_start | TEXT | 開始時間 'HH:mm'，15 分鐘刻度 |
 | time_end | TEXT | 結束時間 'HH:mm'，不做防呆 |
-| type | TEXT | volunteer / supplies / dispatch / post / other（有 CHECK 約束） |
+| type | TEXT | 類型 key，見 `pages/calendar.vue` 的 typeList（**沒有** CHECK 約束） |
 | notify_roles | JSONB | `['morning','night','owner']` 的子集合 |
 | owners | JSONB | profiles.id 的陣列（可多人），僅 notify_roles 含 'owner' 時才有值 |
 | content | TEXT | 備註內容，必填 |

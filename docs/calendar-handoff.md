@@ -56,12 +56,35 @@
 | `volunteer` | 體驗 | `#409eff` 藍 | 早班／晚班 |
 | `supplies` | 物資 | `#67c23a` 綠 | 早班／晚班 |
 | `dispatch` | 出車 | `#e6a23c` 橘 | 負責人 |
+| `medicine` | 領藥 | `#13c2c2` 青 | 負責人 |
+| `viewing` | 帶看 | `#eb2f96` 粉 | 負責人 |
 | `post` | 社群 | `#7c5cf0` 紫 | 負責人 |
 | `other` | 其他 | `#303133` 黑 | 混合 |
 
 > label 改過名（志工體驗→體驗、物資贈送→物資、發文→社群），
 > **但 `value` 沒動** —— DB 存的還是 `volunteer` / `supplies` / `post`，
 > 所以只是顯示文字，不需要搬資料。
+
+### 新增一個類型要改哪裡
+
+`calendar_events.type` **沒有** CHECK 約束（原本有，後來拿掉 ——
+類型會隨貓屋的實務一直增加，每次都要改 DB 太麻煩）。
+所以新增類型**不必動資料庫**，只要改 `pages/calendar.vue` 的兩個地方：
+
+```js
+// 1. typeList（script）
+{ value: 'viewing', label: '帶看', color: '#eb2f96' },
+```
+```scss
+// 2. $types（style）—— 前景色 背景色
+'viewing': #eb2f96 #fff0f6,
+```
+
+`@each` 迴圈會自動產生 `.tag` / `.day-event` / `.legend-item` / `.list-item` 四種選擇器，
+月曆色塊、列表卡片、legend 都會跟著有顏色。
+
+> 代價：資料庫擋不住打錯的 `type`，那筆活動在畫面上會沒有顏色也沒有 label。
+> `typeLabel()` 會退回顯示原始 value，至少看得出是什麼。
 
 體驗與物資多半只掛早晚班，而排班要等日期接近才會催投票，
 所以這兩類**經常處於「還沒有人」的狀態**，月曆上會是紅色虛線框。這是正常的，不是 bug。
@@ -443,7 +466,7 @@ end   = 該月最後一天所屬週的週日
 重點：
 
 - **軟刪除**：`deleted_at` / `deleted_by`，所有查詢帶 `.is('deleted_at', null)`
-- `type` 有 CHECK 約束，新增類型要同步改 `pages/calendar.vue` 的 `typeList`
+- `type` **沒有** CHECK 約束，新增類型只要改 `pages/calendar.vue`（見第 3 節）
 - 早晚班人員不存進這張表，依 `date` 對到 `votes` 即時算
 - RLS 只開 `select`（給 Realtime 訂閱用），寫入走 service key
 
