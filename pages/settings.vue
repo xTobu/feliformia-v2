@@ -49,7 +49,7 @@
                 <p class="line-status">尚未綁定</p>
                 <ol class="line-steps">
                     <li>在 LINE 加「大哥」為好友</li>
-                    <li>私訊他：<code>綁定 {{ userEmail || '你的信箱' }}</code></li>
+                    <li>私訊他：<code>我要綁定 {{ userEmail || '你的信箱' }}</code></li>
                 </ol>
                 <p class="hint">信箱要跟你登入這個網站用的一樣。</p>
             </template>
@@ -294,6 +294,14 @@ async function updatePassword() {
 </script>
 
 <style scoped lang="scss">
+// 說明文字，比內文小一級的灰字
+.hint {
+    margin: 0 0 12px;
+    color: #909399;
+    font-size: 13px;
+    line-height: 1.7;
+}
+
 .line-status {
     margin: 0 0 8px;
     font-weight: 500;
