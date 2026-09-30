@@ -25,6 +25,39 @@
             <p v-if="profileError" class="error">{{ profileError }}</p>
         </section>
 
+        <!-- LINE 提醒 -->
+        <section class="settings-section">
+            <h2>LINE 提醒</h2>
+
+            <div v-if="lineLoading" class="hint">讀取中...</div>
+
+            <template v-else-if="lineBound">
+                <p class="line-status bound">✅ 已綁定 LINE</p>
+                <p class="hint">
+                    有你負責的活動時，「大哥」會在當天早上私訊提醒你。
+                </p>
+                <button
+                    class="btn unbind-btn"
+                    @click="unbindLine"
+                    :disabled="unbinding"
+                >
+                    {{ unbinding ? '解除中...' : '解除綁定' }}
+                </button>
+            </template>
+
+            <template v-else>
+                <p class="line-status">尚未綁定</p>
+                <ol class="line-steps">
+                    <li>在 LINE 加「大哥」為好友</li>
+                    <li>私訊他：<code>綁定 {{ userEmail || '你的信箱' }}</code></li>
+                </ol>
+                <p class="hint">信箱要跟你登入這個網站用的一樣。</p>
+            </template>
+
+            <p v-if="lineSuccess" class="success">{{ lineSuccess }}</p>
+            <p v-if="lineError" class="error">{{ lineError }}</p>
+        </section>
+
         <!-- 修改密碼 -->
         <section class="settings-section">
             <h2>修改密碼</h2>
@@ -83,6 +116,15 @@ const saving = ref(false);
 const profileSuccess = ref(null);
 const profileError = ref(null);
 
+// LINE 綁定
+const lineLoading = ref(true);
+const lineBound = ref(false);
+const unbinding = ref(false);
+const lineSuccess = ref(null);
+const lineError = ref(null);
+const user = useSupabaseUser();
+const userEmail = computed(() => user.value?.email || '');
+
 // 密碼
 const newPassword = ref('');
 const confirmPassword = ref('');
@@ -113,6 +155,52 @@ watch(
     },
     { immediate: true }
 );
+
+async function loadLineStatus() {
+    lineLoading.value = true;
+
+    try {
+        const userId = getUserId();
+        if (!userId) return;
+
+        const { data } = await supabase
+            .from('profiles')
+            .select('line_user_id')
+            .eq('id', userId)
+            .maybeSingle();
+
+        lineBound.value = !!data?.line_user_id;
+    } catch (error) {
+        console.error('讀取 LINE 綁定狀態失敗:', error);
+    } finally {
+        lineLoading.value = false;
+    }
+}
+
+async function unbindLine() {
+    unbinding.value = true;
+    lineSuccess.value = null;
+    lineError.value = null;
+
+    try {
+        const { error } = await supabase
+            .from('profiles')
+            .update({ line_user_id: null, updated_at: new Date().toISOString() })
+            .eq('id', getUserId());
+
+        if (error) throw error;
+
+        lineBound.value = false;
+        lineSuccess.value = '已解除綁定';
+    } catch (error) {
+        console.error('解除綁定失敗:', error);
+        lineError.value = '解除失敗，請稍後再試';
+    } finally {
+        unbinding.value = false;
+    }
+}
+
+onMounted(loadLineStatus);
 
 async function saveProfile() {
     if (!isNicknameValid.value) {
@@ -206,6 +294,35 @@ async function updatePassword() {
 </script>
 
 <style scoped lang="scss">
+.line-status {
+    margin: 0 0 8px;
+    font-weight: 500;
+
+    &.bound {
+        color: #67c23a;
+    }
+}
+
+.line-steps {
+    margin: 0 0 8px;
+    padding-left: 20px;
+    line-height: 1.9;
+
+    code {
+        padding: 2px 6px;
+        border-radius: 4px;
+        background: #f4f4f5;
+        // 信箱可能很長，讓它能斷行不要撐破版面
+        word-break: break-all;
+    }
+}
+
+.unbind-btn {
+    background: #fff;
+    border: 1px solid #dcdfe6;
+    color: #606266;
+}
+
 .settings-page {
     max-width: 400px;
     margin: 0 auto;

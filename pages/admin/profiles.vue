@@ -58,10 +58,25 @@
                         >
                             管理員
                         </el-tag>
+                        <el-tag
+                            v-if="profile.line_user_id"
+                            type="success"
+                            size="small"
+                        >
+                            LINE
+                        </el-tag>
                     </div>
                     <div class="profile-actions">
                         <el-button size="small" @click="openDialog(profile)">
                             編輯
+                        </el-button>
+                        <!-- 換手機、綁錯帳號時由管理員解除，本人也能在 /settings 自己解除 -->
+                        <el-button
+                            v-if="profile.line_user_id"
+                            size="small"
+                            @click="unbindLine(profile)"
+                        >
+                            解除 LINE
                         </el-button>
                     </div>
                 </div>
@@ -160,6 +175,31 @@ async function loadProfiles() {
     } catch (error) {
         console.error('載入志工失敗:', error);
     }
+}
+
+// 解除某位志工的 LINE 綁定
+async function unbindLine(profile) {
+    const { isConfirmed } = await Swal.fire({
+        html: `確定要解除「${profile.nickname || profile.email}」的 LINE 綁定嗎？<br>解除後他不會再收到活動提醒。`,
+        showCancelButton: true,
+        cancelButtonText: '取消',
+        confirmButtonColor: '#b33a39',
+        confirmButtonText: '解除',
+    });
+
+    if (!isConfirmed) return;
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ line_user_id: null, updated_at: new Date().toISOString() })
+        .eq('id', profile.id);
+
+    if (error) {
+        Swal.fire({ text: '解除失敗，請稍後再試', confirmButtonColor: '#b33a39' });
+        return;
+    }
+
+    await loadProfiles();
 }
 
 // 開啟 Dialog

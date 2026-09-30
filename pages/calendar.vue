@@ -280,8 +280,59 @@
                     </button>
                 </div>
 
-                <p class="day-empty" v-else>這天沒有活動</p>
+                <!-- 挑人發送那天的活動摘要。管理員限定，那天有活動才出現 -->
+                <button
+                    type="button"
+                    class="notify-btn"
+                    v-if="canEdit && dayEvents.length"
+                    @click="openNotify"
+                >
+                    提醒這天的人員
+                </button>
+
+                <p class="day-empty" v-if="!dayEvents.length">這天沒有活動</p>
             </div>
+
+            <!-- 挑人發送提醒 -->
+            <el-dialog
+                v-model="notifyVisible"
+                :title="`提醒 ${formData.date} 的人員`"
+                width="390px"
+            >
+                <div class="notify-list">
+                    <label
+                        v-for="person in notifyCandidates"
+                        :key="person.id"
+                        class="notify-row"
+                        :class="{ disabled: !person.hasLine }"
+                    >
+                        <el-checkbox
+                            v-model="notifyPicked"
+                            :value="person.id"
+                            :disabled="!person.hasLine"
+                        />
+                        <span class="nr-name">{{ person.name }}</span>
+                        <span class="nr-count">{{ person.count }} 筆</span>
+                        <span class="nr-hint" v-if="!person.hasLine">未綁定 LINE</span>
+                    </label>
+
+                    <p class="notify-empty" v-if="!notifyCandidates.length">
+                        這天沒有對應到任何人員
+                    </p>
+                </div>
+
+                <template #footer>
+                    <el-button @click="notifyVisible = false">取消</el-button>
+                    <el-button
+                        type="primary"
+                        :loading="notifying"
+                        :disabled="!notifyPicked.length"
+                        @click="SendNotify"
+                    >
+                        發送{{ notifyPicked.length ? ` (${notifyPicked.length})` : '' }}
+                    </el-button>
+                </template>
+            </el-dialog>
 
             <!-- 活動表單。做成 dialog 是為了把「檢視 / 新增 / 編輯」分開：
                  表單只在明確要新增、或要看某一筆時才出現，關掉就等於取消。
@@ -570,6 +621,9 @@ const roleList = [
 // State
 const loading = ref(true);
 const saving = ref(false);
+const notifying = ref(false);
+const notifyVisible = ref(false);
+const notifyPicked = ref([]);
 const calendarRef = ref(null);
 const listBodyRef = ref(null);
 const cursor = ref(new Date());
@@ -681,6 +735,36 @@ const eventsByDate = computed(() => {
 });
 
 const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
+
+// 那天有活動的人。用未經篩選的 events —— 送出去的摘要是整天的內容，
+// 候選名單跟著篩選跑的話兩者會對不起來
+const notifyCandidates = computed(() => {
+    const date = formData.value.date;
+    if (!date) return [];
+
+    const counts = new Map();
+
+    for (const ev of events.value) {
+        if (ev.date !== date) continue;
+        for (const id of eventPeopleIds(ev)) {
+            counts.set(id, (counts.get(id) || 0) + 1);
+        }
+    }
+
+    return [...counts]
+        .map(([id, count]) => ({
+            id,
+            count,
+            name: getNickname(id),
+            hasLine: lineBoundIds.value.has(id),
+        }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'zh-TW'));
+});
+
+// 誰綁定了 LINE。/api/users/list 只回布林值，不會把 LINE userId 送到前端
+const lineBoundIds = computed(
+    () => new Set(allUsers.value.filter((u) => u.hasLine).map((u) => u.id))
+);
 
 const dayEvents = computed(() => eventsByDate.value[selectedDate.value] || []);
 
@@ -1229,6 +1313,42 @@ async function Submit() {
     }
 }
 
+function openNotify() {
+    // 預設都不選，避免手滑整批發出去
+    notifyPicked.value = [];
+    notifyVisible.value = true;
+}
+
+async function SendNotify() {
+    if (!canEdit.value) {
+        return ElMessage.error('只有管理員可以發送提醒');
+    }
+
+    notifying.value = true;
+
+    try {
+        const { notified, skipped } = await $fetch('/api/calendar/notify', {
+            method: 'POST',
+            body: { date: formData.value.date, userIds: [...notifyPicked.value] },
+        });
+
+        if (!notified) {
+            ElMessage.warning('沒有送出任何提醒');
+        } else {
+            ElMessage.success(
+                skipped ? `已提醒 ${notified} 人，${skipped} 人未送達` : `已提醒 ${notified} 人`
+            );
+        }
+
+        notifyVisible.value = false;
+    } catch (error) {
+        console.error('發送提醒失敗:', error);
+        ElMessage.error(error.data?.message || '發送提醒失敗');
+    } finally {
+        notifying.value = false;
+    }
+}
+
 async function DeleteEvent() {
     if (!canEdit.value) {
         return ElMessage.error('只有管理員可以刪除活動');
@@ -1397,6 +1517,10 @@ $card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
 }
 
 :deep(.el-dialog) {
+    // dialog 寬度寫死 390px，但 iPhone SE 之類只有 375px，會超出畫面
+    // 把右側內容切掉。留 16px 的邊距讓它在小螢幕自動縮。
+    max-width: calc(100vw - 32px);
+
     // 標題置中 ＋ X 與標題同一條水平線。
     //
     // Element Plus 預設：標題靠繼承的 text-align 置中，header 只在右邊留
@@ -1860,6 +1984,71 @@ $types: (
     .time-sep {
         flex-shrink: 0;
         color: $grey;
+    }
+}
+
+// 「提醒這天的人員」按鈕
+.notify-btn {
+    width: 100%;
+    margin-top: 8px;
+    padding: 6px 8px;
+    border: 1px dashed #dcdfe6;
+    border-radius: 4px;
+    background: none;
+    color: $grey;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover {
+        border-color: $blue;
+        color: $blue;
+    }
+}
+
+// 挑人 modal
+.notify-list {
+    text-align: left;
+
+    .notify-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px solid #f4f4f5;
+        cursor: pointer;
+
+        &:last-child {
+            border-bottom: none;
+        }
+
+        &.disabled {
+            cursor: not-allowed;
+        }
+
+        .nr-name {
+            flex: 1;
+            min-width: 0;
+            font-size: 14px;
+        }
+
+        .nr-count {
+            flex-shrink: 0;
+            color: #c0c4cc;
+            font-size: 12px;
+        }
+
+        .nr-hint {
+            flex-shrink: 0;
+            color: #e6a23c;
+            font-size: 12px;
+        }
+    }
+
+    .notify-empty {
+        padding: 24px 0;
+        color: #c0c4cc;
+        font-size: 13px;
+        text-align: center;
     }
 }
 
