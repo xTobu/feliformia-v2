@@ -66,7 +66,19 @@ alter table public.profiles add column if not exists line_user_id text unique;
 
 ---
 
-## 5. LINE console 設定步驟
+## 5. 加好友連結
+
+```
+https://lin.ee/8pI3YeW
+```
+
+寫在 [pages/settings.vue](../pages/settings.vue) 的 `LINE_ADD_FRIEND_URL`。
+要重新取得或換一組：LINE Official Account Manager → 增加好友人數 → 加入好友指南，
+那裡也有 QR code 可以印出來貼在貓屋。
+
+---
+
+## 6. LINE console 設定步驟
 
 1. **Basic settings** → 複製 **Channel secret** → 設成 `LINE_CHANNEL_SECRET`
 2. **Messaging API** → **Webhook URL** 填：
@@ -90,16 +102,16 @@ webhook 與自動回應訊息可以並存，設定錯會讓關鍵字失效。
 
 ---
 
-## 6. ⚠️ Vercel 的兩個坑
+## 7. ⚠️ Vercel 的兩個坑
 
-### 6.1 Firewall 可能擋掉 LINE 的請求
+### 7.1 Firewall 可能擋掉 LINE 的請求
 
 Vercel 專案若開了 Attack Challenge / Bot 防護，LINE 的 webhook 請求會被 challenge，
 **綁定會完全失效，而且不會有任何錯誤提示** —— LINE 那邊只顯示 webhook 失敗。
 
 部署後去 Vercel → Firewall 加一條規則，讓 `/api/line/webhook` 跳過挑戰。
 
-### 6.2 Hobby 方案的 Cron 限制
+### 7.2 Hobby 方案的 Cron 限制
 
 - 每個專案最多 **2 個** cron
 - **一天只能跑一次**
@@ -119,7 +131,7 @@ Vercel 專案若開了 Attack Challenge / Bot 防護，LINE 的 webhook 請求�
 
 ---
 
-## 7. 手動測試
+## 8. 手動測試
 
 ```bash
 curl -H "Authorization: Bearer <CRON_SECRET>" https://feliformia.org/api/calendar/remind
@@ -140,7 +152,7 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://feliformia.org/api/calenda
 
 ---
 
-## 8. 兩支提醒端點的差別
+## 9. 兩支提醒端點的差別
 
 | | `remind.get.js` | `notify.post.js` |
 |---|---|---|
@@ -167,7 +179,7 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://feliformia.org/api/calenda
 
 ---
 
-## 9. 已知限制
+## 10. 已知限制
 
 - **綁定只靠 email 比對** —— 知道某位志工的信箱就能把自己的 LINE 綁上去，
   收到那個人的提醒。貓屋是小團體，目前接受這個風險；
