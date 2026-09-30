@@ -58,12 +58,12 @@
                         >
                             管理員
                         </el-tag>
+                        <!-- 兩種狀態都顯示，管理員才看得出誰還沒綁、需要去催 -->
                         <el-tag
-                            v-if="profile.line_user_id"
-                            type="success"
+                            :type="profile.line_user_id ? 'success' : 'info'"
                             size="small"
                         >
-                            LINE
+                            LINE {{ profile.line_user_id ? '已綁定' : '未綁定' }}
                         </el-tag>
                     </div>
                     <div class="profile-actions">
