@@ -4,7 +4,7 @@ export default defineEventHandler(async () => {
     // 撈 profiles
     const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, is_admin, is_active, created_at')
+        .select('id, nickname, is_admin, is_active, created_at, line_user_id')
         .order('created_at', { ascending: false })
 
     if (profilesError) {

@@ -1,39 +1,15 @@
-import * as line from '@line/bot-sdk'
+import { pushToGroups } from '~/server/utils/line'
 
+// 推播到志工群組。/regular 與 /medicine 的手動發送按鈕在用。
 export default defineEventHandler(async (event) => {
-    const body = await readBody(event)
-    const { text } = body
+    const { text } = await readBody(event)
 
     if (!text) {
         throw createError({ statusCode: 400, message: 'empty body.text' })
     }
 
-    const client = new line.Client({
-        channelAccessToken: process.env.LINE_CHANNEL_ACCESS_TOKEN,
-    })
-
-    const groupIdMain = process.env.LINE_GROUPID_FELIFORMIA_MAIN
-    const groupIdPartner = process.env.LINE_GROUPID_FELIFORMIA_PARTNER
-
-    const messages = [
-        {
-            type: 'text',
-            text,
-        },
-    ]
-
     try {
-        // 只有正式環境才發送到主群組
-        if (process.env.DEPLOY_SITE === 'feliformia' && groupIdMain) {
-            await client.pushMessage(groupIdMain, messages)
-        }
-
-        // 發送到夥伴群組
-        if (groupIdPartner) {
-            await client.pushMessage(groupIdPartner, messages)
-        }
-
-        return { success: true }
+        return await pushToGroups(text)
     } catch (error) {
         console.error('LINE push error:', error)
         throw createError({ statusCode: 500, message: error.message })
