@@ -312,8 +312,9 @@
                             :disabled="!person.hasLine"
                         />
                         <span class="nr-name">{{ person.name }}</span>
-                        <span class="nr-count">{{ person.count }} 筆</span>
+                        <!-- 未綁定的標示放在數量前面，視線順序：誰 → 能不能收到 → 幾項 -->
                         <span class="nr-hint" v-if="!person.hasLine">未綁定 LINE</span>
+                        <span class="nr-count">{{ person.count }} 項</span>
                     </label>
 
                     <p class="notify-empty" v-if="!notifyCandidates.length">
