@@ -70,14 +70,6 @@
                         <el-button size="small" @click="openDialog(profile)">
                             編輯
                         </el-button>
-                        <!-- 換手機、綁錯帳號時由管理員解除，本人也能在 /settings 自己解除 -->
-                        <el-button
-                            v-if="profile.line_user_id"
-                            size="small"
-                            @click="unbindLine(profile)"
-                        >
-                            解除 LINE
-                        </el-button>
                     </div>
                 </div>
             </div>
@@ -104,6 +96,16 @@
                     </el-form-item>
                     <el-form-item label="啟用">
                         <el-switch v-model="form.is_active" />
+                    </el-form-item>
+                    <!-- 換手機、綁錯帳號時由管理員解除。本人也能在 /settings 自己解除 -->
+                    <el-form-item label="LINE">
+                        <span class="line-bound" v-if="editingProfile?.line_user_id">
+                            <el-tag type="success" size="small">已綁定</el-tag>
+                            <el-button size="small" @click="unbindLine(editingProfile)">
+                                解除
+                            </el-button>
+                        </span>
+                        <el-tag type="info" size="small" v-else>未綁定</el-tag>
                     </el-form-item>
                 </el-form>
                 <template #footer>
@@ -199,6 +201,8 @@ async function unbindLine(profile) {
         return;
     }
 
+    // 先更新手上這份，dialog 才會立刻變成「未綁定」
+    profile.line_user_id = null;
     await loadProfiles();
 }
 
@@ -361,6 +365,13 @@ onMounted(() => {
     &:hover {
         color: #b33a39;
     }
+}
+
+.line-bound {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    line-height: 1.5;
 }
 
 :deep(.el-dialog) {
