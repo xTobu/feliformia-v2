@@ -34,7 +34,7 @@
             <template v-else-if="lineBound">
                 <p class="line-status bound">✅ 已綁定 LINE</p>
                 <p class="hint">
-                    有你負責的活動時，「大哥」會在當天早上私訊提醒你。
+                    有你負責的活動時，<br>「大哥」會在當天早上私訊提醒你。
                 </p>
                 <button
                     class="btn unbind-btn"
