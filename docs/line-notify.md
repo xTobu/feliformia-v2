@@ -11,7 +11,7 @@
    ↓  follow 事件
 大哥回覆使用說明
    ↓
-志工私訊「綁定 你的信箱」
+志工私訊「我要綁定 你的信箱」（解除是「我要解除綁定」）
    ↓  message 事件（驗簽 → 用 email 對到 auth.users）
 寫入 profiles.line_user_id
    ↓
@@ -83,7 +83,7 @@ alter table public.profiles add column if not exists line_user_id text unique;
 大哥目前在志工群組裡用**關鍵字自動回覆**。開啟 webhook **不會**影響它：
 
 - 本專案的 webhook **只處理一對一私訊**，群組訊息直接忽略
-- 私訊也只處理「綁定」「解除綁定」開頭的訊息，其他不回應、不消耗 replyToken
+- 私訊也只處理「我要綁定」「我要解除綁定」開頭的訊息，其他不回應、不消耗 replyToken
 
 但 LINE Official Account Manager 的「回應設定」要自己確認一次，
 webhook 與自動回應訊息可以並存，設定錯會讓關鍵字失效。

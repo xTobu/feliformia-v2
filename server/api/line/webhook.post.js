@@ -7,16 +7,21 @@ import { verifyLineSignature, replyMessage } from '~/server/utils/line'
 // ⚠️ 只處理「綁定」「解除綁定」開頭的訊息，其他一律不回應也不動作。
 // LINE Official Account Manager 設定的關鍵字自動回覆不會受影響。
 
-const BIND_KEYWORD = '綁定'
-const UNBIND_KEYWORD = '解除綁定'
+const BIND_KEYWORD = '我要綁定'
+const UNBIND_KEYWORD = '我要解除綁定'
 
 const HELP_TEXT = [
-    '嗨！我是大哥 🐱',
+    '喵喵  我是大哥 🐱',
+    '很高興你加入了我們',
     '',
-    '想收到貓屋行事曆的活動提醒，請傳：',
-    '綁定 你的信箱',
+    '這是貓毛的網站',
+    'https://feliformia.org/',
     '',
-    '例如：綁定 cat@example.com',
+    '如果想收到貓屋行事曆的活動提醒，',
+    '請傳訊息：',
+    `「${BIND_KEYWORD} {你的註冊信箱}」`,
+    '',
+    `例如：${BIND_KEYWORD} cat@example.com`,
     '（信箱要跟你登入貓屋網站的一樣）',
 ].join('\n')
 

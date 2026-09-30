@@ -66,7 +66,7 @@ export default defineEventHandler(async (event) => {
             continue
         }
 
-        const result = await pushToUser(lineUserId, buildDigest(today, list, { greeting: '早安！今天 ' }))
+        const result = await pushToUser(lineUserId, buildDigest(today, list, { greeting: '早安！' }))
         result.success ? notified++ : skipped++
     }
 

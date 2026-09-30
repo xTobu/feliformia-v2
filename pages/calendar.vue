@@ -296,7 +296,7 @@
             <!-- 挑人發送提醒 -->
             <el-dialog
                 v-model="notifyVisible"
-                :title="`提醒 ${formData.date} 的人員`"
+                :title="`提醒 ${dayPanelLabel} 的人員`"
                 width="390px"
             >
                 <div class="notify-list">
@@ -739,7 +739,9 @@ const WEEKDAY_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 // 那天有活動的人。用未經篩選的 events —— 送出去的摘要是整天的內容，
 // 候選名單跟著篩選跑的話兩者會對不起來
 const notifyCandidates = computed(() => {
-    const date = formData.value.date;
+    // 用 selectedDate 不是 formData.date ——
+    // 前者是「檢視中選的那天」，後者是「表單正在編輯的那筆活動的日期」
+    const date = selectedDate.value;
     if (!date) return [];
 
     const counts = new Map();
@@ -1329,7 +1331,7 @@ async function SendNotify() {
     try {
         const { notified, skipped } = await $fetch('/api/calendar/notify', {
             method: 'POST',
-            body: { date: formData.value.date, userIds: [...notifyPicked.value] },
+            body: { date: selectedDate.value, userIds: [...notifyPicked.value] },
         });
 
         if (!notified) {
