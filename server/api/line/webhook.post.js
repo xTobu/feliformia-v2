@@ -115,7 +115,7 @@ async function handleBind(replyToken, lineUserId, email) {
 
     if (error) {
         console.error('綁定寫入失敗:', error)
-        await replyMessage(replyToken, '綁定失敗了 😿 請稍後再試，或在群組裡跟管理員說一聲。')
+        await replyMessage(replyToken, '綁定失敗了 😿\n請稍後再試，或在群組裡跟管理員說一聲。')
         return
     }
 
