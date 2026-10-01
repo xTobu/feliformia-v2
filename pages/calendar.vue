@@ -512,7 +512,7 @@
 
                     <template v-else>
                         <p class="perm-hint">
-                            唯讀：只有管理員可以新增、編輯或刪除活動
+                            唯讀：僅管理員可新增、編輯或刪除活動
                         </p>
                         <el-button @click="formVisible = false">關閉</el-button>
                     </template>
@@ -2159,10 +2159,11 @@ $types: (
 }
 
 .perm-hint {
-    margin: 0 0 8px;
+    margin: 0 6px 0 0 ;
     color: #c0c4cc;
     font-size: 13px;
-    text-align: center;
+    line-height: 32px;
+    flex-grow: 1;
 }
 
 // 新增入口。固定在畫面最下方，月曆與列表兩種檢視都在同一個位置

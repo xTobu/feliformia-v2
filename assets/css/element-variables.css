@@ -42,7 +42,7 @@ body {
 }
 
 h1 {
-  margin-bottom: 18px !important;
+  margin:  0 0 10px !important;
   font-size: 21px;
   font-weight: 500;
 }
