@@ -23,7 +23,7 @@
 | Column | Type | Description |
 |--------|------|-------------|
 | id | UUID | PK |
-| name | TEXT | 選項名稱（醫療、灌食、值班、快閃/協助） |
+| name | TEXT | 選項名稱（醫療、灌食、值班、快閃/協助）。**行事曆只把「值班」「快閃/協助」當成值班人員** —— 名單寫死在 `pages/calendar.vue` 與 `server/utils/roster.js` 的 `DUTY_OPTION_NAMES`，改名會讓它失效 |
 | has_time_range | BOOLEAN | 是否需要時間區間（醫療需要） |
 | is_exclusive | BOOLEAN | 是否排他（目前未使用） |
 | sort_order | INTEGER | 排序 |

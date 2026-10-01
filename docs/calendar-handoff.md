@@ -119,9 +119,19 @@
 ```js
 // votes.data[date][shift][optionId].checked === true 的人
 // option 名稱來自 vote_options（依 sort_order 排序、is_active）
+// 只算「值班」與「快閃/協助」兩個選項（原因見下）
 // 要跳過 is_pass 的人
 // 日期直接用 data 的 key，不要比對 week_start（原因見 7.4）
 ```
+
+> ⚠️ **只有「值班」和「快閃/協助」算值班人員。**
+> `vote_options` 裡還有「醫療」（和已停用的「灌食」），但勾醫療的人那天是
+> 帶貓去就醫、人不在貓屋，不該被算成活動人員。
+>
+> 名單寫死在 `DUTY_OPTION_NAMES`，**[pages/calendar.vue](../pages/calendar.vue) 與
+> [server/utils/roster.js](../server/utils/roster.js) 各有一份，改要兩邊一起改**。
+> 比對的是 `vote_options.name`，所以在 `/admin/vote-options` **改名或新增選項時
+> 這裡沒跟著改，就會靜默漏人** —— 不會報錯，只是名單少人。
 
 > ⚠️ `votes` **沒有 nickname 欄位**（舊版 database.md 寫錯了，已修正）。
 > 名字要用 `user_id` 對 `/api/users/list` 建出來的 `userMap`，
@@ -531,11 +541,18 @@ dayjs.updateLocale('zh-tw', { weekStart: 1 })
 `.el-select__wrapper` 要用 `min-height` 不能用 `height`，
 標籤換到第二行時才不會被裁掉。
 
-### 7.4 `votes.week_start` 有不少是「星期二」，不能拿來精準比對
+### 7.4 `votes.week_start` 曾經大量偏移，所以不拿來精準比對
+
+> **2026-10-02 更新：正式站的資料已經正規化過了。**
+> `select to_char(week_start,'Dy'), count(*) from votes group by 1` 的結果是
+> **780 筆 Mon、1 筆 Sun** —— 偏移的只剩一筆例外。
+> 但**測試站還沒有**（23 筆裡 17 筆是星期二），而且那 1 筆 Sun 說明例外還是會發生。
+>
+> 所以結論不變：**繼續不比對 `week_start`**。下面是當初的調查記錄。
 
 **這是接後端時踩到最大的坑。**
 
-`/vote` 存檔時送的明明是週一字串（`initWeek()` 手算的），但資料庫裡實際長這樣：
+`/vote` 存檔時送的明明是週一字串（`initWeek()` 手算的），但當時資料庫裡長這樣：
 
 ```
 2025-12-02  星期二  ← data 的 key 卻是 2025-12-01（星期一）
@@ -558,8 +575,8 @@ dayjs.updateLocale('zh-tw', { weekStart: 1 })
 直接 `vote.data[date][shift][optionId].checked` 就好。
 `loadVotes()` 只負責用區間把可能相關的列撈進來（前後各多抓一週當緩衝）。
 
-> 這個偏移也代表 `/vote` 自己可能有讀不到舊投票的問題（它是 `.eq('week_start', 週一)`）。
-> 不在本次範圍內，但值得另外查。
+> 這個偏移也代表 `/vote` 自己讀不到偏移的那些列（它是 `.eq('week_start', 週一)`）。
+> 正式站正規化之後只剩那 1 筆 Sun 受影響，但測試站仍然大量看不到舊投票。
 
 ---
 

@@ -819,10 +819,20 @@ function getNickname(userId) {
     return userMap.value.get(userId) || '未命名';
 }
 
-// 該班別可用的選項；shift 缺值視同 'both'，與 /vote 的處理一致
+// 算值班人員的選項名稱。只有這兩個算 —— 勾「醫療」的人那天是帶貓去就醫、
+// 人不在貓屋，不該出現在活動人員裡。
+//
+// ⚠️ server/utils/roster.js 也有一份一樣的常數（LINE 提醒用），兩邊要一起改。
+// ⚠️ 比對的是 vote_options.name。在 /admin/vote-options 改名或新增選項時，
+//    這裡沒跟著改就會靜默漏人 —— 不會報錯，只是名單少人。
+const DUTY_OPTION_NAMES = ['值班', '快閃/協助'];
+
+// 該班別算值班的選項；shift 缺值視同 'both'，與 /vote 的處理一致
 function shiftOptions(shift) {
     return voteOptions.value.filter(
-        (opt) => !opt.shift || opt.shift === 'both' || opt.shift === shift
+        (opt) =>
+            DUTY_OPTION_NAMES.includes(opt.name) &&
+            (!opt.shift || opt.shift === 'both' || opt.shift === shift)
     );
 }
 
