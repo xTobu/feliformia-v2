@@ -1,7 +1,7 @@
 <template>
     <ClientOnly>
         <div v-loading="loading" id="regular">
-            <h1>飲食及如廁紀錄表</h1>
+            <h1>飲食與如廁紀錄表</h1>
             <form @submit.prevent="Submit">
                 <div class="d_flex">
                     <div class="W50">
@@ -267,7 +267,7 @@ definePageMeta({
 });
 
 useHead({
-    title: '飲食及如廁紀錄表',
+    title: '飲食與如廁紀錄表',
 });
 
 const { $dayjs } = useNuxtApp();
@@ -529,7 +529,7 @@ async function ManualNotifyLine() {
         loadingNotify.value = true;
         const textDate = $dayjs(formData.value.date).format('YYYY/MM/DD');
         const textShift = ShiftMap[formData.value.shift];
-        const textPush = `飲食及如廁紀錄\n---------------\n日期： ${textDate}\n班別： ${textShift}\n志工： ${
+        const textPush = `飲食與如廁紀錄\n---------------\n日期： ${textDate}\n班別： ${textShift}\n志工： ${
             formData.value.member || ''
         }\n回報：\n${formData.value.note || ''}`;
         const textSite =
@@ -538,7 +538,7 @@ async function ManualNotifyLine() {
                 : `[${config.public.deploySite || 'Local'}]\n`;
         const textManual = '[大哥通知]\n';
 
-        const htmlPush = `<div style="text-align: left;"><b><h3>將以下訊息通知大哥</h3></b>飲食及如廁紀錄<br>---------------<br>日期： ${textDate}<br>班別： ${textShift}<br>志工： ${
+        const htmlPush = `<div style="text-align: left;"><b><h3>將以下訊息通知大哥</h3></b>飲食與如廁紀錄<br>---------------<br>日期： ${textDate}<br>班別： ${textShift}<br>志工： ${
             formData.value.member || ''
         }<br>回報：<br>${formData.value.note || ''}</div>`;
 
