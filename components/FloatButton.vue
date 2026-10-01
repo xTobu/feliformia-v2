@@ -23,7 +23,7 @@
                         <Icon icon="fa-solid:syringe" width="17" /> <span>用藥與特殊照護</span>
                     </li>
                     <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
-                    <li class="red"><Icon icon="mdi:bell-ring" width="17" /> <span>今日待辦提醒</span></li>
+                    <li class="red" @click="openTodo"><Icon icon="mdi:bell-ring" width="17" /> <span>今日待辦提醒</span></li>
                     <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>
                     <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>卯咪餵藥週表</span></li>
                     <li
@@ -60,6 +60,31 @@
                 </span>
             </template>
         </el-dialog>
+
+        <!-- 今日待辦提醒。目前只有殼，資料等後端 ——
+             要換的地方是 GetTodos() 裡那一行註解掉的 $fetch -->
+        <el-dialog
+            v-model="showDialogTodo"
+            :title="`今日待辦提醒（${todayText}）`"
+            width="90%"
+            :show-close="false"
+        >
+            <p class="todo-state" v-if="todoLoading">載入中...</p>
+            <p class="todo-state" v-else-if="!todos.length">今天沒有待辦事項</p>
+
+            <ul class="todo-list" v-else>
+                <li v-for="todo in todos" :key="todo.id">
+                    <span class="todo-time">{{ todo.time }}</span>
+                    <span class="todo-text">{{ todo.text }}</span>
+                </li>
+            </ul>
+
+            <template #footer>
+                <span class="dialog-footer">
+                    <button @click="showDialogTodo = false">關閉</button>
+                </span>
+            </template>
+        </el-dialog>
 </template>
 
 <script setup>
@@ -69,9 +94,19 @@ import { marked } from 'marked';
 const router = useRouter();
 const route = useRoute();
 
+const { $dayjs } = useNuxtApp();
+
 const drawer = ref(false);
 const showDialogMind = ref(false);
 const minds = ref([]);
+
+// 今日待辦提醒
+const showDialogTodo = ref(false);
+const todoLoading = ref(false);
+const todos = ref([]);
+
+// 放標題上，彈窗開著跨過午夜時才不會搞錯是哪一天
+const todayText = computed(() => $dayjs().format('M/D'));
 
 function open(url) {
     window.open(url, '_blank').focus();
@@ -93,6 +128,33 @@ function toggleDialogNotice() {
     showDialogMind.value = !showDialogMind.value;
     if (minds.value.length === 0) {
         GetNotice();
+    }
+}
+
+function openTodo() {
+    // 先收抽屜再開彈窗，不然兩層疊在一起
+    drawer.value = false;
+    showDialogTodo.value = true;
+    GetTodos();
+}
+
+// TODO: 後端好了之後把下面那行 $fetch 打開。
+// 每次開啟都重抓 —— 待辦會變，不像注意事項可以快取
+//
+// 預期的回傳格式（還沒定案，接的時候以後端為準）：
+//   [{ id, time: 'HH:mm', text: '待辦內容' }]
+// 欄位要是不一樣，記得同步改上面 .todo-list 的 template
+async function GetTodos() {
+    todoLoading.value = true;
+
+    try {
+        // todos.value = await $fetch('/api/todo/today');
+        todos.value = [];
+    } catch (e) {
+        console.error('GetTodos error:', e);
+        todos.value = [];
+    } finally {
+        todoLoading.value = false;
     }
 }
 
@@ -165,6 +227,46 @@ async function GetNotice() {
 
 .md {
     text-align: left;
+}
+
+.todo-state {
+    margin: 0;
+    padding: 24px 0;
+    color: #c0c4cc;
+    font-size: 14px;
+    text-align: center;
+}
+
+.todo-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    text-align: left;
+
+    li {
+        display: flex;
+        align-items: baseline;
+        gap: 10px;
+        padding: 10px 0;
+        border-bottom: 1px solid #ababab66;
+
+        &:last-child {
+            border-bottom: none;
+        }
+    }
+
+    .todo-time {
+        flex-shrink: 0;
+        color: #657181;
+        font-size: 13px;
+        // 等寬數字，時間才不會左右跳動
+        font-variant-numeric: tabular-nums;
+    }
+
+    .todo-text {
+        color: #5a5c5f;
+        word-break: break-word;
+    }
 }
 
 .dialog-footer {
