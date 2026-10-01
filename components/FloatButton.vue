@@ -17,10 +17,10 @@
                     </li> -->
  
                     <li class="red" @click="open('/regular')">
-                        <Icon icon="mdi:silverware-fork-knife" width="17" /> <span>飲食及如廁紀錄</span>
+                        <Icon icon="mdi:silverware-fork-knife" width="17" /> <span>飲食與如廁紀錄</span>
                     </li>
                     <li class="red" @click="open('/medicine')">
-                        <Icon icon="fa-solid:syringe" width="17" /> <span>餵藥及特殊飲食表</span>
+                        <Icon icon="fa-solid:syringe" width="17" /> <span>用藥與特殊照護</span>
                     </li>
                     <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
                     <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>

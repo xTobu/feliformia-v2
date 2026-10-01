@@ -151,7 +151,7 @@
                     </button>
 
                     <NuxtLink class="f_red" to="/regular" target="_blank"
-                        >前往飲食及如廁紀錄</NuxtLink
+                        >前往飲食與如廁紀錄</NuxtLink
                     >
                     <NuxtLink class="f_red" :to="prevLink" target="_blank"
                         >看前班紀錄</NuxtLink
