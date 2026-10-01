@@ -15,7 +15,7 @@
    ↓  message 事件（驗簽 → 用 email 對到 auth.users）
 寫入 profiles.line_user_id
    ↓
-每天 Vercel Cron 打 /api/calendar/remind
+每天 Supabase pg_cron 打 /api/calendar/remind
    ↓
 撈當天的 calendar_events → 算出每筆的活動人員 → 私訊已綁定的人
 ```
@@ -30,11 +30,10 @@
 |---|---|
 | [server/utils/line.js](../server/utils/line.js) | 共用 client：驗簽、推播、回覆 |
 | [server/api/line/webhook.post.js](../server/api/line/webhook.post.js) | 綁定／解除綁定 |
-| [server/api/calendar/remind.get.js](../server/api/calendar/remind.get.js) | 每日提醒，由 Vercel Cron 觸發 |
+| [server/api/calendar/remind.get.js](../server/api/calendar/remind.get.js) | 每日提醒，由 Supabase pg_cron 觸發 |
 | [server/api/calendar/notify.post.js](../server/api/calendar/notify.post.js) | 手動提醒，管理員挑日期與收件人 |
 | [server/utils/calendar-message.js](../server/utils/calendar-message.js) | 摘要訊息組裝，兩支提醒端點共用 |
 | [server/utils/roster.js](../server/utils/roster.js) | 從 `votes` 算值班名單（server 端版本） |
-| [vercel.json](../vercel.json) | cron 排程 |
 | [pages/settings.vue](../pages/settings.vue) | 志工看自己的綁定狀態、可自行解除 |
 | [pages/admin/profiles.vue](../pages/admin/profiles.vue) | 管理員看全體綁定狀態、可代為解除 |
 
@@ -48,7 +47,7 @@
 |---|---|---|
 | `LINE_CHANNEL_ACCESS_TOKEN` | LINE console → Messaging API | 推播（既有） |
 | `LINE_CHANNEL_SECRET` | LINE console → Basic settings | **驗證 webhook 簽章** |
-| `CRON_SECRET` | 自己產一串長亂數 | Vercel Cron 會自動帶成 `Authorization: Bearer` |
+| `CRON_SECRET` | 自己產一串長亂數 | 排程打提醒端點時帶的 `Authorization: Bearer` |
 
 > 沒設 `LINE_CHANNEL_SECRET` 的話 webhook 會直接回 500；
 > 沒設 `CRON_SECRET` 的話提醒端點會回 500。兩個都是刻意的，
@@ -102,7 +101,7 @@ webhook 與自動回應訊息可以並存，設定錯會讓關鍵字失效。
 
 ---
 
-## 7. ⚠️ Vercel 的兩個坑
+## 7. ⚠️ 兩個容易踩的坑
 
 ### 7.1 Firewall 可能擋掉 LINE 的請求
 
@@ -111,23 +110,70 @@ Vercel 專案若開了 Attack Challenge / Bot 防護，LINE 的 webhook 請求�
 
 部署後去 Vercel → Firewall 加一條規則，讓 `/api/line/webhook` 跳過挑戰。
 
-### 7.2 Hobby 方案的 Cron 限制
+### 7.2 排程跑在 Supabase，不是 Vercel
 
-- 每個專案最多 **2 個** cron
-- **一天只能跑一次**
-- **觸發時間不保證準時**，會落在指定的那個小時內
+**排程設定不在 repo 裡**，是跑在 production Supabase 專案的資料庫裡
+（`pg_cron` + `pg_net`）。改時間要進 Supabase SQL Editor，不是改這份程式碼。
 
-`vercel.json` 設的是 `0 22 * * *`（**UTC**）＝ 台灣時間隔天 **06:00**。
-台灣是 UTC+8，所以要往回推 8 小時、跨到前一天。
+一開始是用 Vercel Cron，但 **Hobby 方案只保證「在指定的那個小時內」觸發**，
+設 06:00 實際會 06:00–06:59 之間才發。pg_cron 是分鐘級準時，而且不吃 Vercel 方案限制。
 
-實際可能 06:00–06:59 之間才發。每日提醒可以接受。
+目前排程：**`0 0 * * *`（UTC）＝ 台灣時間 08:00**。
+pg_cron 在 Supabase 上以 UTC 判斷時間，台灣是 UTC+8，所以要往回推 8 小時。
 
-> 這個時間跟端點裡的 `dayjs().tz('Asia/Taipei')` 是一致的：
-> UTC 22:00 觸發時，台灣已經是隔天早上 6 點，
-> `today` 取到的就是「剛開始的那一天」，提醒的是當天的活動。
+設定 SQL（在 production 專案跑一次就好，**不要在測試站跑**，會重複發訊息）：
 
-之後若要做「活動前一小時提醒」，Hobby 方案做不到，要改用 GitHub Actions
-（專案裡已經有 `.github/workflows/keep_supabase_active.yml` 可以參考）。
+```sql
+-- 兩個 extension：pg_cron 排程、pg_net 從資料庫發 HTTP
+create extension if not exists pg_cron;
+create extension if not exists pg_net;
+
+select cron.schedule(
+    'calendar-daily-remind',
+    '0 0 * * *',                      -- UTC 00:00 = 台灣 08:00
+    $$
+    select net.http_get(
+        url := 'https://feliformia.org/api/calendar/remind',
+        headers := jsonb_build_object(
+            'Authorization',
+            'Bearer ' || (
+                select decrypted_secret from vault.decrypted_secrets
+                where name = 'cron_secret'
+            )
+        ),
+        timeout_milliseconds := 60000  -- 預設 5 秒，推播人多會不夠
+    );
+    $$
+);
+```
+
+`CRON_SECRET` 放在 Supabase Vault，不要寫死在排程裡 ——
+`cron.job` 這張表只要能連資料庫就看得到：
+
+```sql
+select vault.create_secret('<CRON_SECRET>', 'cron_secret', 'calendar remind endpoint');
+```
+
+**改時間**用同一個 job 名稱重跑 `cron.schedule` 就會覆蓋；**停掉**是
+`select cron.unschedule('calendar-daily-remind');`。
+
+#### 怎麼確認它真的跑了
+
+pg_net 是非同步的 —— `net.http_get()` 只負責把請求排進佇列就回傳，
+所以 **`cron.job_run_details` 一定顯示成功**，就算 API 回 401 也一樣。
+要看真正的結果得查 pg_net 的回應表：
+
+```sql
+-- 排程有沒有被觸發
+select jobid, status, start_time from cron.job_run_details
+order by start_time desc limit 10;
+
+-- API 實際回了什麼（只保留最近幾小時）
+select status_code, content, created from net._http_response
+order by created desc limit 10;
+```
+
+`status_code` 要是 **200**。看到 401 就是 secret 不對，看到 404 就是網址錯了。
 
 ---
 
@@ -147,8 +193,10 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://feliformia.org/api/calenda
 - `notified` — 成功私訊幾個人
 - `skipped` — 沒綁定 LINE、或推播失敗（對方封鎖大哥）的人數
 
-> 時區用 `dayjs().tz('Asia/Taipei')` 換算。Vercel 跑在 UTC，
-> 不換算的話台灣時間早上 8 點會抓到「前一天」的活動。
+> 時區用 `dayjs().tz('Asia/Taipei')` 換算。Vercel 的 function 跑在 UTC，
+> 不換算的話半夜的排程會抓到「前一天」的活動。
+> 現在排在台灣 08:00（UTC 00:00）這個瞬間兩邊日期剛好相同，
+> 但換算要留著 —— 之後把時間往前挪就會踩到。
 
 ---
 
@@ -156,7 +204,7 @@ curl -H "Authorization: Bearer <CRON_SECRET>" https://feliformia.org/api/calenda
 
 | | `remind.get.js` | `notify.post.js` |
 |---|---|---|
-| 誰觸發 | Vercel Cron | 管理員按「立即提醒」 |
+| 誰觸發 | Supabase pg_cron | 管理員按「立即提醒」 |
 | 驗證 | `CRON_SECRET` | `requireAdmin()`（登入身分） |
 | 日期 | 今天 | 管理員在行事曆選的那天 |
 | 收件人 | 那天有活動的**所有**人 | 管理員從清單**勾選**的人 |

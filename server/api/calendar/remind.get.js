@@ -11,8 +11,8 @@ dayjs.extend(timezone)
 
 // 每天早上私訊提醒「今天有什麼事」給活動相關人員。
 //
-// 由 Vercel Cron 觸發（見 vercel.json）。Vercel Cron 是發 GET，
-// 並在有設定 CRON_SECRET 時自動帶 Authorization: Bearer <CRON_SECRET>。
+// 由 Supabase pg_cron 觸發（排程 SQL 見 docs/line-notify.md 7.2）。
+// 排程用 pg_net 發 GET，並自己帶上 Authorization: Bearer <CRON_SECRET>。
 //
 // 也可以手動帶同樣的 header 呼叫來測試。
 
@@ -73,7 +73,7 @@ export default defineEventHandler(async (event) => {
     return { date: today, events: events.length, notified, skipped }
 })
 
-// Vercel Cron 會自動帶 Authorization: Bearer <CRON_SECRET>。
+// 排程會帶 Authorization: Bearer <CRON_SECRET>。
 // 沒有這道檢查的話，任何人都能打這支 API 觸發推播。
 function requireCronAuth(event) {
     const secret = process.env.CRON_SECRET
