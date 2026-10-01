@@ -52,13 +52,13 @@ const { isAdmin } = useProfile();
     width: 100%;
     max-width: 450px;
     margin: 0 auto;
-    padding: 20px 20px;
+    padding: 0 20px 30px;
     a {
         display: block;
     }
 
     .admin-link {
-        margin: -10px 0 24px;
+        margin: 0;
         font-size: 13px;
         color: #6da2c2;
     }
@@ -69,7 +69,7 @@ const { isAdmin } = useProfile();
     .or {
         font-size: 13px;
         color:rgb(152, 166, 184);
-        margin: 40px 0 20px;
+        margin: 30px 0 20px;
         text-align: center;
         position: relative;
         &::before, &::after {

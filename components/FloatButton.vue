@@ -23,6 +23,7 @@
                         <Icon icon="fa-solid:syringe" width="17" /> <span>用藥與特殊照護</span>
                     </li>
                     <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
+                    <li class="red"><Icon icon="mdi:bell-ring" width="17" /> <span>今日待辦提醒</span></li>
                     <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>
                     <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>卯咪餵藥週表</span></li>
                     <li
@@ -34,7 +35,7 @@
                     >
                         <Icon icon="mdi:information" width="17" /> <span>貓咪簡介 / 飲食 / 習慣需知</span>
                     </li>
-                    <li @click="goto('/')"><Icon icon="mdi:home" width="17" /> <span>首頁</span></li>
+                    <li class="blue" @click="goto('/')"><Icon icon="mdi:home" width="17" /> <span>首頁</span></li>
                 </ul>
             </div>
         </el-drawer>
@@ -155,6 +156,9 @@ async function GetNotice() {
 
         &.pink {
             color: #e8a598;
+        }
+        &.blue {
+            color: #6da2c2;
         }
     }
 }
