@@ -43,6 +43,7 @@
         <el-dialog
             v-model="showDialogMind"
             title="注意事項"
+            class="mind-dialog"
             width="90%"
             :show-close="false"
         >
@@ -65,7 +66,8 @@
              所以這裡看到的跟大哥私訊的內容一定一致 -->
         <el-dialog
             v-model="showDialogTodo"
-            :title="`今日活動提醒（${todayText}）`"
+            :title="`🔔 今日活動 ${todayText}`"
+            class="todo-dialog"
             width="90%"
             :show-close="false"
         >
@@ -106,7 +108,7 @@ const todoLoading = ref(false);
 const todos = ref([]);
 
 // 放標題上，彈窗開著跨過午夜時才不會搞錯是哪一天
-const todayText = computed(() => $dayjs().format('M/D'));
+const todayText = computed(() => $dayjs().format('MM/DD(dd)'));
 
 function open(url) {
     window.open(url, '_blank').focus();
@@ -241,18 +243,16 @@ async function GetNotice() {
 
     li {
         display: flex;
-        align-items: baseline;
-        gap: 10px;
-        padding: 10px 0;
-        border-bottom: 1px solid #ababab66;
+        flex-direction: column;
+        gap: 2px;
 
-        &:last-child {
-            border-bottom: none;
+        // 用留白分隔，不用分隔線 —— 跟大哥私訊的排版一致
+        & + li {
+            margin-top: 18px;
         }
     }
 
     .todo-time {
-        flex-shrink: 0;
         color: #657181;
         font-size: 13px;
         // 等寬數字，時間才不會左右跳動
@@ -274,5 +274,21 @@ async function GetNotice() {
         font-size: 14px;
         color: #fff;
     }
+}
+</style>
+
+<style lang="scss">
+/* el-dialog 會 teleport 到 body，scoped 的樣式選不到 .el-dialog 本身，
+   所以這塊不加 scoped。class 名稱夠獨特，不會影響其他 dialog。
+   兩個 dialog 都是 width="90%"，手機維持滿版，桌機才封頂。 */
+
+/* 短行清單，窄一點比較集中 */
+.todo-dialog {
+    max-width: 400px;
+}
+
+/* 放 markdown 長文，太窄會讓每行字數太少不好讀 */
+.mind-dialog {
+    max-width: 560px;
 }
 </style>

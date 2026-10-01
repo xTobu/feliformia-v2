@@ -296,7 +296,7 @@
             <!-- 挑人發送提醒 -->
             <el-dialog
                 v-model="notifyVisible"
-                :title="`提醒 ${dayPanelLabel} 的人員`"
+                title="想提醒的人"
                 width="390px"
             >
                 <div class="notify-list">
