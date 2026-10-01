@@ -4,7 +4,7 @@ export default defineEventHandler(async () => {
     // 撈 profiles
     const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, is_active')
+        .select('id, nickname, is_active, line_user_id')
 
     if (profilesError) {
         throw createError({ statusCode: 500, message: profilesError.message })
@@ -28,5 +28,7 @@ export default defineEventHandler(async () => {
         nickname: p.nickname,
         email: emailMap[p.id] || null,
         is_active: p.is_active,
+        // 只回有沒有綁定，不把 LINE userId 送到前端
+        hasLine: !!p.line_user_id,
     }))
 })

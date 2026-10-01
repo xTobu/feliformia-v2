@@ -10,6 +10,7 @@
 | id | UUID | PK, 對應 auth.users |
 | nickname | TEXT | 顯示名稱 |
 | is_admin | BOOLEAN | 是否為管理員，預設 FALSE |
+| line_user_id | TEXT | UNIQUE，LINE 的 userId。靠 webhook 綁定取得，用來發活動提醒（見 [line-notify.md](line-notify.md)） |
 | created_at | TIMESTAMPTZ | 建立時間 |
 | updated_at | TIMESTAMPTZ | 更新時間 |
 
