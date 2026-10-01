@@ -23,7 +23,7 @@
                         <Icon icon="fa-solid:syringe" width="17" /> <span>用藥與特殊照護</span>
                     </li>
                     <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
-                    <li class="red" @click="openTodo"><Icon icon="mdi:bell-ring" width="17" /> <span>今日待辦提醒</span></li>
+                    <li class="red" @click="openTodo"><Icon icon="mdi:bell-ring" width="17" /> <span>今日活動提醒</span></li>
                     <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>
                     <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>卯咪餵藥週表</span></li>
                     <li
@@ -61,16 +61,16 @@
             </template>
         </el-dialog>
 
-        <!-- 今日待辦提醒。目前只有殼，資料等後端 ——
-             要換的地方是 GetTodos() 裡那一行註解掉的 $fetch -->
+        <!-- 今日活動提醒。名單規則與每日 LINE 提醒共用（server/utils/roster.js），
+             所以這裡看到的跟大哥私訊的內容一定一致 -->
         <el-dialog
             v-model="showDialogTodo"
-            :title="`今日待辦提醒（${todayText}）`"
+            :title="`今日活動提醒（${todayText}）`"
             width="90%"
             :show-close="false"
         >
             <p class="todo-state" v-if="todoLoading">載入中...</p>
-            <p class="todo-state" v-else-if="!todos.length">今天沒有待辦事項</p>
+            <p class="todo-state" v-else-if="!todos.length">今天您沒有活動</p>
 
             <ul class="todo-list" v-else>
                 <li v-for="todo in todos" :key="todo.id">
@@ -138,18 +138,14 @@ function openTodo() {
     GetTodos();
 }
 
-// TODO: 後端好了之後把下面那行 $fetch 打開。
-// 每次開啟都重抓 —— 待辦會變，不像注意事項可以快取
-//
-// 預期的回傳格式（還沒定案，接的時候以後端為準）：
-//   [{ id, time: 'HH:mm', text: '待辦內容' }]
-// 欄位要是不一樣，記得同步改上面 .todo-list 的 template
+// 每次開啟都重抓 —— 活動會變，不像注意事項可以快取。
+// 回傳 [{ id, time: '09:00 ~ 09:15', text: '[體驗] 內容' }]，
+// 只包含「我」有份的活動（負責人、或當天早／晚班的值班人員）。
 async function GetTodos() {
     todoLoading.value = true;
 
     try {
-        // todos.value = await $fetch('/api/todo/today');
-        todos.value = [];
+        todos.value = await $fetch('/api/calendar/today');
     } catch (e) {
         console.error('GetTodos error:', e);
         todos.value = [];

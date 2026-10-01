@@ -185,7 +185,7 @@ Server API 用 **service key** 連 Supabase，**會繞過上面所有 RLS**。
 
 | 端點 | 權限 |
 |---|---|
-| `calendar/list` | `requireUser` |
+| `calendar/list`、`calendar/today` | `requireUser` |
 | `calendar/update`、`calendar/delete`、`calendar/notify` | `requireAdmin` |
 | `calendar/remind` | `CRON_SECRET`（排程專用，見 line-notify.md） |
 | `line/webhook` | LINE 簽章驗證 |

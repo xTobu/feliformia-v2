@@ -147,6 +147,28 @@
 
 資料結構詳見 [docs/database.md](database.md)。
 
+### 4.1.1 `/api/calendar/today` — 我今天的活動
+
+[components/FloatButton.vue](../components/FloatButton.vue) 的「今日活動提醒」彈窗在用。
+
+回傳 `[{ id, time: '09:00 ~ 09:15', text: '[體驗] 內容' }]`，
+只包含**登入者自己**有份的活動。
+
+**名單規則跟每日 LINE 提醒完全共用** —— 兩邊都走
+[server/utils/roster.js](../server/utils/roster.js) 的 `eventPeopleIds()`，
+所以彈窗看到的跟大哥私訊的內容一定一致。差別只在：
+
+| | `calendar/today` | `calendar/remind` |
+|---|---|---|
+| 誰 | 只算登入的那個人 | 跑過所有人 |
+| 觸發 | 使用者點開彈窗 | pg_cron 每天 08:00 |
+| 驗證 | `requireUser` | `CRON_SECRET` |
+| 輸出 | JSON 給前端 | LINE 推播 |
+
+時區用 `dayjs().tz('Asia/Taipei')`，不然伺服器的 UTC 午夜後會抓到前一天。
+
+---
+
 ### 4.2 送出檢查與紅色邊框
 
 `validate()` 一次檢查全部五個必填欄位，回傳 `{ 欄位: 訊息 }`，
