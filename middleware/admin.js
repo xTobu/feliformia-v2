@@ -1,5 +1,4 @@
-export default defineNuxtRouteMiddleware(async (to) => {
-    const supabase = useSupabaseClient();
+export default defineNuxtRouteMiddleware(async () => {
     const user = useSupabaseUser();
 
     // 先檢查登入
@@ -7,27 +6,15 @@ export default defineNuxtRouteMiddleware(async (to) => {
         return navigateTo('/login');
     }
 
-    // 檢查 useProfile 是否已載入
-    const profileLoaded = useState('profileLoaded');
-    const isAdmin = useState('isAdmin');
+    // 管理頁面不掛 auth 中介層，停用檢查這裡要自己做一次
+    const { isAdmin, ensureActive } = useProfile();
+    const redirect = await ensureActive();
 
-    if (profileLoaded.value) {
-        // 已載入，直接用 isAdmin
-        if (!isAdmin.value) {
-            return navigateTo('/');
-        }
-        return;
+    if (redirect) {
+        return navigateTo(redirect);
     }
 
-    // 尚未載入，查資料庫
-    const userId = user.value?.id || user.value?.sub;
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('is_admin')
-        .eq('id', userId)
-        .single();
-
-    if (!profile?.is_admin) {
+    if (!isAdmin.value) {
         return navigateTo('/');
     }
 });

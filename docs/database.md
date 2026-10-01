@@ -10,6 +10,7 @@
 | id | UUID | PK, 對應 auth.users |
 | nickname | TEXT | 顯示名稱 |
 | is_admin | BOOLEAN | 是否為管理員，預設 FALSE |
+| is_active | BOOLEAN | 是否啟用，預設 TRUE。**`false` 會被 `requireUser()` 擋掉**，所有 API 都進不去（見下方「API 端點權限」） |
 | line_user_id | TEXT | UNIQUE，LINE 的 userId。靠 webhook 綁定取得，用來發活動提醒（見 [line-notify.md](line-notify.md)） |
 | created_at | TIMESTAMPTZ | 建立時間 |
 | updated_at | TIMESTAMPTZ | 更新時間 |
@@ -151,3 +152,51 @@ ALTER PUBLICATION supabase_realtime ADD TABLE calendar_events;
 ### calendar_events
 - SELECT: 所有登入用戶可讀取（給 Realtime 訂閱用）
 - INSERT/UPDATE/DELETE: 無 policy。寫入一律走 server API，用 service key 繞過 RLS
+
+---
+
+## API 端點權限
+
+Server API 用 **service key** 連 Supabase，**會繞過上面所有 RLS**。
+所以每一支端點都必須自己驗身分 —— RLS 擋不住它們。
+
+驗證 helper 在 [server/utils/auth.js](../server/utils/auth.js)：
+
+| helper | 擋什麼 | 回傳 |
+|---|---|---|
+| `requireUser(event)` | 沒登入 → 401；`is_active = false` → 403 | user id（`user.sub`） |
+| `requireAdmin(event)` | 同上，再加不是管理員 → 403 | user id |
+
+兩個 helper 共用內部的 `authenticate()`，所以**不管呼叫哪一個，
+`profiles` 都只查一次** —— 每支 API 固定一次 round-trip，不會疊加。
+
+`is_active` 只在**明確是 `false`** 時才擋。欄位是 `null`、或 `profiles`
+整列不存在都放行：早期的 row 沒有這個欄位，當成停用會讓老帳號全部進不來。
+
+前端 `middleware/auth.js` 與 `middleware/admin.js` 也會查同一個欄位
+（走 `useProfile().ensureActive()`），停用的人直接登出並導到
+`/login?inactive=1` 顯示原因。**那是體驗層，不是安全層** ——
+真正的防線是上面兩個 server helper，中介層只是避免使用者看到一連串 403。
+
+> ⚠️ `serverSupabaseUser()` 回的是 **JWT claims**，使用者 id 在 `user.sub`
+> **不是** `user.id`。要寫 `updated_by` 之類的欄位時用 helper 的回傳值就對了。
+
+### 現況
+
+| 端點 | 權限 |
+|---|---|
+| `calendar/list` | `requireUser` |
+| `calendar/update`、`calendar/delete`、`calendar/notify` | `requireAdmin` |
+| `calendar/remind` | `CRON_SECRET`（排程專用，見 line-notify.md） |
+| `line/webhook` | LINE 簽章驗證 |
+| `line/message/push` | `requireUser` |
+| `users/list`、`volunteer/list` | `requireUser` |
+| `admin/profiles` | `requireAdmin` |
+| `medicine/*`、`regular/*` | `requireUser` |
+| `mind/list` | `requireUser` |
+| `auth/verify-answer` | **刻意公開** —— 登入前的問答關卡，此時還沒有身分 |
+
+**新增端點時預設加 `requireUser`**，確定要公開才例外，並在程式碼裡註明理由。
+
+> `medicine/index` 與 `regular/index` 雖然是 GET，但查不到當天記錄時會
+> 順手 INSERT 一筆。它們不是唯讀的，別因為是 GET 就以為不用擋。

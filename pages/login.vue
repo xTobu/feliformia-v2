@@ -197,6 +197,11 @@ const canRegister = computed(() => {
 
 // 處理 URL hash 中的錯誤
 onMounted(() => {
+    // 被中介層擋下來的停用帳號
+    if (useRoute().query.inactive) {
+        error.value = '這個帳號已經停用，請聯絡管理員';
+    }
+
     const hash = window.location.hash;
     if (hash) {
         const params = new URLSearchParams(hash.substring(1));
