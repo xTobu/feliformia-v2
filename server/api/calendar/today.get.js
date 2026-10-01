@@ -37,9 +37,13 @@ export default defineEventHandler(async (event) => {
 
     return events
         .filter((ev) => eventPeopleIds(source, ev).includes(userId))
+        // type 與 content 分開回傳，前端才能把類型做成帶顏色的 badge
+        //（顏色沿用 /calendar 的色票，志工看到的是同一套視覺語言）
         .map((ev) => ({
             id: ev.id,
             time: `${ev.time_start} ~ ${ev.time_end}`,
-            text: `[${CalendarTypeLabel(ev.type)}] ${ev.content}`,
+            type: ev.type,
+            label: CalendarTypeLabel(ev.type),
+            content: ev.content,
         }))
 })

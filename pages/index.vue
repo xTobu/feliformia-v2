@@ -28,7 +28,6 @@
         > -->
         
     </div>
-    <FloatButton />
 </template>
 
 <script setup>
