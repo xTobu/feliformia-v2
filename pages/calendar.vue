@@ -454,13 +454,14 @@
                 <!-- 負責人 -->
                 <div class="field" v-if="formData.notifyRoles.includes('owner')">
                     <label>負責人</label>
+
                     <!-- 不開 filterable：純點選就好，不要跳出鍵盤 -->
                     <el-select
+                        v-if="canEdit"
                         v-model="formData.owners"
                         multiple
                         clearable
                         placeholder="請選擇負責人"
-                        :disabled="!canEdit"
                     >
                         <el-option
                             v-for="item in volunteerList"
@@ -469,6 +470,19 @@
                             :value="item.value"
                         />
                     </el-select>
+
+                    <!-- 唯讀時不給 disabled 的下拉 —— 灰字擠在 input 裡很難讀。
+                         改成跟早班／晚班人員一樣的 chip -->
+                    <template v-else>
+                        <div class="roster" v-if="ownerNames.length">
+                            <span class="chip" v-for="name in ownerNames" :key="name">
+                                {{ name }}
+                            </span>
+                        </div>
+                        <div class="warn" v-else>
+                            <el-icon><WarningFilled /></el-icon> 尚未指定負責人
+                        </div>
+                    </template>
                 </div>
 
                 <!-- 內容 -->
@@ -797,6 +811,10 @@ const monthGroups = computed(() => {
             };
         });
 });
+
+// 唯讀時用 chip 顯示負責人。用 getNickname（來自 allUsers）而不是 volunteerList，
+// 後者濾掉了停用的志工，舊活動的負責人如果已停用會變成空白
+const ownerNames = computed(() => formData.value.owners.map(getNickname));
 
 const rosterMorning = computed(() => roster(formData.value.date, 'morning'));
 const rosterNight = computed(() => roster(formData.value.date, 'night'));

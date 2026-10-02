@@ -11,6 +11,11 @@
   
   /* 如果你也想改 Radio, Switch 等其他元件的主色 */
   --el-color-primary: #6da2c2;
+
+  /* 停用狀態的文字。預設 #a8abb2 太淺看不清楚。
+     select 有自己的變數，兩個都要設才會一致 */
+  --el-disabled-text-color: #7c7c7c;
+  --el-select-disabled-color: #7c7c7c;
 }
 
 body {
