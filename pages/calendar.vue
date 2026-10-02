@@ -408,19 +408,19 @@
                 <!-- 提示該活動之人員 -->
                 <div class="field" :class="{ invalid: errors.notifyRoles }">
                     <label>活動人員 <i>*</i></label>
-                    <el-select
+                    <!-- 只有三個選項，攤開來比下拉快，也看得到有哪些可選 -->
+                    <el-checkbox-group
                         v-model="formData.notifyRoles"
-                        multiple
-                        placeholder="請選擇相關人員"
+                        class="role-group"
                         :disabled="!canEdit"
                     >
-                        <el-option
+                        <el-checkbox
                             v-for="item in roleList"
                             :key="item.value"
-                            :label="item.label"
                             :value="item.value"
+                            :label="item.label"
                         />
-                    </el-select>
+                    </el-checkbox-group>
                 </div>
 
                 <!-- 早班人員 -->
@@ -454,10 +454,10 @@
                 <!-- 負責人 -->
                 <div class="field" v-if="formData.notifyRoles.includes('owner')">
                     <label>負責人</label>
+                    <!-- 不開 filterable：純點選就好，不要跳出鍵盤 -->
                     <el-select
                         v-model="formData.owners"
                         multiple
-                        filterable
                         clearable
                         placeholder="請選擇負責人"
                         :disabled="!canEdit"
@@ -2250,6 +2250,20 @@ $types: (
     .da-right {
         display: flex;
         align-items: center;
+    }
+}
+
+// 活動人員：三個角色的 checkbox，等寬攤開
+.role-group {
+    display: flex;
+    justify-content: flex-start;
+    gap: 16px;
+
+    :deep(.el-checkbox) {
+        padding: 0;
+        margin: 0;
+        align-items: center;
+        display: flex;
     }
 }
 

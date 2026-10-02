@@ -220,10 +220,10 @@ async function GetNotice() {
 .btn__float {
     cursor: pointer;
     position: fixed;
-    width: 50px;
-    height: 50px;
-    bottom: 30px;
-    right: 30px;
+    width: 40px;
+    height: 40px;
+    bottom: 25px;
+    right: 25px;
     color: transparent;
     border-radius: 50px;
     text-align: center;
