@@ -32,41 +32,41 @@
                 <div
                     v-for="profile in filteredProfiles"
                     :key="profile.id"
-                    class="profile-item"
+                    class="profile-item column"
                     :class="{ inactive: profile.is_active === false }"
                 >
                     <div class="profile-info">
                         <div class="profile-name">
                             {{ profile.nickname || '（未設定名稱）' }}
                         </div>
+                        <div class="profile-meta">
+                            <el-tag
+                                v-if="profile.is_active === false"
+                                type="info"
+                                size="small"
+                            >
+                                已停用
+                            </el-tag>
+                            <el-tag
+                                v-if="profile.is_admin"
+                                type="danger"
+                                size="small"
+                            >
+                                管理員
+                            </el-tag>
+                            <!-- 兩種狀態都顯示，管理員才看得出誰還沒綁、需要去催 -->
+                            <el-tag
+                                :type="profile.line_user_id ? 'success' : 'info'"
+                                size="small"
+                            >
+                                LINE {{ profile.line_user_id ? '已綁定' : '未綁定' }}
+                            </el-tag>
+                        </div>
+                    </div>
+                    <div class="profile-email-actions">
                         <div class="profile-email">
                             {{ profile.email || '（無 Email）' }}
                         </div>
-                    </div>
-                    <div class="profile-meta">
-                        <el-tag
-                            v-if="profile.is_active === false"
-                            type="info"
-                            size="small"
-                        >
-                            已停用
-                        </el-tag>
-                        <el-tag
-                            v-if="profile.is_admin"
-                            type="danger"
-                            size="small"
-                        >
-                            管理員
-                        </el-tag>
-                        <!-- 兩種狀態都顯示，管理員才看得出誰還沒綁、需要去催 -->
-                        <el-tag
-                            :type="profile.line_user_id ? 'success' : 'info'"
-                            size="small"
-                        >
-                            LINE {{ profile.line_user_id ? '已綁定' : '未綁定' }}
-                        </el-tag>
-                    </div>
-                    <div class="profile-actions">
                         <el-button size="small" @click="openDialog(profile)">
                             編輯
                         </el-button>
@@ -81,7 +81,7 @@
 
             <!-- 編輯 Dialog -->
             <el-dialog v-model="dialogVisible" title="編輯志工" width="300px">
-                <el-form :model="form" label-width="80px" @submit.prevent>
+                <el-form :model="form" label-width="65px" @submit.prevent>
                     <el-form-item label="Email">
                         <el-input :value="form.email" disabled />
                     </el-form-item>
@@ -319,11 +319,21 @@ onMounted(() => {
         opacity: 0.6;
         background: #f9f9f9;
     }
+
+    &.column {
+        flex-direction: column;
+        gap: 8px;
+    }
 }
 
 .profile-info {
     flex: 1;
+    display: flex;
     text-align: left;
+    flex-direction: row;
+    width: 100%;
+    justify-content: flex-start;
+    gap: 8px;
 }
 
 .profile-name {
@@ -335,6 +345,8 @@ onMounted(() => {
     font-size: 12px;
     color: #888;
     margin-top: 2px;
+    width: 100%;
+    text-align: left;
 }
 
 .profile-meta {
@@ -342,9 +354,11 @@ onMounted(() => {
     gap: 4px;
 }
 
-.profile-actions {
+.profile-email-actions {
     display: flex;
-    gap: 4px;
+    gap: 8px;
+    width: 100%;
+    justify-content: flex-end;
 }
 
 .empty {
