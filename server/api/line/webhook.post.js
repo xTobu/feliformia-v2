@@ -11,7 +11,7 @@ import { buildDigest } from '~/server/utils/calendar-message'
 
 const BIND_KEYWORD = '我要綁定'
 const UNBIND_KEYWORD = '我要解除綁定'
-const MENU_KEYWORD = '大哥我要問'
+const MENU_KEYWORD = '大哥在嗎'
 const TODAY_KEYWORD = '我的活動提醒'
 
 // 選單標了號碼，使用者很自然會直接回數字。
@@ -39,7 +39,7 @@ const HELP_TEXT = [
 function menuText(profile) {
     if (!profile) {
         return [
-            '喵喵  你好～',
+            '你好～',
             '需要什麼幫忙呢？',
             '',
             `1. ${BIND_KEYWORD} {你的信箱}`,
@@ -51,7 +51,7 @@ function menuText(profile) {
 
     return [
         // 帶暱稱順便讓他確認「綁到的是我沒錯」
-        profile.nickname ? `喵喵  ${profile.nickname}你好～` : '喵喵  你好～',
+        profile.nickname ? `${profile.nickname}你好～` : '你好～',
         '需要什麼幫忙呢？',
         '',
         `1. ${TODAY_KEYWORD}`,
