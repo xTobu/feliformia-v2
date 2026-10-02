@@ -23,7 +23,7 @@
                         <Icon icon="fa-solid:syringe" width="17" /> <span>用藥與特殊照護</span>
                     </li>
                     <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
-                    <li class="red" @click="openTodo"><Icon icon="mdi:bell-ring" width="17" /> <span>今日待辦提醒</span></li>
+                    <li class="red" @click="openTodo"><Icon icon="mdi:bell-ring" width="17" /> <span>今日活動提醒</span></li>
                     <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>
                     <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>卯咪餵藥週表</span></li>
                     <li
@@ -43,6 +43,7 @@
         <el-dialog
             v-model="showDialogMind"
             title="注意事項"
+            class="mind-dialog"
             width="90%"
             :show-close="false"
         >
@@ -61,21 +62,29 @@
             </template>
         </el-dialog>
 
-        <!-- 今日待辦提醒。目前只有殼，資料等後端 ——
-             要換的地方是 GetTodos() 裡那一行註解掉的 $fetch -->
+        <!-- 今日活動提醒。名單規則與每日 LINE 提醒共用（server/utils/roster.js），
+             所以這裡看到的跟大哥私訊的內容一定一致 -->
         <el-dialog
             v-model="showDialogTodo"
-            :title="`今日待辦提醒（${todayText}）`"
+            :title="`🔔 今日活動 ${todayText}`"
+            class="todo-dialog"
             width="90%"
             :show-close="false"
         >
             <p class="todo-state" v-if="todoLoading">載入中...</p>
-            <p class="todo-state" v-else-if="!todos.length">今天沒有待辦事項</p>
+            <p class="todo-state" v-else-if="!todos.length">今天您沒有活動</p>
 
             <ul class="todo-list" v-else>
-                <li v-for="todo in todos" :key="todo.id">
+                <li
+                    v-for="todo in todos"
+                    :key="todo.id"
+                    :class="`type-${todo.type}`"
+                >
                     <span class="todo-time">{{ todo.time }}</span>
-                    <span class="todo-text">{{ todo.text }}</span>
+                    <span class="todo-detail">
+                        <span class="todo-tag">{{ todo.label }}</span>
+                        <span class="todo-text">{{ todo.content }}</span>
+                    </span>
                 </li>
             </ul>
 
@@ -100,13 +109,25 @@ const drawer = ref(false);
 const showDialogMind = ref(false);
 const minds = ref([]);
 
-// 今日待辦提醒
+const { get: getStorage, set: setStorage } = useLocalStorage();
+
+// 今日活動提醒
 const showDialogTodo = ref(false);
 const todoLoading = ref(false);
 const todos = ref([]);
 
+// 自動跳出的門檻（台灣時間），跟每日 LINE 提醒同一個時間 ——
+// 這個彈窗等於是沒綁 LINE 的人的備援。
+const AUTO_OPEN_HOUR = 8;
+
+// 存「最後一次自動跳出的日期」而不是布林值，換一天就自然失效
+const AUTO_SHOWN_KEY = 'todo-auto-shown';
+
+// 同一個 SPA session 裡只檢查一次，換頁時不要重打 API
+const autoChecked = useState('todo-auto-checked', () => false);
+
 // 放標題上，彈窗開著跨過午夜時才不會搞錯是哪一天
-const todayText = computed(() => $dayjs().format('M/D'));
+const todayText = computed(() => $dayjs().format('MM/DD(dd)'));
 
 function open(url) {
     window.open(url, '_blank').focus();
@@ -138,18 +159,45 @@ function openTodo() {
     GetTodos();
 }
 
-// TODO: 後端好了之後把下面那行 $fetch 打開。
-// 每次開啟都重抓 —— 待辦會變，不像注意事項可以快取
+// 每天第一次開站時自動跳出來一次。
 //
-// 預期的回傳格式（還沒定案，接的時候以後端為準）：
-//   [{ id, time: 'HH:mm', text: '待辦內容' }]
-// 欄位要是不一樣，記得同步改上面 .todo-list 的 template
+// 條件全部成立才跳：這個 session 還沒檢查過、已經過了早上八點、
+// 今天還沒自動跳過、而且他今天真的有活動。
+//
+// ⚠️ 沒有活動時**不標記** —— 不然早上八點開過一次（那時還沒人排班），
+// 下午被加了一筆活動，就再也不會提醒他了。
+//
+// ⚠️ 手動從選單打開（openTodo）**不標記** —— 自己點開不應該消耗掉
+// 今天自動跳出的那一次。
+async function autoOpenTodo() {
+    if (autoChecked.value) return;
+    autoChecked.value = true;
+
+    if (!useSupabaseUser().value) return;
+
+    if ($dayjs().hour() < AUTO_OPEN_HOUR) return;
+
+    const today = $dayjs().format('YYYY-MM-DD');
+    if (getStorage(AUTO_SHOWN_KEY, null) === today) return;
+
+    // 先靜默抓資料再決定開不開，避免跳出一個空的或還在載入的彈窗
+    await GetTodos();
+    if (!todos.value.length) return;
+
+    setStorage(AUTO_SHOWN_KEY, today);
+    showDialogTodo.value = true;
+}
+
+onMounted(autoOpenTodo);
+
+// 每次開啟都重抓 —— 活動會變，不像注意事項可以快取。
+// 回傳 [{ id, time, type, label, content }]，
+// 只包含「我」有份的活動（負責人、或當天早／晚班的值班人員）。
 async function GetTodos() {
     todoLoading.value = true;
 
     try {
-        // todos.value = await $fetch('/api/todo/today');
-        todos.value = [];
+        todos.value = await $fetch('/api/calendar/today');
     } catch (e) {
         console.error('GetTodos error:', e);
         todos.value = [];
@@ -243,29 +291,82 @@ async function GetNotice() {
     padding: 0;
     text-align: left;
 
+    // 一筆一張卡。多筆活動時光靠留白分不太出來，給個邊界好掃讀
     li {
         display: flex;
-        align-items: baseline;
-        gap: 10px;
-        padding: 10px 0;
-        border-bottom: 1px solid #ababab66;
+        flex-direction: column;
+        gap: 4px;
+        padding: 14px 12px;
+        border: 1px solid #e4e7ed;
+        // 左側色條標出類型，跟 /calendar 的列表同一個做法
+        border-left: 4px solid #dcdfe6;
+        border-radius: 10px;
+        background: #fff;
 
-        &:last-child {
-            border-bottom: none;
+        & + li {
+            margin-top: 10px;
         }
     }
 
+    // 時間是這個提醒最關鍵的資訊（幾點要到），所以比內容更重
     .todo-time {
-        flex-shrink: 0;
-        color: #657181;
-        font-size: 13px;
+        color: #303133;
+        font-size: 18px;
+        font-weight: 600;
+        line-height: 1.3;
         // 等寬數字，時間才不會左右跳動
         font-variant-numeric: tabular-nums;
     }
 
+    .todo-detail {
+        display: flex;
+        align-items: baseline;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .todo-tag {
+        flex-shrink: 0;
+        padding: 0 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        line-height: 1.6;
+        color: #303133;
+        background: #f4f4f5;
+    }
+
     .todo-text {
         color: #5a5c5f;
+        font-size: 14px;
+        line-height: 1.5;
         word-break: break-word;
+    }
+}
+
+// 類型色票沿用 pages/calendar.vue 的 $type-colors（前景色 / 底色）。
+// 新增活動類型時三個地方要一起補：calendar.vue 的 typeList、
+// server/utils/constant.js 的 CalendarTypeLabel，還有這裡。
+$todo-type-colors: (
+    'volunteer': #409eff #ecf5ff,
+    'supplies': #67c23a #f0f9eb,
+    'dispatch': #e6a23c #fdf6ec,
+    'medicine': #13c2c2 #e6fffb,
+    'viewing': #eb2f96 #fff0f6,
+    'post': #7c5cf0 #f1eefe,
+    'other': #303133 #f4f4f5
+);
+
+@each $name, $pair in $todo-type-colors {
+    $fg: nth($pair, 1);
+    $bg: nth($pair, 2);
+
+    .todo-list li.type-#{$name} {
+        border-left-color: $fg;
+
+        .todo-tag {
+            color: $fg;
+            background: $bg;
+        }
     }
 }
 
@@ -278,5 +379,21 @@ async function GetNotice() {
         font-size: 14px;
         color: #fff;
     }
+}
+</style>
+
+<style lang="scss">
+/* el-dialog 會 teleport 到 body，scoped 的樣式選不到 .el-dialog 本身，
+   所以這塊不加 scoped。class 名稱夠獨特，不會影響其他 dialog。
+   兩個 dialog 都是 width="90%"，手機維持滿版，桌機才封頂。 */
+
+/* 短行清單，窄一點比較集中 */
+.todo-dialog {
+    max-width: 400px;
+}
+
+/* 放 markdown 長文，太窄會讓每行字數太少不好讀 */
+.mind-dialog {
+    max-width: 560px;
 }
 </style>

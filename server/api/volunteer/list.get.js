@@ -1,6 +1,10 @@
 import { supabase } from '~/server/utils/supabase'
+import { requireUser } from '~/server/utils/auth'
 
-export default defineEventHandler(async () => {
+// 有效志工名單，給 /calendar、/regular、/medicine 的選單用。
+export default defineEventHandler(async (event) => {
+    await requireUser(event)
+
     // 撈 profiles
     const { data: profiles, error: profilesError } = await supabase
         .from('profiles')

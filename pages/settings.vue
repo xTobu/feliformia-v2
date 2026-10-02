@@ -34,7 +34,7 @@
             <template v-else-if="lineBound">
                 <p class="line-status bound">✅ 已綁定 LINE</p>
                 <p class="hint">
-                    有你負責的活動時，「大哥」會在當天早上私訊提醒你。
+                    有你負責的活動時，<br>「大哥」會在當天早上私訊提醒你。
                 </p>
                 <button
                     class="btn unbind-btn"
@@ -47,10 +47,34 @@
 
             <template v-else>
                 <p class="line-status">尚未綁定</p>
-                <ol class="line-steps">
-                    <li>在 LINE 加「大哥」為好友</li>
-                    <li>私訊他：<code>我要綁定 {{ userEmail || '你的信箱' }}</code></li>
-                </ol>
+                <p class="hint">
+                    綁定後，有你負責的活動時「大哥」會私訊提醒你。
+                </p>
+
+                <a
+                    class="line-add"
+                    :href="LINE_ADD_FRIEND_URL"
+                    target="_blank"
+                    rel="noopener"
+                >
+                    加「大哥」為好友
+                </a>
+
+                <p class="line-step">加好友後，私訊他這句話：</p>
+
+                <!-- 手機打這串很麻煩，點一下直接複製 -->
+                <button type="button" class="line-copy" @click="copyBindCommand">
+                    <code>{{ bindCommand }}</code>
+                    <el-icon
+                        class="lc-action"
+                        :class="{ done: copied }"
+                        :title="copied ? '已複製' : '複製'"
+                    >
+                        <Check v-if="copied" />
+                        <CopyDocument v-else />
+                    </el-icon>
+                </button>
+
                 <p class="hint">信箱要跟你登入這個網站用的一樣。</p>
             </template>
 
@@ -95,6 +119,8 @@
 </template>
 
 <script setup>
+import { CopyDocument, Check } from '@element-plus/icons-vue';
+
 definePageMeta({
     middleware: 'auth',
 });
@@ -117,6 +143,10 @@ const profileSuccess = ref(null);
 const profileError = ref(null);
 
 // LINE 綁定
+// 加好友短連結。LINE Official Account Manager →
+// 增加好友人數 → 加入好友指南 可以重新取得
+const LINE_ADD_FRIEND_URL = 'https://lin.ee/8pI3YeW';
+
 const lineLoading = ref(true);
 const lineBound = ref(false);
 const unbinding = ref(false);
@@ -124,6 +154,8 @@ const lineSuccess = ref(null);
 const lineError = ref(null);
 const user = useSupabaseUser();
 const userEmail = computed(() => user.value?.email || '');
+const bindCommand = computed(() => `我要綁定 ${userEmail.value || '你的信箱'}`);
+const copied = ref(false);
 
 // 密碼
 const newPassword = ref('');
@@ -155,6 +187,18 @@ watch(
     },
     { immediate: true }
 );
+
+async function copyBindCommand() {
+    try {
+        await navigator.clipboard.writeText(bindCommand.value);
+        copied.value = true;
+        // 給個短暫的回饋就好，不用跳 dialog 打斷操作
+        setTimeout(() => (copied.value = false), 2000);
+    } catch {
+        // 舊瀏覽器或非 https 會沒有 clipboard API，讓使用者自己選取
+        lineError.value = '複製失敗，請手動選取文字';
+    }
+}
 
 async function loadLineStatus() {
     lineLoading.value = true;
@@ -311,17 +355,70 @@ async function updatePassword() {
     }
 }
 
-.line-steps {
-    margin: 0 0 8px;
-    padding-left: 20px;
-    line-height: 1.9;
+// LINE 的品牌綠。手機上點了會直接開 LINE app
+// LINE 的品牌綠。手機上點了會直接開 LINE app
+.line-add {
+    display: block;
+    width: 100%;
+    margin-bottom: 16px;
+    padding: 10px;
+    border-radius: 4px;
+    background: #06c755;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 500;
+    text-align: center;
+    text-decoration: none;
+
+    &:hover {
+        opacity: 0.85;
+    }
+}
+
+.line-step {
+    margin: 0 0 6px;
+    color: #606266;
+    font-size: 13px;
+    text-align: left;
+}
+
+// 要私訊的整句話。點一下複製，手機不用自己打
+.line-copy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    margin-bottom: 12px;
+    padding: 10px 12px;
+    border: 1px solid #dcdfe6;
+    border-radius: 4px;
+    background: #fafafa;
+    text-align: left;
+    cursor: pointer;
+
+    &:hover {
+        border-color: #06c755;
+    }
 
     code {
-        padding: 2px 6px;
-        border-radius: 4px;
-        background: #f4f4f5;
-        // 信箱可能很長，讓它能斷行不要撐破版面
+        flex: 1;
+        min-width: 0;
+        color: #303133;
+        font-size: 13px;
+        line-height: 1.6;
+        // 信箱可能很長，讓它斷行不要撐破版面
         word-break: break-all;
+    }
+
+    .lc-action {
+        flex-shrink: 0;
+        color: #909399;
+        font-size: 16px;
+
+        // 複製成功後轉成 LINE 綠的打勾
+        &.done {
+            color: #06c755;
+        }
     }
 }
 

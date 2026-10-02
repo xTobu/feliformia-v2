@@ -1,8 +1,12 @@
 import { supabase } from '~/server/utils/supabase'
+import { requireUser } from '~/server/utils/auth'
 
 // 依日期區間撈活動列表（不含軟刪除）
 // query: start / end，皆為 YYYY-MM-DD
+// 寫入要管理員（update / delete），讀取只要登入 —— 志工唯讀。
 export default defineEventHandler(async (event) => {
+    await requireUser(event)
+
     const { start, end } = getQuery(event)
 
     if (!start || !end) {

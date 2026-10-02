@@ -1,7 +1,12 @@
 import { supabase } from '~/server/utils/supabase'
+import { requireUser } from '~/server/utils/auth'
 import dayjs from 'dayjs'
 
+// ⚠️ 這支是 GET，但沒有當天記錄時會順手 INSERT 一筆 ——
+// 沒驗證的話任何人都能用任意 date/shift 灌出記錄，不只是讀而已。
 export default defineEventHandler(async (event) => {
+    await requireUser(event)
+
     const query = getQuery(event)
     const { date, shift } = query
 

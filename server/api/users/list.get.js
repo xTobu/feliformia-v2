@@ -1,6 +1,11 @@
 import { supabase } from '~/server/utils/supabase'
+import { requireUser } from '~/server/utils/auth'
 
-export default defineEventHandler(async () => {
+// 全體志工的暱稱對照表，/calendar 與 /vote 都用它把 user_id 轉成名字。
+// 志工名單與 email 不是公開資料，一定要先確認登入身分。
+export default defineEventHandler(async (event) => {
+    await requireUser(event)
+
     // 撈 profiles
     const { data: profiles, error: profilesError } = await supabase
         .from('profiles')

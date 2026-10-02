@@ -1,6 +1,9 @@
 import { supabase } from '~/server/utils/supabase'
+import { requireUser } from '~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
+    await requireUser(event)
+
     const body = await readBody(event)
     const { dateStart, dateEnd } = body
 
