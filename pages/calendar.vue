@@ -2332,6 +2332,7 @@ $types: (
 :deep(.el-input__wrapper),
 :deep(.el-select__wrapper) {
     min-height: 45px;
+    height: auto;
 }
 
 // layouts/default.vue 的全域 button { width: 100% } 會把標籤文字擠成 0 寬度
