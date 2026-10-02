@@ -85,3 +85,7 @@ form {
 .el-range-editor.is-disabled input {
   -webkit-text-fill-color: var(--el-disabled-text-color);
 }
+
+.el-input__inner, .el-textarea__inner {
+  opacity: 1 !important;
+}

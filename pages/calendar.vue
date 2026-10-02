@@ -1970,7 +1970,7 @@ $types: (
         display: block;
         margin-bottom: 8px;
         font-size: 14px;
-        font-weight: 500;
+        font-weight: 400;
         color: #303133;
 
         i {
