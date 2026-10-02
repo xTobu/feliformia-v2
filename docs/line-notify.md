@@ -29,7 +29,8 @@
 | 檔案 | 說明 |
 |---|---|
 | [server/utils/line.js](../server/utils/line.js) | 共用 client：驗簽、推播、回覆 |
-| [server/api/line/webhook.post.js](../server/api/line/webhook.post.js) | 綁定／解除綁定 |
+| [server/api/line/webhook.post.js](../server/api/line/webhook.post.js) | 綁定／解除綁定／選單／查今天的活動 |
+| [server/utils/calendar-today.js](../server/utils/calendar-today.js) | 「某人某天有份的活動」，網站彈窗與大哥共用 |
 | [server/api/calendar/remind.get.js](../server/api/calendar/remind.get.js) | 每日提醒，由 Supabase pg_cron 觸發 |
 | [server/api/calendar/notify.post.js](../server/api/calendar/notify.post.js) | 手動提醒，管理員挑日期與收件人 |
 | [server/utils/calendar-message.js](../server/utils/calendar-message.js) | 摘要訊息組裝，兩支提醒端點共用 |
@@ -98,6 +99,31 @@ https://lin.ee/8pI3YeW
 
 但 LINE Official Account Manager 的「回應設定」要自己確認一次，
 webhook 與自動回應訊息可以並存，設定錯會讓關鍵字失效。
+
+---
+
+## 6.1 大哥聽得懂的關鍵字
+
+**只有這幾個會觸發回應，其他訊息一律不理** —— 交給 LINE Official Account
+Manager 設定的自動回覆。常數都在 [webhook.post.js](../server/api/line/webhook.post.js) 最上方。
+
+| 傳什麼 | 比對方式 | 做什麼 |
+|---|---|---|
+| `大哥我要問` | 完全相同 | 回選單，內容依有沒有綁定而不同 |
+| `我的活動提醒` | 完全相同 | 回自己今天的活動，格式與早上八點那則相同 |
+| `我要綁定 {信箱}` | 開頭相符 | 綁定 |
+| `我要解除綁定` | 開頭相符 | 解除綁定 |
+| `1` / `2` | 完全相同 | 選單的數字快捷（未綁定一律回選單） |
+
+> ⚠️ **新增關鍵字前先確認 LINE 後台沒設過同樣的詞**，否則使用者會收到兩則
+> 回覆 —— 一則是我們的，一則是內建自動回覆。這也是只收完整「大哥我要問」、
+> 不收「大哥」的原因。
+
+> ⚠️ 解除綁定的判斷要排在綁定前面。兩個都以「我要」開頭，用的又是開頭相符，
+> 順序顛倒的話「我要解除綁定」會被當成綁定、把「解除綁定」當信箱。
+
+**選單依綁定狀態不同** —— 還沒綁的人只能綁定，所以直接把用法寫出來不列選單；
+綁好的人才看得到「我的活動提醒」和「我要解除綁定」。
 
 ---
 
