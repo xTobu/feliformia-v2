@@ -7,7 +7,7 @@ import { buildDigest } from '~/server/utils/calendar-message'
 // 管理員在行事曆選好某一天、挑好要通知誰之後，私訊那幾個人「那天的活動摘要」。
 //
 // 跟 remind.get.js 的差別：
-//   remind — Vercel Cron 觸發，驗 CRON_SECRET，發給「今天有活動的所有人」
+//   remind — 排程觸發，驗 CRON_SECRET，發給「今天有活動的所有人」
 //   notify — 管理員手動觸發，驗登入身分，日期與收件人都由管理員指定
 //
 // CRON_SECRET 不能放進前端（等於公開），所以兩支不能合併。

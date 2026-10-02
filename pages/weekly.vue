@@ -95,7 +95,6 @@
                     </template>
                 </el-table-column>
             </el-table>
-            <FloatButton />
         </div>
 
         <template #fallback>
@@ -106,7 +105,6 @@
 
 <script setup>
 import { Check, Close } from '@element-plus/icons-vue';
-import FloatButton from '~/components/FloatButton.vue';
 
 definePageMeta({
     middleware: 'auth',

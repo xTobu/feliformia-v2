@@ -4,15 +4,25 @@ import { supabase } from '~/server/utils/supabase'
 // 這段邏輯原本只在 pages/calendar.vue 裡（rosterEntries），
 // 提醒功能在 server 端也要用，所以搬一份出來共用。
 //
-// ⚠️ 不要用 week_start 精準比對。資料庫裡現存的 week_start 有不少是「星期二」
-//（例如 2025-12-02 那筆，它的 data key 其實是 2025-12-01 星期一），
-// 精準比對會整批漏掉。votes.data 本來就是以真實日期當 key，直接查 key 就好。
+// ⚠️ 不要用 week_start 精準比對。正式站的資料已經正規化過（781 筆裡只剩 1 筆
+// 沒對齊星期一），但測試站還是大量偏移，而且正式站那 1 筆代表例外仍會發生。
+// votes.data 本來就是以真實日期當 key，直接查 key 最穩。
 // 詳見 docs/calendar-handoff.md 的 7.4。
 
-// 該班別可用的選項；shift 缺值視同 'both'，與 /vote 的處理一致
+// 算值班人員的選項名稱。只有這兩個算 —— 勾「醫療」的人那天是帶貓去就醫、
+// 人不在貓屋，不該被當成值班人員收到活動提醒。
+//
+// ⚠️ pages/calendar.vue 也有一份一樣的常數（畫面上的早晚班人員 chip），兩邊要一起改。
+// ⚠️ 比對的是 vote_options.name。在 /admin/vote-options 改名或新增選項時，
+//    這裡沒跟著改就會靜默漏人 —— 不會報錯，只是名單少人。
+const DUTY_OPTION_NAMES = ['值班', '快閃/協助']
+
+// 該班別算值班的選項；shift 缺值視同 'both'，與 /vote 的處理一致
 function shiftOptions(voteOptions, shift) {
     return voteOptions.filter(
-        (opt) => !opt.shift || opt.shift === 'both' || opt.shift === shift
+        (opt) =>
+            DUTY_OPTION_NAMES.includes(opt.name) &&
+            (!opt.shift || opt.shift === 'both' || opt.shift === shift)
     )
 }
 

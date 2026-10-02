@@ -12,11 +12,17 @@
             <slot />
         </div>
         <Footer />
+
+        <!-- 掛在 layout 而不是各頁面，這樣每一頁都有選單，
+             「今日活動提醒」的自動跳出也才涵蓋得到整站。
+             未登入時不掛 —— 它裡面的 API 都需要身分。 -->
+        <FloatButton v-if="user" />
     </div>
 </template>
 
 <script setup>
 import Footer from '~/components/Footer.vue';
+import FloatButton from '~/components/FloatButton.vue';
 
 const user = useSupabaseUser();
 const supabase = useSupabaseClient();

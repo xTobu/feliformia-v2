@@ -247,7 +247,6 @@
                     >
                 </div>
             </form>
-            <FloatButton />
         </div>
 
         <template #fallback>
@@ -260,7 +259,6 @@
 import { ElMessage } from 'element-plus';
 import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
-import FloatButton from '~/components/FloatButton.vue';
 
 definePageMeta({
     middleware: 'auth',

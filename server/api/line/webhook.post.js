@@ -1,14 +1,22 @@
 import { supabase } from '~/server/utils/supabase'
 import { verifyLineSignature, replyMessage } from '~/server/utils/line'
+import { loadUserEvents, todayInTaipei } from '~/server/utils/calendar-today'
+import { buildDigest } from '~/server/utils/calendar-message'
 
-// LINE webhook。目前只做一件事：把志工的 LINE 帳號綁到系統帳號，
-// 之後行事曆的提醒才發得出去。
+// LINE webhook。處理綁定、解除綁定、選單，以及查自己今天的活動。
 //
-// ⚠️ 只處理「綁定」「解除綁定」開頭的訊息，其他一律不回應也不動作。
-// LINE Official Account Manager 設定的關鍵字自動回覆不會受影響。
+// ⚠️ 只回應下面這幾個關鍵字，其他訊息一律不回應也不動作 ——
+// 交給 LINE Official Account Manager 設定的關鍵字自動回覆。
+// 新增關鍵字前要先確認後台沒設過同樣的詞，否則使用者會收到兩則回覆。
 
 const BIND_KEYWORD = '我要綁定'
 const UNBIND_KEYWORD = '我要解除綁定'
+const MENU_KEYWORD = '大哥在嗎'
+const TODAY_KEYWORD = '我的活動提醒'
+
+// 選單標了號碼，使用者很自然會直接回數字。
+// 對應的動作依綁定狀態不同，見 handleMenuNumber()
+const MENU_NUMBERS = ['1', '2']
 
 const HELP_TEXT = [
     '喵喵  我是大哥 🐱',
@@ -23,7 +31,33 @@ const HELP_TEXT = [
     '',
     `例如：${BIND_KEYWORD} cat@example.com`,
     '（信箱要跟你登入貓屋網站的一樣）',
+    '',
+    `任何時候傳「${MENU_KEYWORD}」都能看我會做什麼 🐾`,
 ].join('\n')
+
+// 選單。未綁定的人只能綁定，所以直接把用法寫出來，不列成選單
+function menuText(profile) {
+    if (!profile) {
+        return [
+            '你好～',
+            '需要什麼幫忙呢？',
+            '',
+            `1. ${BIND_KEYWORD} {你的信箱}`,
+            '',
+            `例如：${BIND_KEYWORD} cat@example.com`,
+            '（信箱要跟你登入貓屋網站的一樣）',
+        ].join('\n')
+    }
+
+    return [
+        // 帶暱稱順便讓他確認「綁到的是我沒錯」
+        profile.nickname ? `${profile.nickname}你好～` : '你好～',
+        '需要什麼幫忙呢？',
+        '',
+        `1. ${TODAY_KEYWORD}`,
+        `2. ${UNBIND_KEYWORD}`,
+    ].join('\n')
+}
 
 export default defineEventHandler(async (event) => {
     // 驗簽一定要用原始字串，不能用 readBody() 解析過的物件
@@ -64,8 +98,24 @@ async function handleEvent(lineEvent) {
     const text = lineEvent.message.text.trim()
     const lineUserId = lineEvent.source.userId
 
+    if (text === MENU_KEYWORD) {
+        await replyMessage(lineEvent.replyToken, menuText(await findProfileByLineUserId(lineUserId)))
+        return
+    }
+
+    if (text === TODAY_KEYWORD) {
+        await handleMyToday(lineEvent.replyToken, await findProfileByLineUserId(lineUserId))
+        return
+    }
+
+    if (MENU_NUMBERS.includes(text)) {
+        await handleMenuNumber(lineEvent.replyToken, lineUserId, text)
+        return
+    }
+
+    // 解除要排在綁定前面：兩個都以「我要」開頭，但只有解除是完整前綴比對
     if (text.startsWith(UNBIND_KEYWORD)) {
-        await handleUnbind(lineEvent.replyToken, lineUserId)
+        await handleUnbind(lineEvent.replyToken, await findProfileByLineUserId(lineUserId))
         return
     }
 
@@ -74,6 +124,45 @@ async function handleEvent(lineEvent) {
     }
 
     // 其他訊息：不回應，交給 LINE 內建的自動回覆
+}
+
+// 直接回數字時的對應。未綁定只有一項，已綁定是 1 活動提醒 / 2 解除綁定
+async function handleMenuNumber(replyToken, lineUserId, number) {
+    const profile = await findProfileByLineUserId(lineUserId)
+
+    if (!profile) {
+        // 還沒綁定的人按什麼號碼都只能走綁定，直接把選單再給他一次
+        await replyMessage(replyToken, menuText(null))
+        return
+    }
+
+    if (number === '1') {
+        await handleMyToday(replyToken, profile)
+        return
+    }
+
+    await handleUnbind(replyToken, profile)
+}
+
+// 查自己今天的活動。格式跟早上八點那則提醒一模一樣（共用 buildDigest）
+async function handleMyToday(replyToken, profile) {
+    if (!profile) {
+        await replyMessage(
+            replyToken,
+            `你還沒有綁定喔 🐾\n請傳「${BIND_KEYWORD} 你的信箱」。`
+        )
+        return
+    }
+
+    const date = todayInTaipei()
+    const events = await loadUserEvents(profile.id, date)
+
+    if (!events.length) {
+        await replyMessage(replyToken, '你今天沒有活動 🐾')
+        return
+    }
+
+    await replyMessage(replyToken, buildDigest(date, events))
 }
 
 async function handleBind(replyToken, lineUserId, email) {
@@ -125,14 +214,8 @@ async function handleBind(replyToken, lineUserId, email) {
     )
 }
 
-async function handleUnbind(replyToken, lineUserId) {
-    const { data } = await supabase
-        .from('profiles')
-        .select('id, nickname')
-        .eq('line_user_id', lineUserId)
-        .maybeSingle()
-
-    if (!data) {
+async function handleUnbind(replyToken, profile) {
+    if (!profile) {
         await replyMessage(replyToken, '你目前沒有綁定任何帳號喔。')
         return
     }
@@ -140,9 +223,20 @@ async function handleUnbind(replyToken, lineUserId) {
     await supabase
         .from('profiles')
         .update({ line_user_id: null, updated_at: new Date().toISOString() })
-        .eq('id', data.id)
+        .eq('id', profile.id)
 
     await replyMessage(replyToken, `已解除綁定，之後不會再收到提醒。\n要重新綁定請傳「${BIND_KEYWORD} 你的信箱」。`)
+}
+
+// 這個 LINE 帳號綁在誰身上。選單、活動提醒、解除綁定都要先問這件事
+async function findProfileByLineUserId(lineUserId) {
+    const { data } = await supabase
+        .from('profiles')
+        .select('id, nickname')
+        .eq('line_user_id', lineUserId)
+        .maybeSingle()
+
+    return data || null
 }
 
 // email 存在 auth.users 不在 profiles，要透過 admin API 查
