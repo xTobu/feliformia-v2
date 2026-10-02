@@ -77,3 +77,11 @@ form {
 .swal2-container {
   z-index: 10000;
 }
+
+/* WebKit 對 disabled 的表單元素會套自己的 -webkit-text-fill-color，優先權高過 color。
+   Element Plus 只在 .el-input__inner 補了這個屬性，textarea 與 range input 漏掉，
+   所以改 --el-disabled-text-color 時那兩個不會跟著變深 */
+.el-textarea.is-disabled .el-textarea__inner,
+.el-range-editor.is-disabled input {
+  -webkit-text-fill-color: var(--el-disabled-text-color);
+}
