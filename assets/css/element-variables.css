@@ -68,11 +68,6 @@ form {
   height: 45px;
 }
 
-/* 全域的 button { width: 100% } 會讓標籤上的 × 撐到 44px，把標籤文字擠成 0 寬（el-input-tag 的暱稱看不到字） */
-.el-tag .el-tag__close {
-  width: auto;
-}
-
 .el-textarea__inner {
   min-height: 100px !important;
 }

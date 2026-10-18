@@ -52,7 +52,7 @@
                                             cat.treatment
                                         }}</font>
                                         <font class="f_grey">{{
-                                            cat.reason
+                                            cat.reason && `原因：${cat.reason}`
                                         }}</font>
                                         <font
                                             v-if="cat.end_date"
@@ -635,15 +635,7 @@ onUnmounted(() => {
         border-top-color: #d8d4d1;
     }
 
-    // 貓名 14px（全域是 13px / 23px 高），標籤高 3px，內容也往下讓 3px
-    padding-top: 35px;
-
     .name {
-        height: 26px;
-        font-size: 14px;
-        // 光學補償：Noto Sans TC 14px 的中文墨水比行框中心低約 0.7px，
-        // 行高比盒子少 1px 讓字往上 0.5px，實測偏差 0.2px（換字體或字級要重算）
-        line-height: 25px;
         border-bottom-right-radius: 6px;
     }
 

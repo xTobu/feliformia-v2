@@ -1,10 +1,12 @@
 <template>
     <ClientOnly>
         <div id="cats-admin">
-            <div class="page-header">
-                <h1>貓咪管理</h1>
+            <h1>貓咪管理</h1>
+
+            <!-- 新增按鈕 -->
+            <div class="actions">
                 <el-button type="primary" @click="openDialog()">
-                    ＋ 新增貓咪
+                    新增貓咪
                 </el-button>
             </div>
 
@@ -21,18 +23,9 @@
                     <div class="cat-item">
                         <span class="drag-handle">☰</span>
                         <div class="cat-info">
-                            <!-- 飲食改在「飲食與待辦」設定，這裡不再顯示 diet_note -->
                             <div class="cat-name">{{ cat.name }}</div>
-                            <div
-                                v-if="cat.nicknames?.length"
-                                class="cat-nicknames"
-                            >
-                                <span
-                                    v-for="nickname in cat.nicknames"
-                                    :key="nickname"
-                                    class="nick-chip"
-                                    >{{ nickname }}</span
-                                >
+                            <div v-if="cat.diet_note" class="cat-diet-note">
+                                {{ cat.diet_note }}
                             </div>
                             <div class="cat-meta">
                                 <div class="cat-status">
@@ -71,14 +64,15 @@
                     <el-form-item label="名稱">
                         <el-input
                             v-model="form.name"
-                            placeholder="例如：噗噗"
+                            placeholder="例如：奇拉拉"
                         />
                     </el-form-item>
-                    <el-form-item label="暱稱">
-                        <!-- 輸入後按 Enter 變成一個標籤，可以填多個 -->
-                        <el-input-tag
-                            v-model="form.nicknames"
-                            placeholder="輸入後按 Enter"
+                    <el-form-item label="飲食備註">
+                        <el-input
+                            v-model="form.diet_note"
+                            type="textarea"
+                            :rows="2"
+                            placeholder="例如：K36 早2匙，晚3匙"
                         />
                     </el-form-item>
                     <el-form-item label="房間">
@@ -90,12 +84,9 @@
                             allow-create
                             default-first-option
                         >
-                            <el-option
-                                v-for="room in ROOMS"
-                                :key="room"
-                                :label="room"
-                                :value="room"
-                            />
+                            <el-option label="客廳" value="客廳" />
+                            <el-option label="小房間" value="小房間" />
+                            <el-option label="倉庫" value="倉庫" />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="已領養" v-if="editingCat">
@@ -134,7 +125,7 @@ const dialogVisible = ref(false);
 const editingCat = ref(null);
 const form = ref({
     name: '',
-    nicknames: [],
+    diet_note: '',
     room: '',
     adopted: false,
 });
@@ -166,31 +157,19 @@ function openDialog(cat = null) {
     if (cat) {
         form.value = {
             name: cat.name,
-            nicknames: [...(cat.nicknames || [])],
+            diet_note: cat.diet_note || '',
             room: cat.room || '',
             adopted: cat.adopted || false,
         };
     } else {
         form.value = {
             name: '',
-            nicknames: [],
+            diet_note: '',
             room: '',
             adopted: false,
         };
     }
     dialogVisible.value = true;
-}
-
-// 去掉空白、重複，以及跟名稱本身一樣的暱稱
-function cleanNicknames() {
-    const name = form.value.name.trim();
-    return [
-        ...new Set(
-            (form.value.nicknames || [])
-                .map((n) => n.trim())
-                .filter((n) => n && n !== name)
-        ),
-    ];
 }
 
 // 儲存貓咪
@@ -207,10 +186,9 @@ async function saveCat() {
         // 編輯
         const { error } = await supabase
             .from('cats')
-            // 不送 diet_note：舊值留在資料庫，/regular、/shift 在貓沒有主食時當備援
             .update({
                 name: form.value.name,
-                nicknames: cleanNicknames(),
+                diet_note: form.value.diet_note || null,
                 room: form.value.room || null,
                 adopted: form.value.adopted,
             })
@@ -232,7 +210,7 @@ async function saveCat() {
 
         const { error } = await supabase.from('cats').insert({
             name: form.value.name,
-            nicknames: cleanNicknames(),
+            diet_note: form.value.diet_note || null,
             room: form.value.room || null,
             adopted: form.value.adopted,
             order: maxOrder + 1,
@@ -298,28 +276,8 @@ onMounted(() => {
     }
 }
 
-// 跟飲食與待辦、醫療管理一致：標題靠左、新增按鈕靠右
-.page-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
+.actions {
     margin-bottom: 16px;
-
-    h1 {
-        // 全域 h1 有 margin-bottom: 10px !important（element-variables.css），
-        // 不蓋掉的話標題會比按鈕高 5px
-        margin: 0 !important;
-        font-size: 22px;
-        text-align: left;
-        // 光學補償：Noto Sans TC 22px 中文墨水比行框中心低約 1.7px，
-        // 按鈕文字幾乎沒偏，往上提讓兩邊的字對齊（換字體或字級要重算）
-        transform: translateY(-1.7px);
-    }
-
-    .el-button {
-        flex-shrink: 0;
-    }
 }
 
 .cats-list {
@@ -371,22 +329,10 @@ onMounted(() => {
     font-size: 14px;
 }
 
-// 暱稱：一個名字一個小灰標籤，不用前綴文字或圖示
-.cat-nicknames {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
+.cat-diet-note {
+    font-size: 13px;
+    color: #666;
     margin-top: 4px;
-}
-
-.nick-chip {
-    display: inline-block;
-    padding: 0 6px;
-    border-radius: 3px;
-    background: #f0eeec;
-    color: #767676;
-    font-size: 12px;
-    line-height: 20px;
 }
 
 .cat-meta {

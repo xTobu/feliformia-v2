@@ -13,21 +13,12 @@
                     <div class="menu-arrow">→</div>
                 </NuxtLink>
 
-                <NuxtLink to="/admin/diet" class="menu-item">
-                    <div class="menu-icon">🍚</div>
-                    <div class="menu-content">
-                        <div class="menu-title">飲食與待辦</div>
-                        <div class="menu-desc">每隻貓吃什麼，以及值班要做的待辦</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/treatment" class="menu-item">
+                <NuxtLink to="/admin/notices" class="menu-item">
                     <div class="menu-icon">📋</div>
                     <div class="menu-content">
-                        <div class="menu-title">醫療管理</div>
+                        <div class="menu-title">餵藥及特殊飲食管理</div>
                         <div class="menu-desc">
-                            吃藥、敷藥、觀察等醫療事項與其他值班事項
+                            新增、編輯、排序特殊照護事項
                         </div>
                     </div>
                     <div class="menu-arrow">→</div>
