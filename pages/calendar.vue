@@ -40,7 +40,6 @@
                         <el-select
                             v-model="filterDraft.people"
                             multiple
-                            filterable
                             clearable
                             placeholder="不限"
                         >

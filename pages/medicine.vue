@@ -33,13 +33,18 @@
 
                 <div class="W100">
                     <div
-                        v-for="(cat, index) in formData.cats"
+                        v-for="group in catGroups"
                         class="d_flex record_item"
-                        :key="`${cat.notice}${index}`"
+                        :key="group.name"
                     >
-                        <div class="name">{{ cat.name }}</div>
+                        <div class="name">{{ group.name }}</div>
                         <div class="detail">
-                            <div class="d_flex treatment">
+                            <div
+                                v-for="(cat, index) in group.items"
+                                :key="index"
+                                class="d_flex treatment"
+                                :class="{ divided: index > 0 }"
+                            >
                                 <p class="f_blue">事項</p>
                                 <div class="d_flex">
                                     <div class="txt">
@@ -49,6 +54,16 @@
                                         <font class="f_grey">{{
                                             cat.reason && `原因：${cat.reason}`
                                         }}</font>
+                                        <font
+                                            v-if="cat.end_date"
+                                            class="f_grey"
+                                            >療程至
+                                            {{
+                                                $dayjs(cat.end_date).format(
+                                                    'MM/DD'
+                                                )
+                                            }}</font
+                                        >
                                     </div>
                                     <div class="done">
                                         <el-checkbox
@@ -90,7 +105,6 @@
                     <div class="member-row">
                         <el-select
                             v-model="formData.member"
-                            filterable
                             :disabled="isDisabled"
                             placeholder="請選擇填表志工"
                             class="member-select"
@@ -217,6 +231,17 @@ const formData = ref({
 });
 
 // Computed
+// 同一隻貓的事項收成一區。cats 本身還是平的陣列，
+// 這裡拿到的是同一批物件，勾選後存回去的格式不變。
+const catGroups = computed(() => {
+    const groups = new Map();
+    for (const cat of formData.value.cats || []) {
+        if (!groups.has(cat.name)) groups.set(cat.name, []);
+        groups.get(cat.name).push(cat);
+    }
+    return [...groups].map(([name, items]) => ({ name, items }));
+});
+
 const prevDateShift = computed(() => {
     let date = formData.value.date ? $dayjs(formData.value.date) : $dayjs();
     if (formData.value.shift === 'morning') {
@@ -595,8 +620,30 @@ onUnmounted(() => {
 
 .record_item {
     padding-right: 10px;
+    // 一隻貓一張卡片。蓋掉 layouts/default.vue 的斑馬紋（/regular 仍保留）
+    border: 1px solid #d8d4d1;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 14px;
+
+    &:nth-child(even) {
+        background-color: transparent;
+    }
+
+    &:first-child {
+        border-top-color: #d8d4d1;
+    }
+
+    .name {
+        border-bottom-right-radius: 6px;
+    }
 
     .detail {
+        > .d_flex.divided {
+            border-top: 1px dashed #ccc;
+            padding-top: 10px;
+        }
+
         > .d_flex {
             align-items: baseline;
 

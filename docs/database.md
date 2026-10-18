@@ -119,6 +119,29 @@ votes.data
 
 ---
 
+### notices
+餵藥及特殊飲食事項（`/admin/notices` 管理）
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | — | PK |
+| name | TEXT | 貓咪名字 |
+| treatment | TEXT | 事項，必填 |
+| reason | TEXT | 原因，可 NULL |
+| shift | TEXT | `morning` / `night` / `both` |
+| order | INTEGER | 排序（後台拖拉） |
+| start_date | DATE | 療程開始日，NULL 代表不限 |
+| end_date | DATE | 療程結束日（含當天），NULL 代表不限 |
+
+**`medicines.cats` 是快照，不是參照。** 某個 date + shift 的紀錄**第一次被打開**時，
+`server/api/medicine/index.get.js` 才會把當下符合班別、期間的事項整份複製進去，
+之後就不再跟 `notices` 同步。所以修改事項內容或期間，**已經被打開過的班別不會跟著變**，
+從下一個還沒建立的班別開始才會生效。
+
+過了 `end_date` 的事項不會自動刪除，後台會標成「已結束」，改期間就能重新使用。
+
+---
+
 ## Realtime
 
 需啟用 Realtime 的表：
