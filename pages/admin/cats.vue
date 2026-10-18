@@ -21,7 +21,7 @@
                     <div class="cat-item">
                         <span class="drag-handle">☰</span>
                         <div class="cat-info">
-                            <!-- 飲食改在「飲食管理」設定，這裡不再顯示 diet_note -->
+                            <!-- 飲食改在「飲食與待辦」設定，這裡不再顯示 diet_note -->
                             <div class="cat-name">{{ cat.name }}</div>
                             <div
                                 v-if="cat.nicknames?.length"
@@ -90,10 +90,12 @@
                             allow-create
                             default-first-option
                         >
-                            <el-option label="客廳" value="客廳" />
-                            <el-option label="小房間" value="小房間" />
-                            <el-option label="倉庫" value="倉庫" />
-                            <el-option label="隔離區" value="隔離區" />
+                            <el-option
+                                v-for="room in ROOMS"
+                                :key="room"
+                                :label="room"
+                                :value="room"
+                            />
                         </el-select>
                     </el-form-item>
                     <el-form-item label="已領養" v-if="editingCat">
@@ -296,7 +298,7 @@ onMounted(() => {
     }
 }
 
-// 跟飲食管理、醫療管理一致：標題靠左、新增按鈕靠右
+// 跟飲食與待辦、醫療管理一致：標題靠左、新增按鈕靠右
 .page-header {
     display: flex;
     align-items: center;

@@ -81,7 +81,7 @@ export default defineEventHandler(async (event) => {
 
 // start_date / end_date 是期間，NULL 代表該端不限。
 // 日期都是 'YYYY-MM-DD'，直接比字串就對了。
-// 乾乾、罐罐（放什麼飯）歸飲食管理，不放進這份紀錄；
+// 乾乾、罐罐（放什麼飯）歸飲食與待辦，不放進這份紀錄；
 // 補充、飲食的其他（加進飯裡、要打勾的）在值班表普及前先留著。
 // 在 JS 濾而不是 .neq()：category 欄位還沒加的資料庫也不會壞
 const FOOD_CATEGORIES = ['dry', 'wet']

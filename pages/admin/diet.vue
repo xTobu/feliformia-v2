@@ -1,8 +1,8 @@
 <template>
     <ClientOnly>
         <CareItemsAdmin
-            title="飲食管理"
-            :categories="['dry', 'wet', 'supplement', 'diet_other']"
+            title="飲食與待辦"
+            :categories="['dry', 'wet', 'supplement', 'diet_other', 'todo']"
             empty-text="尚無貓咪"
             empty-group-text="尚未設定飲食"
             :labels="{ treatment: '內容', reason: '備註' }"
@@ -21,6 +21,6 @@ definePageMeta({
 });
 
 useHead({
-    title: '飲食管理',
+    title: '飲食與待辦',
 });
 </script>

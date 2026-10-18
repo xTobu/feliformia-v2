@@ -76,6 +76,7 @@ async function syncWithSettings(record) {
             released: old.released ?? false,
             medical: mergeItems(cat.medical, old.medical),
             with_meal: mergeItems(cat.with_meal, old.with_meal),
+            todos: mergeItems(cat.todos, old.todos),
         }
     })
 
@@ -106,7 +107,7 @@ function hasRecord(cat) {
     const intakeChanged =
         !!cat.intake &&
         Object.keys(defaults).some((key) => (cat.intake[key] ?? null) !== defaults[key])
-    return !!cat.released || anyDone(cat.medical) || anyDone(cat.with_meal) || intakeChanged
+    return !!cat.released || anyDone(cat.medical) || anyDone(cat.todos) || intakeChanged
 }
 
 // 快照建立時已照貓咪管理排好，但之後在貓咪管理調整順序，已經建立的班不會跟著變。
@@ -120,8 +121,8 @@ async function sortByCatOrder(record) {
     return { ...record, cats: [...record.cats].sort((a, b) => rank(a) - rank(b)) }
 }
 
-// 飲食管理的類別分兩群：放什麼飯（乾乾、罐罐）只看不打勾；
-// 加進飯裡的（補充、其他）要打勾。藥一律歸醫療管理，出現在醫療分頁。
+// 飲食與待辦的類別分兩群：放什麼飯（乾乾、罐罐）只看不打勾；
+// 加進飯裡的（補充、其他）也只看不打勾。藥一律歸醫療管理，出現在吃藥分頁。
 // 快照的 meals / with_meal 兩個 key 沿用舊名，每一項帶 category，畫面再依 category 顯示
 const FOOD_CATEGORIES = ['dry', 'wet']
 const ADDON_CATEGORIES = ['supplement', 'diet_other']
@@ -197,20 +198,23 @@ async function buildSnapshot(date, shift) {
                 intake: defaultIntake(),
                 // 醫療分頁
                 medical: of(['medication', 'medical', 'other']),
-                // 放飯：還沒在飲食管理設定乾乾、罐罐的貓，退回貓咪資料上的飲食備註
+                // 備餐：還沒在飲食與待辦設定乾乾、罐罐的貓，退回貓咪資料上的飲食備註
                 meals: meals.length
                     ? meals
                     : c.diet_note?.trim()
                       ? [{ notice_id: null, treatment: c.diet_note.trim(), reason: null }]
                       : [],
                 with_meal: of(ADDON_CATEGORIES),
+                // 備餐：值班要做的待辦，要打勾
+                todos: of(['todo']),
                 released: false,
             }
         })
 
-    // 對不到貓的項目（全員、小房間…）。乾乾、罐罐只對單一貓咪有意義，這裡不收
+    // 對不到貓的項目（全員、房間…）。飲食類的會在備餐分頁併進每隻符合的貓
+    // （全員 → 每隻貓；房間名 → 那個房間的貓），所以乾乾、罐罐也要收
     const tasks = active
-        .filter((n) => !n.cat_id && !FOOD_CATEGORIES.includes(n.category))
+        .filter((n) => !n.cat_id)
         .map((n) => ({ ...item(n), name: n.name, category: n.category || 'medical' }))
 
     return { cats, tasks }

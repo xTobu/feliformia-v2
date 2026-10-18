@@ -125,10 +125,11 @@ votes.data
 
 | category | 中文 | 後台 |
 |---|---|---|
-| `dry` | 乾乾 | 飲食管理 `/admin/diet` |
-| `wet` | 罐罐 | 飲食管理 `/admin/diet` |
-| `supplement` | 補充 | 飲食管理 `/admin/diet` |
-| `diet_other` | 其他 | 飲食管理 `/admin/diet`（value 跟醫療的 `other` 分開） |
+| `dry` | 乾乾 | 飲食與待辦 `/admin/diet` |
+| `wet` | 罐罐 | 飲食與待辦 `/admin/diet` |
+| `supplement` | 補充 | 飲食與待辦 `/admin/diet` |
+| `diet_other` | 其他 | 飲食與待辦 `/admin/diet`（value 跟醫療的 `other` 分開） |
+| `todo` | 待辦 | 飲食與待辦 `/admin/diet`（值班要做、要打勾的事，例如小房間柵欄） |
 | `medication` | 吃藥 | 醫療管理 `/admin/treatment` |
 | `medical` | 醫療 | 醫療管理 `/admin/treatment` |
 | `other` | 其他 | 醫療管理 `/admin/treatment` |
@@ -159,8 +160,9 @@ votes.data
 ---
 
 ### shifts
-值班記錄（`/shift`）。一個班（date + shift）一筆，合併觀察、醫療、放飯三個分頁
-（分頁 value 是 `arrive` / `care` / `leave`，網址參數 `?tab=` 用的就是這個）。
+值班記錄（`/shift`）。一個班（date + shift）一筆，合併觀察、醫療、吃藥、備餐、待辦五個分頁
+（分頁 value 是 `arrive` / `care` / `meds` / `leave` / `todo`，網址參數 `?tab=` 用的就是這個）。
+醫療、吃藥兩個分頁讀同一份 `cats[].medical`，依 `category` 是否為 `medication` 分開。
 `/regular`、`/medicine` 維持原樣，跟這張表**不互通**。
 
 | Column | Type | Description |
@@ -183,15 +185,25 @@ votes.data
 [{
   cat_id, name, room,
   intake:    { feed, feed_detail, can, can_detail, urine, feces, feces_warning },  // 觀察，欄位同 regulars
-  medical:   [{ notice_id, category, treatment, reason, end_date, done }],       // 醫療：吃藥、醫療、其他
-  meals:     [{ notice_id, category, treatment, reason }],                       // 放飯：乾乾、罐罐（只看）
-  with_meal: [{ notice_id, category, treatment, reason, end_date, done }],       // 放飯：補充、其他（打勾）
-  released:  false                                                               // 放飯：放風（離開時沒關籠）
+  medical:   [{ notice_id, category, treatment, reason, end_date, done }],       // 醫療分頁（醫療、其他）＋吃藥分頁（吃藥）
+  meals:     [{ notice_id, category, treatment, reason }],                       // 備餐：乾乾、罐罐（只看）
+  with_meal: [{ notice_id, category, treatment, reason, end_date, done }],       // 備餐：補充、其他（只看；done 沿用欄位但畫面不再打勾）
+  todos:     [{ notice_id, category, treatment, reason, end_date, done }],       // 待辦分頁（打勾）
+  released:  false                                                               // 備餐：放風（離開時沒關籠）
 }]
 ```
 
 `tasks` 是 `[{ notice_id, name, category, treatment, reason, end_date, done }]`，
-`category` 為補充、飲食其他的放放飯分頁最上面，其他放醫療分頁最下面。
+飲食類的 tasks（乾乾、罐罐、補充、其他）在備餐分頁**併進每隻適用的貓**：
+`name` 是「全員」→ 每隻貓；`name` 等於某個房間（`cats.room`，清單在 `composables/rooms.js`）→ 那個房間的貓。
+備餐分頁只看、不打勾，同類別併成一列（乾乾一列、罐罐一列…）；沒有任何貓適用的飲食項目
+（例如房間裡還沒有貓）列在貓的後面。
+**待辦**有自己的分頁（備餐右邊）：貓自己的待辦列在貓的卡片；全員、房間的待辦（例如小房間柵欄）
+整班做一次，不併進每隻貓，用 task 自己的 `done`，列在貓的後面。
+
+**非貓咪項目的排序**（後台與值班表一致）：貓咪在前，然後全員 → 房間（照 `ROOMS` 順序）→ 手動輸入的名稱
+（`placeRank`，在 `composables/rooms.js`）。
+非飲食類的 tasks（醫療、其他…）放醫療分頁最下面，整班共用一個 `done`。
 藥一律歸醫療管理（曾經有過的 `meal_med` 醫藥已併入 `medication` 吃藥）。
 `meals` / `with_meal` 是沿用的舊 key 名；更早建立的班裡，`category` 可能是舊值 `meal` / `with_meal` 或不存在，畫面要有預設文字。
 

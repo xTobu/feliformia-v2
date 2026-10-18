@@ -86,8 +86,8 @@ export default defineEventHandler(async (event) => {
     }
 })
 
-// 飲食備註改由飲食管理（notices 的乾乾、罐罐）提供：這一班、在期間內的串起來。
-// 還沒在飲食管理設定的貓，退回貓咪資料上的 diet_note，過渡期不會空白
+// 飲食備註改由飲食與待辦（notices 的乾乾、罐罐）提供：這一班、在期間內的串起來。
+// 還沒在飲食與待辦設定的貓，退回貓咪資料上的 diet_note，過渡期不會空白
 async function getCatList(date, shift) {
     const [{ data, error }, meals] = await Promise.all([
         supabase.from('cats').select(),

@@ -156,33 +156,212 @@
                     </div>
                 </div>
 
-                <!-- ========== 醫療：醫療事項（只列有事項的貓） ========== -->
-                <div v-show="tab === 'care'" class="W100">
+                <!-- ========== 醫療、吃藥：同一份 cat.medical，依類別分兩個分頁（只列有事項的貓） ========== -->
+                <template v-for="section in medicalSections" :key="section.tab">
+                    <div v-show="tab === section.tab" class="W100">
+                        <!-- 兩區都有時各加小標題：貓咪／全員與區域（同後台） -->
+                        <div v-if="section.cats.length && section.taskGroups.length" class="section-title">
+                            貓咪
+                        </div>
+                        <div
+                            v-for="entry in section.cats"
+                            :key="entry.cat.cat_id"
+                            class="d_flex record_item"
+                        >
+                            <div class="name">{{ entry.cat.name }}</div>
+                            <div class="detail">
+                                <div
+                                    v-for="(item, index) in entry.items"
+                                    :key="item.notice_id"
+                                    class="d_flex item-row"
+                                    :class="{ divided: index > 0 }"
+                                >
+                                    <p class="f_blue">{{ categoryLabel(item.category, '事項') }}</p>
+                                    <div class="d_flex">
+                                        <div class="txt">
+                                            <font class="treatment">{{ item.treatment }}</font>
+                                            <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
+                                            <font v-if="item.end_date" class="f_grey"
+                                                >療程至 {{ $dayjs(item.end_date).format('MM/DD') }}</font
+                                            >
+                                        </div>
+                                        <div class="done">
+                                            <el-checkbox
+                                                v-model="item.done"
+                                                :disabled="isDisabled"
+                                                @change="onAutoSave"
+                                                >完成</el-checkbox
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div v-if="section.cats.length && section.taskGroups.length" class="section-title later">
+                            全員與區域
+                        </div>
+
+                        <!-- 不屬於單一貓咪的項目（小房間、費洛蒙、全員…） -->
+                        <div
+                            v-for="group in section.taskGroups"
+                            :key="group.name"
+                            class="d_flex record_item"
+                        >
+                            <div class="name">{{ group.name }}</div>
+                            <div class="detail">
+                                <div
+                                    v-for="(item, index) in group.items"
+                                    :key="item.notice_id"
+                                    class="d_flex item-row"
+                                    :class="{ divided: index > 0 }"
+                                >
+                                    <p class="f_blue">{{ categoryLabel(item.category, '事項') }}</p>
+                                    <div class="d_flex">
+                                        <div class="txt">
+                                            <font class="treatment">{{ item.treatment || group.name }}</font>
+                                            <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
+                                        </div>
+                                        <div class="done">
+                                            <el-checkbox
+                                                v-model="item.done"
+                                                :disabled="isDisabled"
+                                                @change="onAutoSave"
+                                                >完成</el-checkbox
+                                            >
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <el-empty
+                            v-if="section.cats.length === 0 && section.taskGroups.length === 0"
+                            :description="section.empty"
+                        />
+                    </div>
+                </template>
+
+                <!-- ========== 備餐：乾乾、罐罐、補充、其他（只看）、放風 ========== -->
+                <div v-show="tab === 'leave'" class="W100">
+                    <div v-if="leaveCats.length && leaveTaskGroups.length" class="section-title">
+                        貓咪
+                    </div>
                     <div
-                        v-for="cat in careCats"
+                        v-for="entry in leaveCats"
+                        :key="entry.cat.cat_id"
+                        class="d_flex record_item"
+                    >
+                        <div class="name">{{ entry.cat.name }}</div>
+                        <!-- 放風：離開時沒有關籠，下一班在觀察分頁會看到。貓名同一列最右邊的膠囊按鈕 -->
+                        <button
+                            type="button"
+                            class="release-pill"
+                            :class="{ on: entry.cat.released }"
+                            :aria-pressed="entry.cat.released"
+                            :disabled="isDisabled"
+                            @click="
+                                entry.cat.released = !entry.cat.released;
+                                onAutoSave();
+                            "
+                        >
+                            {{ entry.cat.released ? '✓ 放風' : '放風' }}
+                        </button>
+                        <div class="detail">
+                            <!-- 乾乾、罐罐、補充、其他：只看不打勾。同類別併成一列，全員／房間的標出來源 -->
+                            <div
+                                v-for="(row, index) in entry.dietRows"
+                                :key="row.category || `row-${index}`"
+                                class="d_flex item-row"
+                                :class="{ divided: index > 0 }"
+                            >
+                                <p class="f_blue">{{ categoryLabel(row.category, row.fallback) }}</p>
+                                <div class="d_flex">
+                                    <div class="txt full">
+                                        <!-- 文字一律齊左；全員／房間的來源標籤靠右成一欄 -->
+                                        <div v-for="item in row.items" :key="item.key" class="diet-item">
+                                            <div class="diet-line">
+                                                <span class="diet-text">{{ item.treatment }}</span>
+                                                <span v-if="item.source" class="source-chip">{{
+                                                    item.source
+                                                }}</span>
+                                            </div>
+                                            <div v-if="item.reason" class="diet-note">{{ item.reason }}</div>
+                                            <div v-if="item.end_date" class="diet-note">
+                                                療程至 {{ $dayjs(item.end_date).format('MM/DD') }}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="entry.dietRows.length === 0" class="d_flex item-row">
+                                <p class="f_blue">飲食</p>
+                                <div class="d_flex">
+                                    <div class="txt full">
+                                        <font class="f_grey">尚未設定飲食</font>
+                                    </div>
+                                </div>
+                            </div>
+
+                        </div>
+                    </div>
+
+                    <!-- 貓後面：沒有任何貓適用的飲食項目（例如房間裡還沒有貓），只看 -->
+                    <div v-if="leaveCats.length && leaveTaskGroups.length" class="section-title later">
+                        全員與區域
+                    </div>
+                    <div
+                        v-for="group in leaveTaskGroups"
+                        :key="group.name"
+                        class="d_flex record_item"
+                    >
+                        <div class="name">{{ group.name }}</div>
+                        <div class="detail">
+                            <div
+                                v-for="(item, index) in group.items"
+                                :key="item.notice_id"
+                                class="d_flex item-row"
+                                :class="{ divided: index > 0 }"
+                            >
+                                <p class="f_blue">{{ categoryLabel(item.category, '飲食') }}</p>
+                                <div class="d_flex">
+                                    <div class="txt full">
+                                        <font class="treatment">{{ item.treatment || group.name }}</font>
+                                        <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ========== 待辦：值班要做的事，要打勾（備餐右邊） ========== -->
+                <div v-show="tab === 'todo'" class="W100">
+                    <div v-if="todoCats.length && todoTaskGroups.length" class="section-title">
+                        貓咪
+                    </div>
+                    <div
+                        v-for="cat in todoCats"
                         :key="cat.cat_id"
                         class="d_flex record_item"
                     >
                         <div class="name">{{ cat.name }}</div>
                         <div class="detail">
                             <div
-                                v-for="(item, index) in cat.medical"
-                                :key="item.notice_id"
+                                v-for="(todo, index) in cat.todos"
+                                :key="todo.notice_id"
                                 class="d_flex item-row"
                                 :class="{ divided: index > 0 }"
                             >
-                                <p class="f_blue">事項</p>
+                                <p class="f_blue">待辦</p>
                                 <div class="d_flex">
                                     <div class="txt">
-                                        <font class="treatment">{{ item.treatment }}</font>
-                                        <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
-                                        <font v-if="item.end_date" class="f_grey"
-                                            >療程至 {{ $dayjs(item.end_date).format('MM/DD') }}</font
-                                        >
+                                        <font class="treatment">{{ todo.treatment }}</font>
+                                        <font v-if="todo.reason" class="f_grey">{{ todo.reason }}</font>
                                     </div>
                                     <div class="done">
                                         <el-checkbox
-                                            v-model="item.done"
+                                            v-model="todo.done"
                                             :disabled="isDisabled"
                                             @change="onAutoSave"
                                             >完成</el-checkbox
@@ -193,11 +372,14 @@
                         </div>
                     </div>
 
-                    <!-- 不屬於單一貓咪的項目（小房間、費洛蒙…） -->
+                    <!-- 全員、房間的待辦（例如小房間柵欄）：整班做一次、一個勾 -->
+                    <div v-if="todoCats.length && todoTaskGroups.length" class="section-title later">
+                        全員與區域
+                    </div>
                     <div
-                        v-for="group in careTaskGroups"
+                        v-for="group in todoTaskGroups"
                         :key="group.name"
-                        class="d_flex record_item task-card"
+                        class="d_flex record_item"
                     >
                         <div class="name">{{ group.name }}</div>
                         <div class="detail">
@@ -207,7 +389,7 @@
                                 class="d_flex item-row"
                                 :class="{ divided: index > 0 }"
                             >
-                                <p class="f_blue">事項</p>
+                                <p class="f_blue">待辦</p>
                                 <div class="d_flex">
                                     <div class="txt">
                                         <font class="treatment">{{ item.treatment || group.name }}</font>
@@ -227,125 +409,9 @@
                     </div>
 
                     <el-empty
-                        v-if="careCats.length === 0 && careTaskGroups.length === 0"
-                        description="這一班沒有醫療事項"
+                        v-if="todoCats.length === 0 && todoTaskGroups.length === 0"
+                        description="這一班沒有待辦"
                     />
-                </div>
-
-                <!-- ========== 放飯：乾乾、罐罐、補充、其他、放風 ========== -->
-                <div v-show="tab === 'leave'" class="W100">
-                    <!-- 全員的隨餐放最上面，不在每隻貓重複 -->
-                    <div
-                        v-for="group in leaveTaskGroups"
-                        :key="group.name"
-                        class="d_flex record_item task-card"
-                    >
-                        <div class="name">{{ group.name }}</div>
-                        <div class="detail">
-                            <div
-                                v-for="(item, index) in group.items"
-                                :key="item.notice_id"
-                                class="d_flex item-row"
-                                :class="{ divided: index > 0 }"
-                            >
-                                <p class="f_blue">{{ categoryLabel(item.category, '隨餐') }}</p>
-                                <div class="d_flex">
-                                    <div class="txt">
-                                        <font class="treatment">{{ item.treatment }}</font>
-                                        <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
-                                    </div>
-                                    <div class="done">
-                                        <el-checkbox
-                                            v-model="item.done"
-                                            :disabled="isDisabled"
-                                            @change="onAutoSave"
-                                            >完成</el-checkbox
-                                        >
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div
-                        v-for="cat in formData.cats"
-                        :key="cat.cat_id"
-                        class="d_flex record_item"
-                    >
-                        <div class="name">{{ cat.name }}</div>
-                        <div class="detail">
-                            <!-- 乾乾、罐罐：照做就好，不用打勾 -->
-                            <div
-                                v-for="(meal, index) in cat.meals"
-                                :key="meal.notice_id || `diet-${index}`"
-                                class="d_flex item-row"
-                                :class="{ divided: index > 0 }"
-                            >
-                                <p class="f_blue">{{ categoryLabel(meal.category, '主食') }}</p>
-                                <div class="d_flex">
-                                    <div class="txt full">
-                                        <font class="treatment">{{ meal.treatment }}</font>
-                                        <font v-if="meal.reason" class="f_grey">{{ meal.reason }}</font>
-                                    </div>
-                                </div>
-                            </div>
-                            <div
-                                v-if="cat.meals.length === 0"
-                                class="d_flex item-row"
-                            >
-                                <p class="f_blue">飲食</p>
-                                <div class="d_flex">
-                                    <div class="txt full">
-                                        <font class="f_grey">尚未設定飲食</font>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 補充、其他：加進飯裡，要打勾 -->
-                            <div
-                                v-for="item in cat.with_meal"
-                                :key="item.notice_id"
-                                class="d_flex item-row divided"
-                            >
-                                <p class="f_blue">{{ categoryLabel(item.category, '隨餐') }}</p>
-                                <div class="d_flex">
-                                    <div class="txt">
-                                        <font class="treatment">{{ item.treatment }}</font>
-                                        <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
-                                        <font v-if="item.end_date" class="f_grey"
-                                            >療程至 {{ $dayjs(item.end_date).format('MM/DD') }}</font
-                                        >
-                                    </div>
-                                    <div class="done">
-                                        <el-checkbox
-                                            v-model="item.done"
-                                            :disabled="isDisabled"
-                                            @change="onAutoSave"
-                                            >完成</el-checkbox
-                                        >
-                                    </div>
-                                </div>
-                            </div>
-
-                            <!-- 放風：離開時沒有關籠。下一班在觀察分頁會看到 -->
-                            <div class="d_flex item-row divided">
-                                <p class="f_blue">放風</p>
-                                <div class="d_flex">
-                                    <div class="txt">
-                                        <font class="f_grey">離開時沒有關籠</font>
-                                    </div>
-                                    <div class="done">
-                                        <el-checkbox
-                                            v-model="cat.released"
-                                            :disabled="isDisabled"
-                                            @change="onAutoSave"
-                                            >放風</el-checkbox
-                                        >
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- ========== 每個分頁共用 ========== -->
@@ -424,7 +490,7 @@
 </template>
 
 <script setup>
-// 值班記錄表：一個班一筆 shifts，合併觀察（吃喝排泄）、醫療、放飯（放什麼、放風）。
+// 值班記錄表：一個班一筆 shifts，合併觀察（吃喝排泄）、醫療、備餐（放什麼、放風）。
 // 分頁的 value 沿用 arrive / care / leave，網址參數不變，舊連結還能用
 // /regular、/medicine 維持原樣，兩邊資料不互通
 import { ElMessage } from 'element-plus';
@@ -482,61 +548,136 @@ const formData = ref({
 });
 
 // Computed
-const careCats = computed(() =>
-    formData.value.cats.filter((cat) => cat.medical.length > 0)
-);
 
-// 飲食管理的類別。快照是建立當下的資料，舊的班可能還是 meal / with_meal，
-// 或根本沒有 category，所以都要有預設文字
+// 飲食與醫療管理的類別，顯示在每一列最前面。快照是建立當下的資料，
+// 舊的班可能還是 meal / with_meal，或根本沒有 category，所以都要有預設文字
 const CATEGORY_LABELS = {
     dry: '乾乾',
     wet: '罐罐',
     supplement: '補充',
     diet_other: '其他',
+    medication: '吃藥',
+    medical: '醫療',
+    other: '其他',
+    todo: '待辦',
     meal_med: '醫藥', // 舊的班才有，新的藥都歸醫療
 };
+const FOOD_CATEGORIES = ['dry', 'wet'];
 const ADDON_CATEGORIES = ['supplement', 'diet_other', 'meal_med', 'with_meal'];
+const isFood = (item) => FOOD_CATEGORIES.includes(item.category);
+const isDiet = (item) => isFood(item) || ADDON_CATEGORIES.includes(item.category);
+const isTodo = (item) => item.category === 'todo';
 
 function categoryLabel(category, fallback) {
     return CATEGORY_LABELS[category] || fallback;
 }
 
-// 非貓咪項目照名字分組（全員、小房間…）
+// 非貓咪項目照名字分組（全員、小房間…），排序是全員 → 房間 → 手動輸入的（placeRank，跟後台一致）
 function groupTasks(filter) {
     const map = new Map();
     for (const task of formData.value.tasks.filter(filter)) {
         if (!map.has(task.name)) map.set(task.name, []);
         map.get(task.name).push(task);
     }
-    return [...map].map(([name, items]) => ({ name, items }));
+    return [...map]
+        .map(([name, items]) => ({ name, items }))
+        .sort((a, b) => placeRank(a.name) - placeRank(b.name));
 }
-const careTaskGroups = computed(() =>
-    groupTasks((t) => !ADDON_CATEGORIES.includes(t.category))
+// 醫療分頁與吃藥分頁：資料都在 cat.medical 與 tasks，依類別分開。
+// 沒有類別的舊資料算醫療
+const isMeds = (item) => item.category === 'medication';
+const medicalSections = computed(() =>
+    [
+        { tab: 'care', match: (i) => !isMeds(i), empty: '這一班沒有醫療事項' },
+        { tab: 'meds', match: isMeds, empty: '這一班沒有要吃的藥' },
+    ].map(({ tab, match, empty }) => ({
+        tab,
+        empty,
+        cats: formData.value.cats
+            .map((cat) => ({ cat, items: cat.medical.filter(match) }))
+            .filter((entry) => entry.items.length > 0),
+        taskGroups: groupTasks((t) => !isDiet(t) && !isTodo(t) && match(t)),
+    }))
 );
+
+// 備餐：全員的飲食項目併進每隻貓，房間的併進那個房間的貓。全部只看、不打勾
+// 同類別排在一起：乾乾 → 罐罐、補充 → 其他。同類別裡自己的在前、全員／房間的在後（sort 是穩定的）
+const FOOD_ORDER = { dry: 0, wet: 1 };
+const ADDON_ORDER = { supplement: 0, diet_other: 1 };
+const byOrder = (order) => (a, b) => (order[a.category] ?? -1) - (order[b.category] ?? -1);
+
+// 已照類別排好的清單，相鄰同類別的併成 { category, fallback, items }
+function groupByCategory(list, fallback) {
+    const rows = [];
+    for (const item of list) {
+        const last = rows[rows.length - 1];
+        if (last && last.category === item.category) last.items.push(item);
+        else rows.push({ category: item.category, fallback, items: [item] });
+    }
+    return rows;
+}
+
+const appliesTo = (task, cat) => task.name === '全員' || (!!cat.room && task.name === cat.room);
+
+const leaveCats = computed(() => {
+    const dietTasks = formData.value.tasks.filter(isDiet);
+    return formData.value.cats.map((cat) => {
+        const shared = dietTasks.filter((t) => appliesTo(t, cat));
+        const fromTask = (t) => ({ ...t, key: `task-${t.notice_id}`, source: t.name });
+        const foods = [
+            ...cat.meals.map((m, i) => ({ ...m, key: m.notice_id || `diet-${i}` })),
+            ...shared.filter(isFood).map(fromTask),
+        ].sort(byOrder(FOOD_ORDER));
+        const addons = [
+            ...cat.with_meal.map((item) => ({ ...item, key: item.notice_id })),
+            ...shared.filter((t) => !isFood(t)).map(fromTask),
+        ].sort(byOrder(ADDON_ORDER));
+        return {
+            cat,
+            // 同類別併成一列（乾乾一列、罐罐一列…），列裡一項一行
+            dietRows: [
+                ...groupByCategory(foods, '主食'),
+                ...groupByCategory(addons, '隨餐'),
+            ],
+        };
+    });
+});
+
+// 備餐分頁貓後面那一區：沒有任何貓適用的飲食項目（例如房間裡還沒有貓），不然會看不到
 const leaveTaskGroups = computed(() =>
-    groupTasks((t) => ADDON_CATEGORIES.includes(t.category))
+    groupTasks(
+        (t) => isDiet(t) && !formData.value.cats.some((cat) => appliesTo(t, cat))
+    )
 );
+
+// 待辦分頁：有待辦的貓（舊的班沒有 todos），以及全員、房間的待辦（整班做一次，不併進每隻貓）
+const todoCats = computed(() =>
+    formData.value.cats.filter((cat) => (cat.todos || []).length > 0)
+);
+const todoTaskGroups = computed(() => groupTasks(isTodo));
 
 // 分頁上的數字：還沒打勾的項目數
 const tabList = computed(() => {
     const undone = (list) => list.filter((i) => !i.done).length;
-    const cats = formData.value.cats;
-    const tasks = formData.value.tasks;
+    const sectionUndone = (tab) => {
+        const section = medicalSections.value.find((s) => s.tab === tab);
+        return (
+            section.cats.reduce((sum, e) => sum + undone(e.items), 0) +
+            section.taskGroups.reduce((sum, g) => sum + undone(g.items), 0)
+        );
+    };
     return [
         { value: 'arrive', label: '觀察', remaining: 0 },
+        { value: 'care', label: '醫療', remaining: sectionUndone('care') },
+        { value: 'meds', label: '吃藥', remaining: sectionUndone('meds') },
+        // 備餐只是參考，沒有要打勾的
+        { value: 'leave', label: '備餐', remaining: 0 },
         {
-            value: 'care',
-            label: '醫療',
+            value: 'todo',
+            label: '待辦',
             remaining:
-                cats.reduce((sum, c) => sum + undone(c.medical), 0) +
-                undone(tasks.filter((t) => !ADDON_CATEGORIES.includes(t.category))),
-        },
-        {
-            value: 'leave',
-            label: '放飯',
-            remaining:
-                cats.reduce((sum, c) => sum + undone(c.with_meal), 0) +
-                undone(tasks.filter((t) => ADDON_CATEGORIES.includes(t.category))),
+                todoCats.value.reduce((sum, c) => sum + undone(c.todos), 0) +
+                todoTaskGroups.value.reduce((sum, g) => sum + undone(g.items), 0),
         },
     ];
 });
@@ -628,7 +769,7 @@ function InitFromQuery() {
         : new Date().getHours() < 18
         ? 'morning'
         : 'night';
-    if (['arrive', 'care', 'leave'].includes(queryTab)) tab.value = queryTab;
+    if (['arrive', 'care', 'meds', 'leave', 'todo'].includes(queryTab)) tab.value = queryTab;
 }
 
 async function InitMemberList() {
@@ -875,14 +1016,19 @@ watch(
     padding: 8px 0;
     background: #fff;
 
+    // 五個分頁在手機上每個只有 64px：蓋掉全域 button 的左右 10px padding，
+    // 字和數字縮一點、不換行，「醫療 5」才放得下一行
     button {
         flex: 1;
+        min-width: 0;
         height: 40px;
+        padding: 0 2px;
+        white-space: nowrap;
         border: 1px solid #d8d4d1;
         border-radius: 6px;
         background: #fff;
         color: #657181;
-        font-size: 15px;
+        font-size: 14px;
         font-weight: 500;
         cursor: pointer;
 
@@ -895,16 +1041,39 @@ watch(
 
     .remaining {
         display: inline-block;
-        min-width: 18px;
-        height: 18px;
-        margin-left: 4px;
-        padding: 0 5px;
-        border-radius: 9px;
+        min-width: 16px;
+        height: 16px;
+        margin-left: 3px;
+        padding: 0 4px;
+        border-radius: 8px;
         background: #b33a39;
         color: #fff;
-        font-size: 12px;
-        line-height: 18px;
+        font-size: 11px;
+        line-height: 16px;
         vertical-align: 1px;
+    }
+}
+
+// 分區小標題：貓咪／全員與區域（同後台）。卡片本身有 14px 下邊距，第二個標題上方再補一點
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #4a4542;
+    text-align: left;
+
+    // 標題後面拉一條細線到右邊，讀起來像段落分隔
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #d8d4d1;
+    }
+
+    &.later {
+        margin-top: 14px;
     }
 }
 
@@ -949,19 +1118,80 @@ watch(
         padding-right: 25px;
     }
 
-    // 非貓咪項目（全員、小房間…）用不同底色，一眼分出不是貓
-    &.task-card {
-        background-color: #faf8f6;
-
-        .name {
-            background-color: #b5aea9;
-        }
-    }
 
     .released-badge {
         position: absolute;
         top: 4px;
         right: 8px;
+    }
+
+    // 同一列（同類別）裡的多個項目：文字齊左、來源標籤齊右成一欄，
+    // 項目之間間距一致，備註緊貼在自己的項目下面
+    .diet-item + .diet-item {
+        margin-top: 8px;
+    }
+
+    .diet-line {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+        padding: 5px;
+    }
+
+    .diet-text {
+        flex: 1;
+        min-width: 0;
+        font-size: 15px;
+        color: #222;
+    }
+
+    .diet-note {
+        padding: 0 5px 2px;
+        font-size: 14px;
+        line-height: 1.4;
+        color: #767676;
+    }
+
+    // 全員／房間併進來的項目，標出來源（在 .diet-line 裡靠右）
+    .source-chip {
+        flex-shrink: 0;
+        display: inline-block;
+        padding: 0 6px;
+        border-radius: 3px;
+        background: #f0eeec;
+        color: #767676;
+        font-size: 12px;
+        line-height: 20px;
+        vertical-align: 1px;
+    }
+
+    // 放風：膠囊按鈕，沒勾是外框、勾了變實心。離上緣、右緣留白，不擠著卡片邊框。
+    // 全域有 button { width: 100%; border; padding } 的樣式，這裡每一項都要蓋回來
+    .release-pill {
+        position: absolute;
+        top: 7px;
+        right: 10px;
+        width: auto;
+        height: 26px;
+        padding: 0 12px;
+        border: 1px solid #c9c4c0;
+        border-radius: 13px;
+        background: #fff;
+        color: #657181;
+        font-size: 13px;
+        line-height: 24px;
+        cursor: pointer;
+
+        &.on {
+            border-color: #6da2c2;
+            background: #6da2c2;
+            color: #fff;
+        }
+
+        &:disabled {
+            cursor: default;
+            opacity: 0.6;
+        }
     }
 
     .detail {

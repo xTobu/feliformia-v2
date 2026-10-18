@@ -11,12 +11,17 @@
         <!-- 一隻貓一張卡片，順序跟貓咪管理走（要調整請到貓咪管理）。⋮⋮ 在同一隻貓裡拖項目 -->
         <div class="notices-list">
             <template v-for="(group, index) in groups" :key="group.key">
-                <!-- 貓與非貓咪項目（全員、小房間、費洛蒙…）交界處隔一條線 -->
+                <!-- 兩區都有時各加一個小標題：貓咪／全員與區域（只有一區就不用分） -->
                 <div
-                    v-if="index > 0 && group.isCat !== groups[index - 1].isCat"
-                    class="group-divider"
-                    role="separator"
-                ></div>
+                    v-if="
+                        hasBothSections &&
+                        (index === 0 || group.isCat !== groups[index - 1].isCat)
+                    "
+                    class="section-title"
+                    :class="{ later: index > 0 }"
+                >
+                    {{ group.isCat ? '貓咪' : '全員與區域' }}
+                </div>
                 <div
                     class="cat-group"
                     :class="{ bare: group.items.length === 0 && !emptyGroupText }"
@@ -145,7 +150,7 @@
         >
             <el-form :model="form" label-position="top" @submit.prevent>
                 <el-form-item label="貓咪">
-                    <!-- 可以手動輸入：「全員」或「小房間」這類不屬於單一貓咪的項目 -->
+                    <!-- 貓咪、全員／區域分兩組；也可以手動輸入不在清單上的名稱 -->
                     <el-select
                         v-model="form.name"
                         placeholder="選擇貓咪或手動輸入"
@@ -153,25 +158,37 @@
                         allow-create
                         default-first-option
                     >
-                        <el-option
-                            v-for="cat in cats"
-                            :key="cat.id"
-                            :label="shortName(cat.name)"
-                            :value="shortName(cat.name)"
-                        />
+                        <el-option-group label="貓咪">
+                            <el-option
+                                v-for="cat in cats"
+                                :key="cat.id"
+                                :label="shortName(cat.name)"
+                                :value="shortName(cat.name)"
+                            />
+                        </el-option-group>
+                        <!-- 全員：每隻貓都適用；房間：那個房間的貓都適用（值班表備餐分頁會併進每隻貓） -->
+                        <el-option-group label="全員／區域">
+                            <el-option label="全員" value="全員" />
+                            <el-option
+                                v-for="room in ROOMS"
+                                :key="room"
+                                :label="room"
+                                :value="room"
+                            />
+                        </el-option-group>
                     </el-select>
                 </el-form-item>
                 <el-form-item label="類別">
-                    <!-- 只列這一頁的兩個類別；要搬到另一頁，用下面的「移到…」 -->
-                    <el-radio-group v-model="form.category" class="category-group">
-                        <el-radio
+                    <!-- 只列這一頁的類別；要搬到另一頁，用下面的「移到…」。
+                         下拉選單不開搜尋：手機點了不會跳出鍵盤 -->
+                    <el-select v-model="form.category">
+                        <el-option
                             v-for="c in pageCategories"
                             :key="c.value"
+                            :label="c.label"
                             :value="c.value"
-                        >
-                            {{ c.label }}
-                        </el-radio>
-                    </el-radio-group>
+                        />
+                    </el-select>
                 </el-form-item>
                 <el-form-item :label="labels.treatment">
                     <el-input
@@ -217,7 +234,7 @@
                     </div>
                 </el-form-item>
 
-                <!-- 只有編輯時才能搬：例如舊資料歸成醫療的隨餐藥，要搬到飲食管理 -->
+                <!-- 只有編輯時才能搬：例如舊資料歸成醫療的隨餐藥，要搬到飲食與待辦 -->
                 <div v-if="editingNotice" class="move-row">
                     <el-button link type="primary" @click="moveToOtherPage">
                         移到{{ otherPage.page }}
@@ -235,9 +252,9 @@
 </template>
 
 <script setup>
-// 飲食管理與醫療管理共用。兩頁的資料都在 notices 表，靠 category 分開：
-// dry 乾乾、wet 罐罐、supplement 補充、diet_other 其他 → 飲食管理；
-// medication 吃藥、medical 醫療、other 其他 → 醫療管理
+// 飲食與待辦與醫療管理共用。兩頁的資料都在 notices 表，靠 category 分開：
+// dry 乾乾、wet 罐罐、supplement 補充、diet_other 其他、todo 待辦 → 飲食與待辦；
+// medical 醫療、medication 吃藥、other 其他 → 醫療管理
 // （藥一律歸醫療管理，就算是拌在飯裡的）
 import draggable from 'vuedraggable';
 import Swal from 'sweetalert2';
@@ -247,9 +264,6 @@ const props = defineProps({
     title: { type: String, required: true },
     // 這一頁管的類別，第一個是新增時的預設值
     categories: { type: Array, required: true },
-    // 非貓咪的組（全員、小房間…）放最前或最後，跟值班表上出現的位置一致：
-    // 飲食的全員項目在值班表放飯分頁最上面，醫療的值班事項在醫療分頁最下面
-    nonCatPosition: { type: String, default: 'top' },
     addLabel: { type: String, default: '＋ 全員或其他' },
     emptyText: { type: String, default: '尚無項目' },
     // 沒有項目的貓顯示的文字；空字串就只顯示標題列
@@ -265,21 +279,28 @@ const props = defineProps({
 });
 
 const ALL_CATEGORIES = [
-    { value: 'dry', label: '乾乾', page: '飲食管理' },
-    { value: 'wet', label: '罐罐', page: '飲食管理' },
-    { value: 'supplement', label: '補充', page: '飲食管理' },
+    { value: 'dry', label: '乾乾', page: '飲食與待辦' },
+    { value: 'wet', label: '罐罐', page: '飲食與待辦' },
+    { value: 'supplement', label: '補充', page: '飲食與待辦' },
     // value 跟醫療管理的 other 分開，兩頁的「其他」才不會混在一起
-    { value: 'diet_other', label: '其他', page: '飲食管理' },
-    { value: 'medication', label: '吃藥', page: '醫療管理' },
+    { value: 'diet_other', label: '其他', page: '飲食與待辦' },
+    // 值班要做、要打勾的事（例如小房間柵欄雙層扣），在值班表備餐分頁打勾
+    { value: 'todo', label: '待辦', page: '飲食與待辦' },
     { value: 'medical', label: '醫療', page: '醫療管理' },
+    { value: 'medication', label: '吃藥', page: '醫療管理' },
     { value: 'other', label: '其他', page: '醫療管理' },
 ];
+
+const catGroupCount = computed(() => groups.value.filter((g) => g.isCat).length);
+const hasBothSections = computed(
+    () => catGroupCount.value > 0 && catGroupCount.value < groups.value.length
+);
 
 const pageCategories = computed(() =>
     ALL_CATEGORIES.filter((c) => props.categories.includes(c.value))
 );
 
-// 另一頁與搬過去時的類別：搬到飲食管理預設補充，搬到醫療管理預設吃藥
+// 另一頁與搬過去時的類別：搬到飲食與待辦預設補充，搬到醫療管理預設吃藥
 const otherPage = computed(() => {
     const others = ALL_CATEGORIES.filter((c) => !props.categories.includes(c.value));
     const target = others.find((c) => ['supplement', 'medication'].includes(c.value)) || others[0];
@@ -386,7 +407,8 @@ async function loadAll() {
 }
 
 // 分組：有 cat_id 的照貓分，沒有的（全員、小房間…）照 name 分。
-// 列出所有未領養的貓（照貓咪管理的順序），沒有項目的也列；非貓咪的組依 nonCatPosition 放前或後。
+// 列出所有未領養的貓（照貓咪管理的順序），沒有項目的也列；
+// 非貓咪的組放在貓後面，順序是全員 → 房間 → 手動輸入的（placeRank，跟值班表一致）。
 // 對不到現有貓的 cat_id（例如已領養）排在貓的後面
 function buildGroups(list) {
     const catById = new Map(cats.value.map((c) => [c.id, c]));
@@ -408,9 +430,10 @@ function buildGroups(list) {
 
     const toList = (map, isCat) =>
         [...map].map(([key, g]) => ({ key, isCat, ...g }));
-    return props.nonCatPosition === 'bottom'
-        ? [...toList(catGroups, true), ...toList(otherGroups, false)]
-        : [...toList(otherGroups, false), ...toList(catGroups, true)];
+    const others = toList(otherGroups, false).sort(
+        (a, b) => placeRank(a.name) - placeRank(b.name)
+    );
+    return [...toList(catGroups, true), ...others];
 }
 
 // 拖拉結束後，照畫面順序（貓 → 項目）重編這一頁的 order，只更新有變的。
@@ -602,10 +625,27 @@ onMounted(loadAll);
     gap: 8px;
 }
 
-// 卡片間距是 8px，線上下再各多留 8px，讓兩區明顯分開
-.group-divider {
-    margin: 8px 0;
-    border-top: 1px dashed #b5aea9;
+// 分區小標題：貓咪／全員與區域。第二個標題上方多留空，讓兩區明顯分開
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 0;
+    font-size: 15px;
+    font-weight: 500;
+    color: #4a4542;
+    text-align: left;
+
+    // 標題後面拉一條細線到右邊，讀起來像段落分隔
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #d8d4d1;
+    }
+
+    &.later {
+        margin-top: 18px;
+    }
 }
 
 .cat-group {
