@@ -33,13 +33,18 @@
 
                 <div class="W100">
                     <div
-                        v-for="(cat, index) in formData.cats"
+                        v-for="group in catGroups"
                         class="d_flex record_item"
-                        :key="`${cat.notice}${index}`"
+                        :key="group.name"
                     >
-                        <div class="name">{{ cat.name }}</div>
+                        <div class="name">{{ group.name }}</div>
                         <div class="detail">
-                            <div class="d_flex treatment">
+                            <div
+                                v-for="(cat, index) in group.items"
+                                :key="index"
+                                class="d_flex treatment"
+                                :class="{ divided: index > 0 }"
+                            >
                                 <p class="f_blue">事項</p>
                                 <div class="d_flex">
                                     <div class="txt">
@@ -227,6 +232,17 @@ const formData = ref({
 });
 
 // Computed
+// 同一隻貓的事項收成一區。cats 本身還是平的陣列，
+// 這裡拿到的是同一批物件，勾選後存回去的格式不變。
+const catGroups = computed(() => {
+    const groups = new Map();
+    for (const cat of formData.value.cats || []) {
+        if (!groups.has(cat.name)) groups.set(cat.name, []);
+        groups.get(cat.name).push(cat);
+    }
+    return [...groups].map(([name, items]) => ({ name, items }));
+});
+
 const prevDateShift = computed(() => {
     let date = formData.value.date ? $dayjs(formData.value.date) : $dayjs();
     if (formData.value.shift === 'morning') {
@@ -607,6 +623,11 @@ onUnmounted(() => {
     padding-right: 10px;
 
     .detail {
+        > .d_flex.divided {
+            border-top: 1px dashed #ccc;
+            padding-top: 10px;
+        }
+
         > .d_flex {
             align-items: baseline;
 
