@@ -84,8 +84,9 @@
                 v-model="dialogVisible"
                 :title="editingOption ? '編輯選項' : '新增選項'"
                 width="300px"
+                class="option-dialog"
             >
-                <el-form :model="form" label-width="70px" @submit.prevent>
+                <el-form :model="form" label-position="top" @submit.prevent>
                     <el-form-item label="選項名稱">
                         <el-input
                             v-model="form.name"
@@ -414,6 +415,42 @@ onMounted(() => {
         .el-button {
             width: auto !important;
         }
+    }
+}
+
+// 標籤放在欄位上方，欄位佔滿整個寬度（300px 的視窗放左邊標籤會把欄位擠窄）
+:deep(.option-dialog) {
+    .el-form-item {
+        flex-direction: column;
+        align-items: stretch;
+        margin-bottom: 14px;
+    }
+
+    .el-form-item__label {
+        justify-content: flex-start;
+        height: auto;
+        padding: 0;
+        margin-bottom: 4px;
+        font-size: 13px;
+        font-weight: 500;
+        line-height: 20px;
+        color: #767676;
+    }
+
+    // 欄位高度統一 40px（全域把 select 設成 45px，其他輸入框是 32px）
+    .el-select__wrapper,
+    .el-input__wrapper {
+        height: 40px;
+        min-height: 40px;
+        box-sizing: border-box;
+    }
+
+    .el-input {
+        height: 40px;
+    }
+
+    .el-dialog__footer .el-button {
+        flex: 1;
     }
 }
 </style>

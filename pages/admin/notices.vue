@@ -140,9 +140,6 @@
                         <el-select
                             v-model="form.name"
                             placeholder="選擇貓咪"
-                            filterable
-                            allow-create
-                            default-first-option
                         >
                             <el-option
                                 v-for="cat in cats"
@@ -253,7 +250,7 @@ function shiftLabel(shift) {
 // 療程期間：NULL 代表該端不限
 function periodLabel({ start_date, end_date }) {
     const fmt = (d) => $dayjs(d).format('MM/DD');
-    if (start_date && end_date) return `${fmt(start_date)}~${fmt(end_date)}`;
+    if (start_date && end_date) return `${fmt(start_date)} ~ ${fmt(end_date)}`;
     if (start_date) return `${fmt(start_date)} 起`;
     return `至 ${fmt(end_date)}`;
 }
