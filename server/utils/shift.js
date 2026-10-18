@@ -3,12 +3,15 @@ import { supabase } from '~/server/utils/supabase'
 // 新版值班記錄表（shifts）的快照。cats / tasks 存成「以 id 為 key 的物件」而不是陣列，
 // 前端只送改動的那一格（/api/shift/update → shift_apply），兩人同時改不同的貓或項目不會互蓋。
 //
-// cats:  { "<cat_id>": { cat_id, name, location, sort, intake, released,
+// cats:  { "<cat_id>": { cat_id, name, location, sort, intake, released, prev_released,
 //                        medical: { "<id>": { id, category, treatment, reason, end_date, sort, done, done_by, done_at } },
 //                        diet:    { "<id>": { id, category, content, end_date, sort } } } }
 // tasks: { "medical:<id>" | "diet:<id>": { kind, id, location, ...同上 }  不屬於單一貓咪的項目（location 空 = 全員）
-//          "required:<id>": { kind, id, content, end_date, sort, done, done_by, done_at } }  收尾，整班一份
+//          "required:<id>": { kind, id, cat_id, location, content, end_date, sort, done, done_by, done_at } }
+//          收尾：對象可以是某隻貓、全員（都空）、貓屋或某個位置，不管哪一種都是整班勾一次
 // done_by / done_at：誰（暱稱）、幾點勾的
+// prev_released：上一班離開時放風了（貓沒關籠，這班吃多少、排泄看不出來，觀察不用登記）。
+//                記在這一班自己身上，之後回頭看也知道為什麼沒有觀察紀錄
 
 const MAX = Number.MAX_SAFE_INTEGER
 
@@ -49,19 +52,38 @@ function check(result) {
 
 const byKey = (list, keyOf) => Object.fromEntries(list.map((item) => [keyOf(item), item]))
 
-// 這一班的快照：未領養的貓（照貓咪管理的順序）＋這一班、在期間內的飲食、醫療、待辦
+// 上一班離開時放風的貓
+async function previousReleased(date, shift) {
+    const prev = previousShiftOf(date, shift)
+    const row = check(
+        await supabase
+            .from('shifts')
+            .select('cats')
+            .eq('date', prev.date)
+            .eq('shift', prev.shift)
+            .maybeSingle()
+    )
+    return new Set(
+        Object.values(row?.cats || {})
+            .filter((c) => c.released)
+            .map((c) => c.cat_id)
+    )
+}
+
+// 這一班的快照：未領養的貓（照貓咪管理的順序）＋這一班、在期間內的飲食、醫療、收尾
 export async function buildSnapshot(date, shift) {
     const forShift = (table) =>
         supabase.from(table).select().or(`shift.eq.both,shift.eq.${shift}`).order('sort_order')
 
-    const [cats, diet, medical, required] = (
-        await Promise.all([
+    const [[cats, diet, medical, required], prevReleased] = await Promise.all([
+        Promise.all([
             supabase.from('cat_profiles').select('id, name, location, adopted, sort_order'),
             forShift('diet_items'),
             forShift('medical_items'),
             forShift('required_items'),
-        ])
-    ).map(check)
+        ]).then((results) => results.map(check)),
+        previousReleased(date, shift),
+    ])
 
     const inPeriod = (i) =>
         (!i.start_date || i.start_date <= date) && (!i.end_date || i.end_date >= date)
@@ -116,6 +138,7 @@ export async function buildSnapshot(date, shift) {
                 sort: c.sort_order ?? MAX,
                 intake: defaultIntake(),
                 released: false,
+                prev_released: prevReleased.has(c.id),
                 medical: ofCat('medical', c.id),
                 diet: ofCat('diet', c.id),
             })),
@@ -128,8 +151,15 @@ export async function buildSnapshot(date, shift) {
             tasks[`${kind}:${i.id}`] = { kind, location: i.location || null, ...toItem[kind](i) }
         }
     }
-    for (const i of lists.required) {
-        tasks[`required:${i.id}`] = { kind: 'required', ...toItem.required(i) }
+    // 收尾：指定的貓已領養或刪掉就不列
+    const activeCatIds = new Set(cats.filter((c) => !c.adopted).map((c) => c.id))
+    for (const i of lists.required.filter((i) => !i.cat_id || activeCatIds.has(i.cat_id))) {
+        tasks[`required:${i.id}`] = {
+            kind: 'required',
+            cat_id: i.cat_id || null,
+            location: i.location || null,
+            ...toItem.required(i),
+        }
     }
 
     return { cats: snapshotCats, tasks }
@@ -164,9 +194,9 @@ function hasRecord(cat) {
 }
 
 // 當天的班載入時，用後台現在的設定重建一份，再把這班已經填的資料併回去：
-// 觀察、放風照舊；醫療、收尾照 id 保留「完成」；飲食一律用最新的；
+// 觀察、放風照舊；上一班放風照上一班現在的記錄；醫療、收尾照 id 保留「完成」；飲食一律用最新的；
 // 這班建立後才領養或刪除的貓，有填過資料就留著。
-// 不寫回資料庫：之後打勾時，前端只送那一格，shift_apply 會補上缺的層
+// 不寫回資料庫（上一班放風例外，見 persistPrevReleased）：之後打勾時，前端只送那一格，shift_apply 會補上缺的層
 export async function syncWithSettings(record) {
     const fresh = await buildSnapshot(record.date, record.shift)
     const stored = record.cats || {}
@@ -200,4 +230,30 @@ export async function applyCurrentCatOrder(record) {
         cats[key] = { ...cat, sort: order.get(cat.cat_id) ?? MAX }
     }
     return { ...record, cats }
+}
+
+// 上一班放風要記在這一班身上。當天的班每次載入都重算（上一班可能晚一點才按放風），
+// 跟資料庫存的不一樣才寫回去
+export async function persistPrevReleased(stored, synced) {
+    const ops = []
+    for (const [key, cat] of Object.entries(synced.cats || {})) {
+        const before = !!stored.cats?.[key]?.prev_released
+        if (before === !!cat.prev_released) continue
+        ops.push(
+            {
+                column: 'cats',
+                path: [key],
+                value: { cat_id: cat.cat_id, name: cat.name, location: cat.location, sort: cat.sort },
+                if_missing: true,
+            },
+            { column: 'cats', path: [key, 'prev_released'], value: !!cat.prev_released }
+        )
+    }
+    if (!ops.length) return
+    const { error } = await supabase.rpc('shift_apply', {
+        p_shift_id: stored.id,
+        p_ops: ops,
+        p_user: null,
+    })
+    if (error) throw createError({ statusCode: 500, message: error.message })
 }

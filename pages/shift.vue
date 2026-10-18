@@ -1,33 +1,32 @@
 <template>
     <ClientOnly>
         <div v-loading="loading" id="shift">
-            <h1>值班記錄表</h1>
-            <form @submit.prevent="Submit">
-                <div class="d_flex">
-                    <div class="W50">
-                        <el-date-picker
-                            v-model="formData.date"
-                            :disabled-date="disabledDate"
-                            type="date"
-                            :clearable="false"
-                            @change="dateHandler"
-                            placeholder="請選擇日期"
-                        />
-                    </div>
-                    <div class="W50 arrow">
-                        <el-select
-                            v-model="formData.shift"
-                            placeholder="請選擇班別"
-                            @change="dateHandler"
+            <form @submit.prevent="saveNow">
+                <!-- 標題靠左；右邊是「‹ 10/19 週日 早班 ›」：箭頭跳前後一班，點中間從下方滑出選擇面板 -->
+                <div class="shift-header">
+                    <h1>值班記錄表</h1>
+                    <div class="shift-nav">
+                        <button
+                            type="button"
+                            class="nav-btn"
+                            aria-label="上一班"
+                            :disabled="!canGo(prevOf(viewing))"
+                            @click="goTo(prevOf(viewing))"
                         >
-                            <el-option
-                                v-for="item in shiftList"
-                                :key="item.value"
-                                :label="item.label"
-                                :value="item.value"
-                                :disabled="disableShift(item.value)"
-                            />
-                        </el-select>
+                            ‹
+                        </button>
+                        <button type="button" class="current-btn" @click="openPicker">
+                            {{ shiftTitle(viewing) }}
+                        </button>
+                        <button
+                            type="button"
+                            class="nav-btn"
+                            aria-label="下一班"
+                            :disabled="!canGo(nextOf(viewing))"
+                            @click="goTo(nextOf(viewing))"
+                        >
+                            ›
+                        </button>
                     </div>
                 </div>
 
@@ -51,24 +50,13 @@
 
                 <!-- ========== 觀察：上一班放的飯吃了多少、排泄 ========== -->
                 <div v-show="tab === 'arrive'" class="W100">
-                    <!-- 上一班：各分頁的回報、沒勾完的收尾（跟以前的前班備註同一個位置） -->
-                    <div
-                        v-for="r in prevReports"
-                        :key="r.tab"
-                        class="W100 ps f_grey prev-note"
-                    >
-                        <b>*前班{{ r.label }}回報：</b>
-                        <span style="white-space: pre-line">{{ r.text }}</span>
-                    </div>
-                    <div v-if="prev.unfinished.length" class="W100 ps f_grey prev-note">
-                        <b>*前班收尾未完成：</b>
-                        <span>{{ prev.unfinished.join('、') }}</span>
-                    </div>
+                    <ShiftReportBlock v-bind="prevBlock('arrive')" />
 
                     <div
                         v-for="cat in formData.cats"
                         :key="cat.cat_id"
                         class="d_flex record_item intake-card"
+                        :class="{ compact: !showIntake(cat) }"
                     >
                         <div class="name-wrap">
                             <div class="name">{{ cat.name }}</div>
@@ -86,14 +74,20 @@
                                 <i v-if="hasHandover(cat.cat_id)" class="handover-dot"></i>
                             </button>
                         </div>
-                        <el-tag
-                            v-if="prev.released.includes(cat.cat_id)"
-                            class="released-badge"
-                            type="warning"
-                            size="small"
-                            >上一班放風</el-tag
-                        >
-                        <div class="detail intake">
+                        <!-- 上一班放風：貓沒關籠，吃多少、排泄看不出來，預設不登記，卡片只剩一行；
+                             有看到的話按「仍要登記」展開。已經填過的會自動展開 -->
+                        <div v-if="cat.prev_released" class="released-row">
+                            <el-tag type="warning" size="small">上一班放風</el-tag>
+                            <button
+                                v-if="!intakeTouched(cat)"
+                                type="button"
+                                class="released-toggle"
+                                @click="toggleIntake(cat)"
+                            >
+                                {{ showIntake(cat) ? '收起' : '仍要登記 ›' }}
+                            </button>
+                        </div>
+                        <div v-if="showIntake(cat)" class="detail intake">
                             <!-- 食物 - 乾 -->
                             <div class="feed food d_flex">
                                 <p class="f_blue">食物</p>
@@ -183,6 +177,7 @@
                 <!-- ========== 醫療、吃藥：醫療管理的項目，依類別分兩個分頁（只列有事項的貓） ========== -->
                 <template v-for="section in medicalSections" :key="section.tab">
                     <div v-show="tab === section.tab" class="W100">
+                        <ShiftReportBlock v-bind="prevBlock(section.tab)" />
                         <!-- 兩區都有時各加小標題：貓咪／全員與位置（同後台） -->
                         <div v-if="section.cats.length && section.taskGroups.length" class="section-title">
                             貓咪
@@ -295,6 +290,7 @@
 
                 <!-- ========== 備餐：乾乾、罐罐、補充、其他（只看）、放風 ========== -->
                 <div v-show="tab === 'leave'" class="W100">
+                    <ShiftReportBlock v-bind="prevBlock('leave')" />
                     <div v-if="leaveCats.length && leaveTaskGroups.length" class="section-title">
                         貓咪
                     </div>
@@ -395,13 +391,38 @@
                     </div>
                 </div>
 
-                <!-- ========== 收尾：這一班離開前一定要勾完的清單，不分貓（備餐右邊） ========== -->
+                <!-- ========== 收尾：這一班離開前一定要勾完的清單（備餐右邊）。
+                     對象可以是某隻貓、全員、貓屋或某個位置，每一項都是整班勾一次 ========== -->
                 <div v-show="tab === 'required'" class="W100">
-                    <div v-if="requiredItems.length" class="d_flex record_item required-card">
-                        <div class="name">收尾</div>
+                    <ShiftReportBlock v-bind="prevBlock('required')" />
+
+                    <div v-if="requiredCats.length && requiredGroups.length" class="section-title">
+                        貓咪
+                    </div>
+                    <div
+                        v-for="entry in requiredCats"
+                        :key="entry.cat.cat_id"
+                        class="d_flex record_item required-card"
+                    >
+                        <div class="name-wrap">
+                            <div class="name">{{ entry.cat.name }}</div>
+                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
+                            <button
+                                type="button"
+                                class="comment-btn"
+                                :class="{ has: commentCount(entry.cat.cat_id) }"
+                                :aria-label="`${entry.cat.name}的留言`"
+                                @click="openComments(entry.cat)"
+                            >
+                                💬<span v-if="commentCount(entry.cat.cat_id)">{{
+                                    commentCount(entry.cat.cat_id)
+                                }}</span>
+                                <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
+                            </button>
+                        </div>
                         <div class="detail">
                             <div
-                                v-for="(item, index) in requiredItems"
+                                v-for="(item, index) in entry.items"
                                 :key="item.key"
                                 class="d_flex item-row"
                                 :class="{ divided: index > 0 }"
@@ -429,44 +450,98 @@
                         </div>
                     </div>
 
-                    <el-empty v-else description="這一班沒有收尾項目" />
-                </div>
+                    <div v-if="requiredCats.length && requiredGroups.length" class="section-title later">
+                        全員與位置
+                    </div>
+                    <!-- 全員 → 貓屋 → 位置 -->
+                    <div
+                        v-for="group in requiredGroups"
+                        :key="group.name"
+                        class="d_flex record_item required-card"
+                    >
+                        <div class="name">{{ group.name }}</div>
+                        <div class="detail">
+                            <div
+                                v-for="(item, index) in group.items"
+                                :key="item.key"
+                                class="d_flex item-row"
+                                :class="{ divided: index > 0 }"
+                            >
+                                <div class="d_flex">
+                                    <div class="txt">
+                                        <font class="treatment">{{ item.content }}</font>
+                                        <font v-if="item.done && item.done_by" class="done-by"
+                                            >✓ {{ doneLabel(item) }}</font
+                                        >
+                                    </div>
+                                    <div class="done">
+                                        <el-checkbox
+                                            v-model="item.done"
+                                            :disabled="isDisabled"
+                                            @change="
+                                                stampDone(item);
+                                                saveTask(item);
+                                            "
+                                            >完成</el-checkbox
+                                        >
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
 
-                <!-- ========== 回報：每個分頁各自一段，下一班在觀察分頁上方看得到；填表志工只在觀察分頁 ========== -->
-                <div class="W100 mb20 report">
-                    <el-input
-                        type="textarea"
-                        v-model="formData.reports[tab]"
-                        :disabled="isDisabled"
-                        :placeholder="`${tabLabel}回報（下一班會在觀察分頁看到）`"
-                        @input="saveReport(tab)"
+                    <el-empty
+                        v-if="requiredCats.length === 0 && requiredGroups.length === 0"
+                        description="這一班沒有收尾項目"
                     />
                 </div>
 
-                <div v-show="tab === 'arrive'" class="W100 mb20">
-                    <div class="member-row">
-                        <!-- 不開搜尋：手機點了不會跳出鍵盤 -->
-                        <el-select
-                            v-model="formData.member"
+                <!-- ========== 回報：每個分頁、每個人各一段（用登入身分）。下一班在同一個分頁上方看得到 ========== -->
+                <div class="W100 mb20 report">
+                    <!-- 跟上面的貓咪、項目分開：小標題＋細線 -->
+                    <div class="section-title report-title">回報</div>
+                    <ShiftReportBlock
+                        :title="`其他人的${tabLabel}回報`"
+                        :entries="othersEntries"
+                        :storage-key="`now:${tab}`"
+                    />
+                    <!-- 我的回報：標題、輸入框、儲存列收在同一張卡片 -->
+                    <div class="my-report">
+                        <div class="mr-head">
+                            <span class="mr-title">我的{{ tabLabel }}回報</span>
+                        </div>
+                        <el-input
+                            type="textarea"
+                            v-model="drafts[tab]"
                             :disabled="isDisabled"
-                            placeholder="請選擇填表志工"
-                            class="member-select"
-                            @change="saveMember"
-                        >
-                            <el-option
-                                v-for="member in memberList"
-                                :key="member.value"
-                                :label="member.label"
-                                :value="member.value"
-                            />
-                        </el-select>
-                        <el-button
-                            :disabled="isDisabled || !nickname"
-                            @click="selectMe"
-                        >
-                            選自己
-                        </el-button>
+                            :autosize="{ minRows: 3, maxRows: 12 }"
+                            placeholder="寫給下一班…"
+                            @input="saveReport(tab)"
+                        />
+                        <!-- 改完會自動儲存；按鈕讓人確定有存到，失敗時也在這裡重試 -->
+                        <div class="mr-foot">
+                            <span class="save-hint" :class="[saveStatus, { saved: saveHint.startsWith('✓') }]">{{
+                                saveHint
+                            }}</span>
+                            <button
+                                type="submit"
+                                class="save-btn"
+                                :disabled="isDisabled || saveStatus === 'saving'"
+                            >
+                                {{ saveStatus === 'saving' ? '儲存中…' : '儲存' }}
+                            </button>
+                        </div>
                     </div>
+
+                    <!-- 把這個分頁的回報推到 LINE 群組（每個分頁各發各的，不合在一起） -->
+                    <button
+                        type="button"
+                        class="btn line-green"
+                        v-show="!isDisabled"
+                        @click="sendTabToLine"
+                    >
+                        {{ loadingNotify ? '發送中…' : 'LINE 發送至群組' }}
+                    </button>
                 </div>
 
                 <!-- ========== 每個分頁共用：儲存狀態、連結 ========== -->
@@ -488,33 +563,77 @@
                         </p>
                     </div>
 
-                    <!-- 每一格改完都會自動儲存；觀察分頁留著按鈕，儲存失敗時每個分頁都會出現，讓人能重試 -->
-                    <button
-                        type="submit"
-                        class="btn"
-                        v-show="!isDisabled && (tab === 'arrive' || saveStatus === 'error')"
-                    >
-                        <template v-if="saveStatus === 'saving'">儲存中...</template>
-                        <template v-else-if="saveStatus === 'error'"
-                            >儲存失敗，請手動重試</template
-                        >
-                        <template v-else>儲存表單</template>
-                    </button>
-
-                    <!-- 把值班回報手動推到 LINE 群組（同 /regular、/medicine），只在觀察分頁 -->
-                    <button
-                        type="button"
-                        class="btn line-green"
-                        v-show="tab === 'arrive' && !isDisabled"
-                        @click="ManualNotifyLine"
-                    >
-                        {{ loadingNotify ? '通知中...' : 'LINE 手動發送' }}
-                    </button>
-
-                    <NuxtLink class="f_red" :to="prevLink">看前班紀錄</NuxtLink>
                     <NuxtLink class="f_red" to="/shift">回到現在這一班</NuxtLink>
                 </div>
             </form>
+
+            <!-- 選擇要看的班：從下方滑出。快速前往一鍵就到；其他日期用手機內建的日期選擇器（不會跳鍵盤） -->
+            <el-drawer
+                v-model="pickerOpen"
+                direction="btt"
+                size="auto"
+                :with-header="false"
+                class="shift-picker-drawer"
+            >
+                <div class="sp-head">
+                    <span class="sp-title">選擇要看的班</span>
+                    <button type="button" class="sp-close" aria-label="關閉" @click="pickerOpen = false">
+                        ✕
+                    </button>
+                </div>
+
+                <div class="sp-label">快速前往</div>
+                <div class="sp-chips">
+                    <button
+                        v-for="item in quickShifts"
+                        :key="`${item.date}-${item.shift}`"
+                        type="button"
+                        class="sp-chip"
+                        :class="{ on: sameShift(item, viewing) }"
+                        @click="goTo(item)"
+                    >
+                        {{ item.label }}
+                    </button>
+                </div>
+
+                <div class="sp-label">日期</div>
+                <input
+                    v-model="pick.date"
+                    type="date"
+                    class="sp-date"
+                    :min="minDate"
+                    :max="todayStr()"
+                    @change="onPickDate"
+                />
+
+                <div class="sp-label">班別</div>
+                <div class="sp-seg">
+                    <button
+                        type="button"
+                        :class="{ on: pick.shift === 'morning' }"
+                        @click="pick.shift = 'morning'"
+                    >
+                        早班
+                    </button>
+                    <button
+                        type="button"
+                        :class="{ on: pick.shift === 'night' }"
+                        :disabled="nightLocked(pick.date)"
+                        @click="pick.shift = 'night'"
+                    >
+                        {{ nightLocked(pick.date) ? '晚班（18:00 後）' : '晚班' }}
+                    </button>
+                </div>
+
+                <button
+                    type="button"
+                    class="sp-go"
+                    :disabled="!canGo(pick)"
+                    @click="goTo(pick)"
+                >
+                    前往
+                </button>
+            </el-drawer>
 
             <!-- 留言面板：從下方滑出，這個分頁、這隻貓的留言 -->
             <el-drawer
@@ -615,12 +734,7 @@ const lastSavedAt = ref(null);
 const realtimeChannel = ref(null);
 const commentsChannel = ref(null);
 const tab = ref('arrive');
-const prev = ref({ reports: {}, released: [], unfinished: [] });
-
-const shiftList = [
-    { value: 'morning', label: '早班' },
-    { value: 'night', label: '晚班' },
-];
+const prev = ref({ date: null, shift: null, reports: {}, released: [], unfinished: [] });
 
 const marks = {
     0: '沒吃',
@@ -630,17 +744,26 @@ const marks = {
     100: '吃光',
 };
 
-const memberList = ref([]);
-
 const formData = ref({
     recordId: '',
     date: new Date(),
     shift: '',
     cats: [], // [{ cat_id, name, location, sort, intake, released, medical: [], diet: [] }]
     tasks: [], // [{ key, kind, id, location, ... }]，kind：medical / diet / required（收尾）
-    reports: {}, // { arrive, care, meds, leave, required }：每個分頁的回報
-    member: '',
+    reports: {}, // { 分頁: { user_id: { name, text, at } } }：每個分頁、每個人一段
 });
+
+// 我在每個分頁的回報（輸入框綁這份）
+const drafts = ref({});
+const me = computed(() => getUserId() || null);
+
+// 一個分頁的回報清單：只留有內容的，照時間排（舊資料沒有時間，排最前面）
+function entriesOf(reports, key) {
+    return Object.entries(reports?.[key] || {})
+        .map(([uid, r]) => ({ key: uid, name: r?.name, text: r?.text || '', at: r?.at || null }))
+        .filter((r) => r.text.trim())
+        .sort((a, b) => (a.at || '').localeCompare(b.at || ''));
+}
 
 // ---- 資料轉換：資料庫存的是以 id 為 key 的物件，畫面用排好順序的陣列 ----
 const MAX = Number.MAX_SAFE_INTEGER;
@@ -669,6 +792,7 @@ function normalize(rawCats, rawTasks) {
             sort: c.sort ?? MAX,
             intake: { ...defaultIntake(), ...(c.intake || {}) },
             released: !!c.released,
+            prev_released: !!c.prev_released,
             medical: sortedValues(c.medical),
             diet: sortedValues(c.diet),
         }))
@@ -769,9 +893,33 @@ function saveTask(task) {
     queue([{ column: 'tasks', path: [key], value }]);
 }
 
-const saveReport = (key) =>
-    queue([{ column: 'reports', path: [key], value: formData.value.reports[key] || '' }]);
-const saveMember = () => queue([{ column: 'member', value: formData.value.member || null }]);
+// 回報只送內容；名字與時間由 server 填（只能改自己那一段）。
+// 本地也先更新，發送到 LINE 才拿得到最新的
+function saveReport(key) {
+    if (!me.value) return;
+    const text = drafts.value[key] || '';
+    const reports = formData.value.reports;
+    reports[key] = { ...(reports[key] || {}) };
+    reports[key][me.value] = { name: nickname.value, text, at: new Date().toISOString() };
+    queue([{ column: 'reports', path: [key, me.value], value: { text } }]);
+}
+
+// 儲存按鈕：馬上送出還沒送的改動
+async function saveNow() {
+    flushSoon.cancel();
+    if (queued.size === 0) {
+        if (saveStatus.value !== 'error') lastSavedAt.value = new Date();
+        return;
+    }
+    await flush();
+}
+
+const saveHint = computed(() => {
+    if (saveStatus.value === 'error') return '儲存失敗，請再按一次儲存';
+    if (saveStatus.value === 'saving') return '';
+    if (isPending.value) return '有變更尚未儲存';
+    return lastSavedAt.value ? `✓ 已儲存 ${$dayjs(lastSavedAt.value).format('HH:mm')}` : '';
+});
 
 // 別人存檔：把對方改的值套進畫面，自己還沒送出的格子不動
 function mergeRemote(row) {
@@ -788,6 +936,7 @@ function mergeRemote(row) {
         const raw = row.cats[id] || {};
         if (raw.intake && !busy('cats', [id, 'intake'])) lc.intake = rc.intake;
         if ('released' in raw && !busy('cats', [id, 'released'])) lc.released = rc.released;
+        if ('prev_released' in raw) lc.prev_released = rc.prev_released;
         for (const ri of rc.medical) {
             if (busy('cats', [id, 'medical', String(ri.id)])) continue;
             const li = lc.medical.find((i) => i.id === ri.id);
@@ -804,10 +953,13 @@ function mergeRemote(row) {
         else local.tasks.push(rt);
     }
 
-    for (const [key, text] of Object.entries(row.reports || {})) {
-        if (!busy('reports', [key])) local.reports[key] = text;
+    for (const [key, byUser] of Object.entries(row.reports || {})) {
+        for (const [uid, entry] of Object.entries(byUser || {})) {
+            if (busy('reports', [key, uid])) continue;
+            local.reports[key] = { ...(local.reports[key] || {}), [uid]: entry };
+            if (uid === me.value) drafts.value[key] = entry?.text || '';
+        }
     }
-    if (!busy('member', [])) local.member = row.member;
 }
 
 const pickDone = ({ done, done_by, done_at }) => ({
@@ -826,6 +978,7 @@ const draftForNext = ref(false);
 const sending = ref(false);
 
 const TABS = ['arrive', 'care', 'meds', 'leave', 'required'];
+const SHIFT_LABELS = { morning: '早班', night: '晚班' };
 const TAB_LABELS = { arrive: '觀察', care: '醫療', meds: '吃藥', leave: '備餐', required: '收尾' };
 const tabLabel = computed(() => TAB_LABELS[tab.value]);
 
@@ -911,7 +1064,7 @@ function subscribeToComments(recordId) {
 
 // ---- 分頁內容 ----
 
-// 不屬於單一貓咪的項目照位置分組，排序是全員 → 位置（placeRank，跟後台一致）
+// 不屬於單一貓咪的項目照位置分組，排序是全員 → 貓屋 → 位置（placeRank，跟後台一致）
 function groupTasks(filter) {
     const map = new Map();
     for (const task of formData.value.tasks.filter(filter)) {
@@ -976,13 +1129,30 @@ const leaveTaskGroups = computed(() =>
     )
 );
 
-// 收尾分頁：整班一張清單
+// 收尾分頁：有收尾項目的貓（照貓的順序），以及全員、貓屋、位置的（groupTasks 照 placeRank 排）
 const requiredItems = computed(() => formData.value.tasks.filter((t) => t.kind === 'required'));
+const requiredCats = computed(() =>
+    formData.value.cats
+        .map((cat) => ({ cat, items: requiredItems.value.filter((t) => t.cat_id === cat.cat_id) }))
+        .filter((entry) => entry.items.length > 0)
+);
+const requiredGroups = computed(() => groupTasks((t) => t.kind === 'required' && !t.cat_id));
 
-// 觀察分頁上方：上一班有寫的回報，照分頁順序
-const prevReports = computed(() =>
-    TABS.map((key) => ({ tab: key, label: TAB_LABELS[key], text: prev.value.reports[key] }))
-        .filter((r) => r.text?.trim())
+// 每個分頁上方：上一班同一個分頁的回報（收尾分頁另外列沒勾完的）
+function prevBlock(key) {
+    const { date, shift, reports, unfinished } = prev.value;
+    return {
+        title: `前班${TAB_LABELS[key]}回報`,
+        meta: date ? `${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift]}` : '',
+        entries: entriesOf(reports, key),
+        unfinished: key === 'required' ? unfinished : [],
+        storageKey: `prev:${key}`,
+    };
+}
+
+// 這一班、這個分頁，其他人寫的回報（自己的在輸入框裡）
+const othersEntries = computed(() =>
+    entriesOf(formData.value.reports, tab.value).filter((r) => r.key !== me.value)
 );
 
 // 分頁上的數字：還沒打勾的項目數
@@ -1001,21 +1171,94 @@ const tabList = computed(() => {
         { value: 'meds', label: '吃藥', remaining: sectionUndone('meds') },
         // 備餐只是參考，沒有要打勾的
         { value: 'leave', label: '備餐', remaining: 0 },
-        { value: 'required', label: '收尾', remaining: undone(requiredItems.value) },
+        {
+            value: 'required',
+            label: '收尾',
+            // 只算畫面上看得到的（貓已經不在這班的不算）
+            remaining:
+                requiredCats.value.reduce((sum, e) => sum + undone(e.items), 0) +
+                requiredGroups.value.reduce((sum, g) => sum + undone(g.items), 0),
+        },
     ];
 });
 
-const prevLink = computed(() => {
-    let date = $dayjs(formData.value.date);
-    if (formData.value.shift === 'morning') date = date.subtract(1, 'day');
-    return {
-        name: 'shift',
-        query: {
-            date: date.format('YYYY-MM-DD'),
-            shift: formData.value.shift === 'morning' ? 'night' : 'morning',
-        },
-    };
+// ---- 選班：標題列的前後箭頭與下方的選擇面板。班用 { date: 'YYYY-MM-DD', shift } 表示 ----
+const WEEKDAYS = '日一二三四五六';
+const todayStr = () => $dayjs().format('YYYY-MM-DD');
+const minDate = $dayjs(config.public.releaseDate || '2024-01-01').format('YYYY-MM-DD');
+
+const viewing = computed(() => ({
+    date: $dayjs(formData.value.date).format('YYYY-MM-DD'),
+    shift: formData.value.shift || 'morning',
+}));
+
+function shiftTitle({ date, shift }) {
+    const d = $dayjs(date);
+    return `${d.format('MM/DD')} 週${WEEKDAYS[d.day()]} ${SHIFT_LABELS[shift]}`;
+}
+
+// 早班的上一班是前一天晚班；晚班的上一班是同一天早班
+function prevOf({ date, shift }) {
+    return shift === 'night'
+        ? { date, shift: 'morning' }
+        : { date: $dayjs(date).subtract(1, 'day').format('YYYY-MM-DD'), shift: 'night' };
+}
+
+function nextOf({ date, shift }) {
+    return shift === 'morning'
+        ? { date, shift: 'night' }
+        : { date: $dayjs(date).add(1, 'day').format('YYYY-MM-DD'), shift: 'morning' };
+}
+
+const sameShift = (a, b) => a.date === b.date && a.shift === b.shift;
+
+// 今天 18:00 前不能看晚班（跟 /medicine 一樣，避免提早建立晚班的記錄）
+const nightLocked = (date) => date === todayStr() && new Date().getHours() < 18;
+
+function canGo({ date, shift }) {
+    if (!date || date > todayStr() || date < minDate) return false;
+    return !(shift === 'night' && nightLocked(date));
+}
+
+function nowShift() {
+    return { date: todayStr(), shift: new Date().getHours() < 18 ? 'morning' : 'night' };
+}
+
+// 快速前往：現在這一班往前數四班
+const quickShifts = computed(() => {
+    const dayName = (date) =>
+        ({ 0: '今天', 1: '昨天', 2: '前天' })[$dayjs().startOf('day').diff($dayjs(date), 'day')] ||
+        $dayjs(date).format('MM/DD');
+    const list = [];
+    let item = nowShift();
+    for (let i = 0; i < 4; i++) {
+        list.push({
+            ...item,
+            label: i === 0 ? '現在這一班' : `${dayName(item.date)}${SHIFT_LABELS[item.shift]}`,
+        });
+        item = prevOf(item);
+    }
+    return list;
 });
+
+const pickerOpen = ref(false);
+const pick = ref({ date: '', shift: 'morning' });
+
+function openPicker() {
+    pick.value = { ...viewing.value };
+    pickerOpen.value = true;
+}
+
+// 換到今天、又還沒 18:00 時，晚班選不了，自動改回早班
+function onPickDate() {
+    if (pick.value.shift === 'night' && nightLocked(pick.value.date)) pick.value.shift = 'morning';
+}
+
+function goTo({ date, shift }) {
+    if (!canGo({ date, shift })) return;
+    pickerOpen.value = false;
+    router.push({ name: 'shift', query: { date, shift, tab: tab.value } });
+}
 
 const isDisabled = computed(() => {
     const day = $dayjs(formData.value.date);
@@ -1023,35 +1266,24 @@ const isDisabled = computed(() => {
     return day < disabled;
 });
 
-// Date picker disabled date
-const disabledDate = (time) => {
-    const dateFrom = new Date(config.public.releaseDate || '2024-01-01');
-    dateFrom.setDate(dateFrom.getDate() - 1);
-    return time.getTime() > Date.now() || time.getTime() < dateFrom;
-};
-
-// 今天 18:00 前不能選晚班（跟 /medicine 一樣，避免提早建立晚班的記錄）
-function disableShift(fromShift) {
-    const { date } = formData.value;
-    return (
-        date &&
-        $dayjs(date).isSame($dayjs(), 'day') &&
-        new Date().getHours() < 18 &&
-        fromShift === 'night'
-    );
-}
-
 // Methods
 function setTab(value) {
     tab.value = value;
     router.replace({ query: { ...route.query, tab: value } });
 }
 
-function selectMe() {
-    if (nickname.value) {
-        formData.value.member = nickname.value;
-        saveMember();
-    }
+// 上一班放風的貓：預設收起觀察欄位；按「仍要登記」或已經填過才展開
+const intakeOpened = ref(new Set());
+function intakeTouched(cat) {
+    const defaults = defaultIntake();
+    return Object.keys(defaults).some((key) => (cat.intake[key] ?? null) !== defaults[key]);
+}
+const showIntake = (cat) =>
+    !cat.prev_released || intakeOpened.value.has(cat.cat_id) || intakeTouched(cat);
+function toggleIntake(cat) {
+    const opened = new Set(intakeOpened.value);
+    opened.has(cat.cat_id) ? opened.delete(cat.cat_id) : opened.add(cat.cat_id);
+    intakeOpened.value = opened;
 }
 
 function foodHandler(cat, type) {
@@ -1060,18 +1292,6 @@ function foodHandler(cat, type) {
 
 function fecesHandler(cat) {
     cat.intake.feces_warning = cat.intake.feces ? '正常' : null;
-}
-
-function dateHandler() {
-    const { date, shift } = formData.value;
-    if (disableShift(shift)) {
-        ElMessage.error('錯誤，請重新選擇日期');
-        return;
-    }
-    router.push({
-        name: 'shift',
-        query: { date: $dayjs(date).format('YYYY-MM-DD'), shift, tab: tab.value },
-    });
 }
 
 function InitFromQuery() {
@@ -1084,15 +1304,6 @@ function InitFromQuery() {
         ? 'morning'
         : 'night';
     if (TABS.includes(queryTab)) tab.value = queryTab;
-}
-
-async function InitMemberList() {
-    try {
-        const data = await $fetch('/api/volunteer/list');
-        memberList.value = data.map((v) => ({ label: v.name, value: v.name }));
-    } catch (e) {
-        console.error('InitMemberList error:', e);
-    }
 }
 
 async function InitShift() {
@@ -1116,8 +1327,12 @@ async function InitShift() {
     formData.value.cats = cats;
     formData.value.tasks = tasks;
     formData.value.reports = { ...data.reports };
-    formData.value.member = data.member;
+    drafts.value = Object.fromEntries(
+        TABS.map((key) => [key, data.reports?.[key]?.[me.value]?.text || ''])
+    );
     prev.value = {
+        date: prevData?.date || null,
+        shift: prevData?.shift || null,
         reports: prevData?.reports || {},
         released: prevData?.released || [],
         unfinished: prevData?.unfinished || [],
@@ -1156,35 +1371,30 @@ function subscribeToRealtime(recordId) {
         .subscribe();
 }
 
-async function Submit() {
-    // 填表志工只在觀察分頁出現；其他分頁的按鈕只用來重試失敗的儲存
-    if (tab.value === 'arrive' && !formData.value.member) {
-        ElMessage.error('請選擇填表志工');
-        return;
-    }
-    flushSoon.cancel();
-    if (queued.size === 0) {
-        saveStatus.value = 'success';
-        lastSavedAt.value = lastSavedAt.value || new Date();
-        return;
-    }
-    await flush();
-}
-
 // 跟 /regular、/medicine 一樣：先跳確認視窗，按「是的」才推到 LINE 群組
-async function ManualNotifyLine() {
-    const ShiftMap = { morning: '早班', night: '晚班' };
+// 把目前這個分頁、這一班所有人的回報推到 LINE 群組（每個分頁各發各的）。
+// 跟 /regular、/medicine 一樣：先跳確認視窗，按「是的」才送
+async function sendTabToLine() {
+    const key = tab.value;
+    const label = TAB_LABELS[key];
+    const entries = entriesOf(formData.value.reports, key);
+    if (!entries.length) {
+        Swal.fire({ text: `這一班還沒有人寫${label}回報`, confirmButtonColor: '#b33a39' });
+        return;
+    }
 
     try {
         loadingNotify.value = true;
-        const textDate = $dayjs(formData.value.date).format('YYYY/MM/DD');
-        const textShift = ShiftMap[formData.value.shift];
-        const member = formData.value.member || '';
-        // 有寫的分頁回報都帶上，各自標分頁名稱
-        const reports = TABS.map((key) => [TAB_LABELS[key], (formData.value.reports[key] || '').trim()])
-            .filter(([, text]) => text);
-        const reportText = reports.map(([label, text]) => `【${label}】\n${text}`).join('\n');
-        const textPush = `值班記錄\n---------------\n日期： ${textDate}\n班別： ${textShift}\n志工： ${member}\n回報：\n${reportText}`;
+        // 先把還沒存的回報存掉，發出去的才跟資料庫一致
+        await saveNow();
+
+        const d = $dayjs(formData.value.date);
+        const textDate = `${d.format('YYYY/MM/DD')}（${WEEKDAYS[d.day()]}）`;
+        const textShift = SHIFT_LABELS[formData.value.shift];
+        const reportText = entries
+            .map((e) => `${e.name || '（舊資料）'}：\n${e.text.trim()}`)
+            .join('\n\n');
+        const textPush = `值班記錄｜${label}回報\n---------------\n日期： ${textDate}\n班別： ${textShift}\n---------------\n${reportText}`;
         const textSite =
             config.public.deploySite === 'feliformia'
                 ? ''
@@ -1198,7 +1408,7 @@ async function ManualNotifyLine() {
                 .replace(/</g, '&lt;')
                 .replace(/>/g, '&gt;')
                 .replace(/\n/g, '<br>');
-        const htmlPush = `<div style="text-align: left;"><b><h3>將以下訊息通知大哥</h3></b>值班記錄<br>---------------<br>日期： ${textDate}<br>班別： ${textShift}<br>志工： ${toHtml(member)}<br>回報：<br>${toHtml(reportText)}</div>`;
+        const htmlPush = `<div style="text-align: left;"><b><h3>將以下訊息發送至群組</h3></b>${toHtml(textPush)}</div>`;
 
         const { isConfirmed } = await Swal.fire({
             html: htmlPush,
@@ -1214,10 +1424,10 @@ async function ManualNotifyLine() {
                     method: 'POST',
                     body: { text: textSite + textManual + textPush },
                 });
-                Swal.fire({ text: '手動發送成功', confirmButtonColor: '#b33a39' });
+                Swal.fire({ text: '已發送至群組', confirmButtonColor: '#b33a39' });
             } catch {
                 Swal.fire({
-                    html: '手動發送失敗。<br>請確認網路狀態後重試。',
+                    html: '發送失敗。<br>請確認網路狀態後重試。',
                     confirmButtonColor: '#b33a39',
                 });
             }
@@ -1265,7 +1475,6 @@ async function load() {
 
 onMounted(() => {
     window.addEventListener('beforeunload', handleBeforeUnload);
-    InitMemberList();
     load();
 });
 
@@ -1310,19 +1519,83 @@ watch(
         color: white;
     }
 
-    .member-row {
-        display: flex;
-        gap: 8px;
-        align-items: center;
+    // ---- 回報：跟上面的項目分開；我的回報收成一張卡片（標題／輸入框／儲存列） ----
+    .report-title {
+        margin-top: 24px;
+        margin-bottom: 10px;
+    }
 
-        .member-select {
-            flex: 1;
+    .my-report {
+        overflow: hidden;
+        border: 1px solid #d8d4d1;
+        border-radius: 6px;
+        background: #fff;
+        text-align: left;
+
+        .mr-head {
+            display: flex;
+            align-items: baseline;
+            gap: 8px;
+            padding: 9px 10px;
+            border-bottom: 1px solid #eee;
+
+            .mr-title {
+                font-size: 14px;
+                font-weight: 500;
+                color: #4a4542;
+            }
         }
 
-        .el-button {
-            width: auto !important;
+        // 輸入框在卡片裡不要自己的框線；全域把 textarea 設成至少 100px，這裡交給 autosize
+        :deep(.el-textarea__inner) {
+            min-height: 76px !important;
+            padding: 9px 10px;
+            border: none;
+            border-radius: 0;
+            box-shadow: none !important;
+            font-size: 15px;
+        }
+
+        .mr-foot {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            padding: 7px 8px 8px 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .save-hint {
+            font-size: 12px;
+            color: #8e8783;
+
+            &.saved {
+                color: #529b2e;
+            }
+
+            &.error {
+                color: #b33a39;
+            }
+        }
+
+        // 全域 button 有 width: 100%，這裡蓋回來
+        .save-btn {
             flex-shrink: 0;
-            height: 45px;
+            width: auto;
+            height: 32px;
+            margin: 0;
+            padding: 0 18px;
+            border: none;
+            border-radius: 6px;
+            background: #6da2c2;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+
+            &:disabled {
+                cursor: default;
+                opacity: 0.5;
+            }
         }
     }
 
@@ -1374,6 +1647,67 @@ watch(
                 }
             }
         }
+    }
+}
+
+// ---- 標題列：標題靠左，「‹ 10/19 週日 早班 ›」靠右 ----
+.shift-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 4px;
+
+    h1 {
+        // 全域 h1 有 margin-bottom: 10px !important（element-variables.css），不蓋掉會跟右邊錯開
+        margin: 0 !important;
+        flex-shrink: 0;
+        font-size: 20px;
+        text-align: left;
+        // 光學補償：Noto Sans TC 中文墨水比行框中心低，22px 約 1.7px（見 /admin 各頁），20px 等比約 1.5px
+        transform: translateY(-1.5px);
+    }
+}
+
+// 全域 button 有 width: 100%、邊框、底色、padding，這裡每一項都要蓋回來
+.shift-nav {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 0;
+
+    button {
+        height: 40px;
+        margin: 0;
+        border: 1px solid #d8d4d1;
+        border-radius: 6px;
+        background: #fff;
+        color: #4a4542;
+        cursor: pointer;
+    }
+
+    .nav-btn {
+        width: 32px;
+        flex-shrink: 0;
+        padding: 0;
+        font-size: 20px;
+        line-height: 1;
+        color: #657181;
+
+        &:disabled {
+            cursor: default;
+            color: #ccc;
+            border-color: #eee;
+        }
+    }
+
+    .current-btn {
+        width: auto;
+        min-width: 0;
+        padding: 0 10px;
+        font-size: 14px;
+        white-space: nowrap;
+        border-color: #6da2c2;
     }
 }
 
@@ -1449,10 +1783,6 @@ watch(
     }
 }
 
-.prev-note {
-    padding-top: 0;
-}
-
 .report {
     margin-top: 6px;
 }
@@ -1501,6 +1831,35 @@ watch(
     // 收尾清單沒有左邊的類別欄，文字從頭開始
     &.required-card .detail > .item-row > .d_flex {
         width: 100%;
+    }
+
+    // 上一班放風：標籤與「仍要登記」在卡片右上角，跟貓名同一列
+    .released-row {
+        position: absolute;
+        top: 4px;
+        right: 8px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    // 全域 button 有 width: 100%、邊框、底色、padding，這裡蓋回來
+    .released-toggle {
+        width: auto;
+        height: 24px;
+        margin: 0;
+        padding: 0 2px;
+        border: none;
+        background: none;
+        color: #3f7ea3;
+        font-size: 13px;
+        cursor: pointer;
+    }
+
+    // 收起時只剩標題列那一行
+    &.compact {
+        min-height: 34px;
+        padding-top: 0;
     }
 
     .released-badge {
@@ -1669,6 +2028,132 @@ watch(
 :deep(.el-input__wrapper),
 :deep(.el-select__wrapper) {
     height: 45px;
+}
+
+// ---- 選班面板 ----
+:deep(.shift-picker-drawer) {
+    border-radius: 14px 14px 0 0;
+
+    .el-drawer__body {
+        padding: 14px 16px 20px;
+        text-align: left;
+    }
+}
+
+.sp-head {
+    display: flex;
+    align-items: center;
+    margin-bottom: 4px;
+
+    .sp-title {
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .sp-close {
+        width: auto;
+        margin-left: auto;
+        padding: 0 4px;
+        border: none;
+        background: none;
+        color: #999;
+        font-size: 16px;
+        cursor: pointer;
+    }
+}
+
+.sp-label {
+    margin: 14px 0 6px;
+    font-size: 13px;
+    color: #8e8783;
+}
+
+.sp-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    .sp-chip {
+        width: auto;
+        height: 34px;
+        margin: 0;
+        padding: 0 14px;
+        border: 1px solid #d8d4d1;
+        border-radius: 17px;
+        background: #fff;
+        color: #4a4542;
+        font-size: 14px;
+        cursor: pointer;
+
+        &.on {
+            border-color: #6da2c2;
+            background: #eaf3f8;
+            color: #3f7ea3;
+        }
+    }
+}
+
+// 手機內建的日期選擇器（iPhone 滾輪、Android 日曆）
+.sp-date {
+    box-sizing: border-box;
+    width: 100%;
+    height: 42px;
+    padding: 0 10px;
+    border: 1px solid #d8d4d1;
+    border-radius: 6px;
+    background: #fff;
+    color: #222;
+    font-size: 16px; // 小於 16px，iPhone 點下去會自動放大頁面
+}
+
+.sp-seg {
+    display: flex;
+    overflow: hidden;
+    border: 1px solid #d8d4d1;
+    border-radius: 6px;
+
+    button {
+        flex: 1;
+        height: 40px;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        background: #fff;
+        color: #657181;
+        font-size: 14px;
+        cursor: pointer;
+
+        & + button {
+            border-left: 1px solid #d8d4d1;
+        }
+
+        &.on {
+            background: #6da2c2;
+            color: #fff;
+        }
+
+        &:disabled {
+            cursor: default;
+            color: #bbb;
+        }
+    }
+}
+
+.sp-go {
+    width: 100%;
+    height: 44px;
+    margin: 18px 0 0;
+    border: none;
+    border-radius: 8px;
+    background: #6da2c2;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.5;
+    }
 }
 
 // ---- 留言 ----

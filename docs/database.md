@@ -153,13 +153,14 @@ votes.data
 | `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order` |
 | `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／補充／其他，`content` |
 | `medical_items` | `/admin/medical` | 醫療。`category` 醫療／吃藥／其他，`treatment`、`reason` |
-| `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單，不分貓。`content` |
-| `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁各自的回報 |
+| `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
+| `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `shift_comments` | `/shift` | 每隻貓、每個分頁的留言，只新增不覆寫 |
 
 **三張事項表的共同欄位**：`shift` 是 `morning` / `night` / `both`，`start_date` / `end_date` 空代表不限。
-飲食、醫療另有對象：`cat_id` 有值 = 那隻貓；`location` 有值 = 那個位置的貓；兩個都空 = 全員
-（不能同時有值）。收尾不分對象。
+三張都有對象：`cat_id` 有值 = 那隻貓；`location` 有值 = 那個位置；兩個都空 = 全員
+（不能同時有值）。收尾的 `location` 多一個「貓屋」（整間屋子、跟貓無關的事，例如倒垃圾）。
+後台與值班表的排序都是：貓咪 → 全員 → 貓屋 → 位置（`composables/locations.js` 的 `placeRank`）。
 刪掉一隻貓會連帶刪掉牠的事項與留言（on delete cascade），不會變成全員。
 
 **權限**：全部登入可讀。`cat_profiles` 與三張事項表只有管理員能寫（`is_admin()`，前端後台直接寫）；
@@ -169,12 +170,16 @@ votes.data
 
 `cats`、`tasks` 是這一班的快照，存成**以 id 為 key 的物件**（不是陣列），結構見 `server/utils/shift.js` 開頭。
 當天（台灣時間）的班每次載入都用後台最新設定重建，再把已填的資料併回去（`syncWithSettings`）；過去的班保持當時的樣子。
+上一班離開時放風的貓，這一班記 `prev_released: true`（貓沒關籠，觀察分頁不用登記吃喝排泄）。
+這個值記在這一班自己身上：當天的班每次載入會照上一班現在的記錄重算，有變才寫回（`persistPrevReleased`）。
 
 醫療、吃藥、收尾打勾時記下 `done_by`（登入者暱稱）與 `done_at`，畫面顯示「✓ 阿明 21:40」。
-`reports` 是 `{ arrive, care, meds, leave, required }`，下一班在觀察分頁上方看到上一班各分頁的回報
-與沒勾完的收尾（`/api/shift/previous`）；LINE 手動發送會帶上有寫的分頁回報。
+`reports` 是 `{ 分頁: { user_id: { name, text, at } } }`：每個分頁、每個人各一段，用登入身分（沒有「填表志工」）。
+每個人只能改自己那一段，名字與時間由 server 填（`server/api/shift/update.post.js`）。
+下一班在**同一個分頁**上方看到上一班的回報（`components/ShiftReportBlock.vue`，可摺疊，這台裝置會記住），
+收尾分頁另外列沒勾完的項目。每個分頁的「LINE 發送至群組」只發那個分頁、這一班所有人的回報（標作者），不合在一起。舊格式的回報放在 `legacy` 底下，顯示為「（舊資料）」。
 
-存檔不是整筆覆寫：前端每改一格只送那一格（例如 `cats.12.medical.5`、`reports.care`），
+存檔不是整筆覆寫：前端每改一格只送那一格（例如 `cats.12.medical.5`、`reports.care.<user_id>`），
 `/api/shift/update` 呼叫資料庫函式 `shift_apply` 套用，同一班的請求會排隊。
 **兩個人同時改不同的貓或項目不會互相覆蓋**；同一格才是後存的贏。
 `shift_apply` 只開放給 service_role，前端不能直接呼叫。

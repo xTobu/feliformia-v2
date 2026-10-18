@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     const prev = previousShiftOf(date, shift)
     const { data, error } = await supabase
         .from('shifts')
-        .select('reports, member, cats, tasks')
+        .select('reports, cats, tasks')
         .eq('date', prev.date)
         .eq('shift', prev.shift)
         .maybeSingle()
@@ -23,21 +23,24 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 500, message: error.message })
     }
     if (!data) {
-        return { ...prev, exists: false, reports: {}, member: null, released: [], unfinished: [] }
+        return { ...prev, exists: false, reports: {}, released: [], unfinished: [] }
     }
 
     return {
         ...prev,
         exists: true,
+        // { 分頁: { user_id: { name, text, at } } }
         reports: data.reports || {},
-        member: data.member,
         released: Object.values(data.cats || {})
             .filter((c) => c.released)
             .map((c) => c.cat_id),
-        // 收尾清單裡沒勾的（只看建立當下的快照，跟後台現在的設定無關）
+        // 收尾清單裡沒勾的（只看建立當下的快照，跟後台現在的設定無關），前面標對象：「餅乾：剪指甲」
         unfinished: Object.values(data.tasks || {})
             .filter((t) => t.kind === 'required' && !t.done)
             .sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0))
-            .map((t) => t.content),
+            .map((t) => {
+                const target = t.cat_id ? data.cats?.[t.cat_id]?.name : t.location || '全員'
+                return target ? `${target}：${t.content}` : t.content
+            }),
     }
 })

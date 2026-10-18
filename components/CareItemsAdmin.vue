@@ -1,10 +1,10 @@
 <template>
     <div class="care-admin">
-        <!-- 已有卡片的貓在卡片上新增；這顆是給全員或某個位置用的（不分對象的清單就是一般的新增） -->
+        <!-- 已有卡片的貓在卡片上新增；這顆是給全員或某個位置用的 -->
         <div class="page-header">
             <h1>{{ title }}</h1>
             <el-button type="primary" @click="openDialog()">
-                {{ targeted ? '＋ 全員或位置' : '＋ 新增' }}
+                ＋ 全員或位置
             </el-button>
         </div>
 
@@ -26,7 +26,7 @@
                     class="cat-group"
                     :class="{ bare: group.items.length === 0 && !emptyGroupText }"
                 >
-                    <div v-if="targeted" class="cat-group-header">
+                    <div class="cat-group-header">
                         <span class="cat-name">{{ group.name }}</span>
                         <span class="cat-count">{{ group.items.length }} 項</span>
                         <el-button
@@ -143,7 +143,7 @@
             class="item-dialog"
         >
             <el-form :model="form" label-position="top" @submit.prevent>
-                <el-form-item v-if="targeted" label="對象">
+                <el-form-item label="對象">
                     <!-- 貓咪、全員／位置分兩組。不開搜尋：手機點了不會跳出鍵盤 -->
                     <el-select v-model="form.target" placeholder="選擇貓咪或位置">
                         <el-option-group label="貓咪">
@@ -154,9 +154,14 @@
                                 :value="`cat:${cat.id}`"
                             />
                         </el-option-group>
-                        <!-- 全員：每隻貓都適用；位置：那個位置的貓都適用 -->
+                        <!-- 全員：每隻貓都適用；位置：那個位置的貓都適用；貓屋：整間屋子（只有收尾） -->
                         <el-option-group label="全員／位置">
                             <el-option label="全員" value="all" />
+                            <el-option
+                                v-if="withHouse"
+                                :label="HOUSE"
+                                :value="`loc:${HOUSE}`"
+                            />
                             <el-option
                                 v-for="location in LOCATIONS"
                                 :key="location"
@@ -232,8 +237,8 @@
 
 <script setup>
 // 飲食（diet_items）、醫療（medical_items）、值班收尾（required_items）三頁共用。
-// 共同欄位：shift、start_date / end_date、sort_order。
-// 飲食、醫療另有 cat_id / location（兩個都空 = 全員）；收尾不分對象（targeted = false）
+// 共同欄位：cat_id / location（兩個都空 = 全員）、shift、start_date / end_date、sort_order。
+// 收尾的 location 多一個「貓屋」（withHouse）
 import draggable from 'vuedraggable';
 import Swal from 'sweetalert2';
 
@@ -248,8 +253,8 @@ const props = defineProps({
     reasonField: { type: Object, default: null },
     // 沒有項目的貓顯示的文字；空字串就只顯示標題列
     emptyGroupText: { type: String, default: '' },
-    // false：不分貓咪或位置，整頁就是一張清單（收尾）。表裡沒有 cat_id、location
-    targeted: { type: Boolean, default: true },
+    // 對象多一個「貓屋」（整間屋子，跟貓無關）。只有收尾用
+    withHouse: { type: Boolean, default: false },
 });
 
 const supabase = useSupabaseClient();
@@ -272,7 +277,7 @@ const hasBothSections = computed(
 
 function emptyForm(target = '') {
     return {
-        target: props.targeted ? target : 'all',
+        target,
         category: props.categories[0] || null,
         main: '',
         reason: '',
@@ -358,11 +363,8 @@ async function loadAll() {
 }
 
 // 分組：未領養的貓照貓咪管理的順序列出，沒有項目的也列；
-// 已領養貓的舊項目接在貓後面；全員、位置放最後（全員 → 位置，placeRank，跟值班表一致）
+// 已領養貓的舊項目接在貓後面；全員、位置放最後（全員 → 貓屋 → 位置，placeRank，跟值班表一致）
 function buildGroups(list) {
-    if (!props.targeted) {
-        return [{ key: 'all', name: '', isCat: false, target: 'all', items: [...list] }];
-    }
     const catById = new Map(allCats.value.map((c) => [c.id, c]));
     const catGroups = new Map(
         activeCats.value.map((cat) => [
@@ -459,7 +461,7 @@ async function saveItem() {
     }
 
     const payload = {
-        ...(props.targeted ? parseTarget(form.value.target) : {}),
+        ...parseTarget(form.value.target),
         [props.mainField.key]: main,
         shift: form.value.shift,
         start_date: form.value.start_date || null,
@@ -503,9 +505,7 @@ async function saveItem() {
 // 刪除確認
 async function confirmDelete(item, groupName) {
     const { isConfirmed } = await Swal.fire({
-        text: props.targeted
-            ? `確定要刪除「${groupName}」的這個項目嗎？`
-            : `確定要刪除「${item[props.mainField.key]}」嗎？`,
+        text: `確定要刪除「${groupName}」的這個項目嗎？`,
         showCancelButton: true,
         confirmButtonText: '刪除',
         cancelButtonText: '取消',
@@ -629,7 +629,8 @@ onMounted(loadAll);
     display: flex;
     align-items: center;
     gap: 6px;
-    padding: 10px 8px;
+    // 左邊 14px：貓名跟下面項目的 ⋮⋮ 對齊（.cat-item 8px ＋ 把手的 -4px margin ＋ 10px padding）
+    padding: 10px 8px 10px 14px;
     background: #f4f5f5;
     border-bottom: 1px solid #e0e0e0;
 
