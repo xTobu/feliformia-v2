@@ -45,6 +45,46 @@
                 </NuxtLink>
             </div>
 
+            <!-- 新版：跟上面的舊版並行，資料表各自獨立（cat_profiles、diet_items…），讓大家慢慢換過來 -->
+            <div class="section-label">新版值班記錄（試行中）</div>
+            <div class="menu-list">
+                <NuxtLink to="/admin/cat-profiles" class="menu-item">
+                    <div class="menu-icon">🐱</div>
+                    <div class="menu-content">
+                        <div class="menu-title">貓咪管理</div>
+                        <div class="menu-desc">新增、編輯、排序貓咪與位置</div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
+
+                <NuxtLink to="/admin/diet" class="menu-item">
+                    <div class="menu-icon">🍚</div>
+                    <div class="menu-content">
+                        <div class="menu-title">飲食管理</div>
+                        <div class="menu-desc">乾乾、罐罐、補充與其他飲食</div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
+
+                <NuxtLink to="/admin/medical" class="menu-item">
+                    <div class="menu-icon">💊</div>
+                    <div class="menu-content">
+                        <div class="menu-title">醫療管理</div>
+                        <div class="menu-desc">吃藥、醫療與其他照護事項</div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
+
+                <NuxtLink to="/admin/required" class="menu-item">
+                    <div class="menu-icon">✅</div>
+                    <div class="menu-content">
+                        <div class="menu-title">值班收尾管理</div>
+                        <div class="menu-desc">每一班離開前一定要勾完的事</div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
+            </div>
+
             <NuxtLink to="/" class="back-link">← 返回首頁</NuxtLink>
         </div>
     </ClientOnly>
@@ -73,6 +113,24 @@ useHead({
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+// 新版區塊的小標題：標題後面拉一條細線，跟上面的舊版分開
+.section-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 28px 0 12px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #4a4542;
+    text-align: left;
+
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #d8d4d1;
+    }
 }
 
 .menu-item {

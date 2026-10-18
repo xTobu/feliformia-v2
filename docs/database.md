@@ -142,11 +142,54 @@ votes.data
 
 ---
 
+## 新版值班系統（試行中）
+
+跟上面的 `cats`、`notices`、`medicines`、`regulars` **並行**，資料各自獨立、不互通，讓大家慢慢換過來。
+建表在 `supabase/migrations/*_create_care_tables.sql`，位置清單在 `composables/locations.js`
+（資料庫有 check 擋，兩邊要一起改）。
+
+| 表 | 頁面 | 說明 |
+|---|---|---|
+| `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order` |
+| `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／補充／其他，`content` |
+| `medical_items` | `/admin/medical` | 醫療。`category` 醫療／吃藥／其他，`treatment`、`reason` |
+| `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單，不分貓。`content` |
+| `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁各自的回報 |
+| `shift_comments` | `/shift` | 每隻貓、每個分頁的留言，只新增不覆寫 |
+
+**三張事項表的共同欄位**：`shift` 是 `morning` / `night` / `both`，`start_date` / `end_date` 空代表不限。
+飲食、醫療另有對象：`cat_id` 有值 = 那隻貓；`location` 有值 = 那個位置的貓；兩個都空 = 全員
+（不能同時有值）。收尾不分對象。
+刪掉一隻貓會連帶刪掉牠的事項與留言（on delete cascade），不會變成全員。
+
+**權限**：全部登入可讀。`cat_profiles` 與三張事項表只有管理員能寫（`is_admin()`，前端後台直接寫）；
+`shifts`、`shift_comments` 沒有寫入 policy，一律走 `server/api/shift/*`（service key）。
+
+### shifts 的快照與局部更新
+
+`cats`、`tasks` 是這一班的快照，存成**以 id 為 key 的物件**（不是陣列），結構見 `server/utils/shift.js` 開頭。
+當天（台灣時間）的班每次載入都用後台最新設定重建，再把已填的資料併回去（`syncWithSettings`）；過去的班保持當時的樣子。
+
+醫療、吃藥、收尾打勾時記下 `done_by`（登入者暱稱）與 `done_at`，畫面顯示「✓ 阿明 21:40」。
+`reports` 是 `{ arrive, care, meds, leave, required }`，下一班在觀察分頁上方看到上一班各分頁的回報
+與沒勾完的收尾（`/api/shift/previous`）；LINE 手動發送會帶上有寫的分頁回報。
+
+存檔不是整筆覆寫：前端每改一格只送那一格（例如 `cats.12.medical.5`、`reports.care`），
+`/api/shift/update` 呼叫資料庫函式 `shift_apply` 套用，同一班的請求會排隊。
+**兩個人同時改不同的貓或項目不會互相覆蓋**；同一格才是後存的贏。
+`shift_apply` 只開放給 service_role，前端不能直接呼叫。
+
+---
+
 ## Realtime
 
 需啟用 Realtime 的表：
 - `votes` - 讓多用戶即時看到彼此的投票
 - `calendar_events` - 讓多用戶即時看到彼此的行事曆異動
+- `medicines`、`regulars` - 舊版餵藥與例行紀錄的即時同步
+- `shifts`、`shift_comments` - 新版值班記錄表的即時同步與留言
+
+（現在都由 `supabase/migrations/` 管理，下面的 SQL 只是參考）
 
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE votes;
