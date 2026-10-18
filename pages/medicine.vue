@@ -621,6 +621,23 @@ onUnmounted(() => {
 
 .record_item {
     padding-right: 10px;
+    // 一隻貓一張卡片。蓋掉 layouts/default.vue 的斑馬紋（/regular 仍保留）
+    border: 1px solid #d8d4d1;
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 14px;
+
+    &:nth-child(even) {
+        background-color: transparent;
+    }
+
+    &:first-child {
+        border-top-color: #d8d4d1;
+    }
+
+    .name {
+        border-bottom-right-radius: 6px;
+    }
 
     .detail {
         > .d_flex.divided {
