@@ -22,13 +22,23 @@
                     <div class="menu-arrow">→</div>
                 </NuxtLink>
 
-                <NuxtLink to="/admin/notices" class="menu-item">
+                <NuxtLink to="/admin/treatment" class="menu-item">
                     <div class="menu-icon">📋</div>
                     <div class="menu-content">
-                        <div class="menu-title">特殊醫療管理</div>
+                        <div class="menu-title">醫療管理</div>
                         <div class="menu-desc">
                             吃藥、敷藥、觀察等醫療事項與其他值班事項
                         </div>
+                    </div>
+                    <div class="menu-arrow">→</div>
+                </NuxtLink>
+
+                <!-- 舊版：所有事項一起管理，給 /medicine 用；飲食管理、醫療管理穩定後再拿掉 -->
+                <NuxtLink to="/admin/notices" class="menu-item">
+                    <div class="menu-icon">📋</div>
+                    <div class="menu-content">
+                        <div class="menu-title">餵藥及特殊飲食管理（舊版）</div>
+                        <div class="menu-desc">所有事項一起管理</div>
                     </div>
                     <div class="menu-arrow">→</div>
                 </NuxtLink>

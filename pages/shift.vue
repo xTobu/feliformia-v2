@@ -49,7 +49,7 @@
                     </button>
                 </div>
 
-                <!-- ========== 到班：上一班放的飯吃了多少、排泄 ========== -->
+                <!-- ========== 觀察：上一班放的飯吃了多少、排泄 ========== -->
                 <div v-show="tab === 'arrive'" class="W100">
                     <div v-if="prev.note" class="W100 ps f_grey prev-note">
                         <b>*前班備註：</b>
@@ -156,7 +156,7 @@
                     </div>
                 </div>
 
-                <!-- ========== 照護：醫療事項（只列有事項的貓） ========== -->
+                <!-- ========== 醫療：醫療事項（只列有事項的貓） ========== -->
                 <div v-show="tab === 'care'" class="W100">
                     <div
                         v-for="cat in careCats"
@@ -232,7 +232,7 @@
                     />
                 </div>
 
-                <!-- ========== 離班：放飯（主食＋隨餐）、放風 ========== -->
+                <!-- ========== 放飯：乾乾、罐罐、補充、其他、放風 ========== -->
                 <div v-show="tab === 'leave'" class="W100">
                     <!-- 全員的隨餐放最上面，不在每隻貓重複 -->
                     <div
@@ -248,7 +248,7 @@
                                 class="d_flex item-row"
                                 :class="{ divided: index > 0 }"
                             >
-                                <p class="f_blue">隨餐</p>
+                                <p class="f_blue">{{ categoryLabel(item.category, '隨餐') }}</p>
                                 <div class="d_flex">
                                     <div class="txt">
                                         <font class="treatment">{{ item.treatment }}</font>
@@ -274,14 +274,14 @@
                     >
                         <div class="name">{{ cat.name }}</div>
                         <div class="detail">
-                            <!-- 主食：照做就好，不用打勾 -->
+                            <!-- 乾乾、罐罐：照做就好，不用打勾 -->
                             <div
                                 v-for="(meal, index) in cat.meals"
                                 :key="meal.notice_id || `diet-${index}`"
                                 class="d_flex item-row"
                                 :class="{ divided: index > 0 }"
                             >
-                                <p class="f_blue">主食</p>
+                                <p class="f_blue">{{ categoryLabel(meal.category, '主食') }}</p>
                                 <div class="d_flex">
                                     <div class="txt full">
                                         <font class="treatment">{{ meal.treatment }}</font>
@@ -293,7 +293,7 @@
                                 v-if="cat.meals.length === 0"
                                 class="d_flex item-row"
                             >
-                                <p class="f_blue">主食</p>
+                                <p class="f_blue">飲食</p>
                                 <div class="d_flex">
                                     <div class="txt full">
                                         <font class="f_grey">尚未設定飲食</font>
@@ -301,13 +301,13 @@
                                 </div>
                             </div>
 
-                            <!-- 隨餐 -->
+                            <!-- 補充、其他：加進飯裡，要打勾 -->
                             <div
                                 v-for="item in cat.with_meal"
                                 :key="item.notice_id"
                                 class="d_flex item-row divided"
                             >
-                                <p class="f_blue">隨餐</p>
+                                <p class="f_blue">{{ categoryLabel(item.category, '隨餐') }}</p>
                                 <div class="d_flex">
                                     <div class="txt">
                                         <font class="treatment">{{ item.treatment }}</font>
@@ -327,7 +327,7 @@
                                 </div>
                             </div>
 
-                            <!-- 放風：離開時沒有關籠。下一班到班時會看到 -->
+                            <!-- 放風：離開時沒有關籠。下一班在觀察分頁會看到 -->
                             <div class="d_flex item-row divided">
                                 <p class="f_blue">放風</p>
                                 <div class="d_flex">
@@ -354,7 +354,7 @@
                         type="textarea"
                         v-model="formData.note"
                         :disabled="isDisabled"
-                        placeholder="值班回報（下一班會在到班時看到）"
+                        placeholder="值班回報（下一班會在觀察分頁看到）"
                         @input="onAutoSave"
                     />
                 </div>
@@ -424,7 +424,8 @@
 </template>
 
 <script setup>
-// 值班記錄表：一個班一筆 shifts，合併到班（吃喝排泄）、照護（醫療）、離班（放飯、放風）。
+// 值班記錄表：一個班一筆 shifts，合併觀察（吃喝排泄）、醫療、放飯（放什麼、放風）。
+// 分頁的 value 沿用 arrive / care / leave，網址參數不變，舊連結還能用
 // /regular、/medicine 維持原樣，兩邊資料不互通
 import { ElMessage } from 'element-plus';
 import { debounce } from 'lodash-es';
@@ -485,6 +486,21 @@ const careCats = computed(() =>
     formData.value.cats.filter((cat) => cat.medical.length > 0)
 );
 
+// 飲食管理的類別。快照是建立當下的資料，舊的班可能還是 meal / with_meal，
+// 或根本沒有 category，所以都要有預設文字
+const CATEGORY_LABELS = {
+    dry: '乾乾',
+    wet: '罐罐',
+    supplement: '補充',
+    diet_other: '其他',
+    meal_med: '醫藥', // 舊的班才有，新的藥都歸醫療
+};
+const ADDON_CATEGORIES = ['supplement', 'diet_other', 'meal_med', 'with_meal'];
+
+function categoryLabel(category, fallback) {
+    return CATEGORY_LABELS[category] || fallback;
+}
+
 // 非貓咪項目照名字分組（全員、小房間…）
 function groupTasks(filter) {
     const map = new Map();
@@ -495,10 +511,10 @@ function groupTasks(filter) {
     return [...map].map(([name, items]) => ({ name, items }));
 }
 const careTaskGroups = computed(() =>
-    groupTasks((t) => t.category !== 'with_meal')
+    groupTasks((t) => !ADDON_CATEGORIES.includes(t.category))
 );
 const leaveTaskGroups = computed(() =>
-    groupTasks((t) => t.category === 'with_meal')
+    groupTasks((t) => ADDON_CATEGORIES.includes(t.category))
 );
 
 // 分頁上的數字：還沒打勾的項目數
@@ -507,20 +523,20 @@ const tabList = computed(() => {
     const cats = formData.value.cats;
     const tasks = formData.value.tasks;
     return [
-        { value: 'arrive', label: '到班', remaining: 0 },
+        { value: 'arrive', label: '觀察', remaining: 0 },
         {
             value: 'care',
-            label: '照護',
+            label: '醫療',
             remaining:
                 cats.reduce((sum, c) => sum + undone(c.medical), 0) +
-                undone(tasks.filter((t) => t.category !== 'with_meal')),
+                undone(tasks.filter((t) => !ADDON_CATEGORIES.includes(t.category))),
         },
         {
             value: 'leave',
-            label: '離班',
+            label: '放飯',
             remaining:
                 cats.reduce((sum, c) => sum + undone(c.with_meal), 0) +
-                undone(tasks.filter((t) => t.category === 'with_meal')),
+                undone(tasks.filter((t) => ADDON_CATEGORIES.includes(t.category))),
         },
     ];
 });
@@ -627,10 +643,12 @@ async function InitMemberList() {
 async function InitShift() {
     const { date, shift } = formData.value;
     const params = { date: $dayjs(date).format('YYYY-MM-DD'), shift };
+    // cache: 'no-store'：同一個網址同時被請求兩次時（開兩個分頁、或直接打開過 API 網址），
+    // Chrome 會讓後到的等前一個寫完快取，最多卡 20 秒。這兩支每次都要最新資料，不用快取
     const [data, prevData] = await Promise.all([
-        $fetch('/api/shift', { params }),
+        $fetch('/api/shift', { params, cache: 'no-store' }),
         // 前一班唯讀：沒有記錄就回 null，不會建立
-        $fetch('/api/shift/previous', { params }).catch((e) => {
+        $fetch('/api/shift/previous', { params, cache: 'no-store' }).catch((e) => {
             console.error('InitPrevShift error:', e);
             return null;
         }),
@@ -795,7 +813,7 @@ watch(
         }
     }
 
-    // ---- 到班：跟 /regular 相同的吃喝排泄樣式 ----
+    // ---- 觀察：跟 /regular 相同的吃喝排泄樣式 ----
     .el-slider {
         &.is-disabled {
             opacity: 0.5;
@@ -916,7 +934,7 @@ watch(
     // 貓名 14px，行高經實測補償，見 pages/medicine.vue
     padding-top: 35px;
 
-    // 不用 overflow: hidden 裁圓角：到班的滑桿標籤（吃光）會超出右邊被切掉。
+    // 不用 overflow: hidden 裁圓角：觀察分頁的滑桿標籤（吃光）會超出右邊被切掉。
     // 改成標籤自己配合卡片的圓角（6px 減掉 1px 邊框）
     .name {
         height: 26px;
@@ -926,7 +944,7 @@ watch(
         border-bottom-right-radius: 6px;
     }
 
-    // 到班的滑桿最右邊的「吃光」會超出滑桿半個字寬，右邊留跟 /regular 一樣的 25px
+    // 觀察分頁滑桿最右邊的「吃光」會超出滑桿半個字寬，右邊留跟 /regular 一樣的 25px
     &.intake-card {
         padding-right: 25px;
     }

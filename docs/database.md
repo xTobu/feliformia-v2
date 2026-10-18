@@ -125,17 +125,20 @@ votes.data
 
 | category | 中文 | 後台 |
 |---|---|---|
-| `meal` | 主食 | 飲食管理 `/admin/diet` |
-| `with_meal` | 隨餐 | 飲食管理 `/admin/diet` |
-| `medical` | 醫療 | 特殊醫療管理 `/admin/notices` |
-| `other` | 其他 | 特殊醫療管理 `/admin/notices` |
+| `dry` | 乾乾 | 飲食管理 `/admin/diet` |
+| `wet` | 罐罐 | 飲食管理 `/admin/diet` |
+| `supplement` | 補充 | 飲食管理 `/admin/diet` |
+| `diet_other` | 其他 | 飲食管理 `/admin/diet`（value 跟醫療的 `other` 分開） |
+| `medication` | 吃藥 | 醫療管理 `/admin/treatment` |
+| `medical` | 醫療 | 醫療管理 `/admin/treatment` |
+| `other` | 其他 | 醫療管理 `/admin/treatment` |
 
 | Column | Type | Description |
 |--------|------|-------------|
 | id | BIGINT | PK |
 | name | TEXT | 顯示用名稱。對得到貓時是貓名（取冒號前），對不到時是「全員」「小房間」這類標籤 |
 | cat_id | BIGINT | FK → cats.id，可 NULL。NULL 代表不屬於單一貓咪 |
-| category | TEXT | 見上表，預設 `medical`，有 CHECK 約束 |
+| category | TEXT | 見上表，預設 `medical`。**刻意不加 CHECK 約束**（同 calendar_events.type）：類別會隨實務增加，真相來源是 `components/CareItemsAdmin.vue` 的 `ALL_CATEGORIES`；打錯的值不會出現在任何一頁 |
 | treatment | TEXT | 內容，必填 |
 | reason | TEXT | 原因／備註，可 NULL |
 | shift | TEXT | `morning` / `night` / `both` |
@@ -146,17 +149,18 @@ votes.data
 **`medicines.cats` 是快照，不是參照。** 某個 date + shift 的紀錄**第一次被打開**時，
 `server/api/medicine/index.get.js` 才會把當下符合班別、期間的項目整份複製進去，
 之後就不再跟 `notices` 同步。所以修改內容或期間，**已經被打開過的班別不會跟著變**，
-從下一個還沒建立的班別開始才會生效。快照**不含主食**（`meal`）。
+從下一個還沒建立的班別開始才會生效。快照**不含乾乾、罐罐**（`dry`、`wet`）。
 
-`regulars` 也一樣是快照：貓名旁的飲食備註取自當下符合班別、期間的主食，
-串成一行；該貓沒有主食時退回 `cats.diet_note`（過渡期用，見 `server/api/regular/index.get.js`）。
+`regulars` 也一樣是快照：貓名旁的飲食備註取自當下符合班別、期間的乾乾、罐罐，
+串成一行；該貓兩者都沒有時退回 `cats.diet_note`（過渡期用，見 `server/api/regular/index.get.js`）。
 
 過了 `end_date` 的項目不會自動刪除，後台會標成「已結束」，改期間就能重新使用。
 
 ---
 
 ### shifts
-值班記錄（`/shift`）。一個班（date + shift）一筆，合併到班、照護、離班。
+值班記錄（`/shift`）。一個班（date + shift）一筆，合併觀察、醫療、放飯三個分頁
+（分頁 value 是 `arrive` / `care` / `leave`，網址參數 `?tab=` 用的就是這個）。
 `/regular`、`/medicine` 維持原樣，跟這張表**不互通**。
 
 | Column | Type | Description |
@@ -166,7 +170,7 @@ votes.data
 | shift | TEXT | `morning` / `night` |
 | cats | JSONB | 每隻貓這一班的快照（結構見下方） |
 | tasks | JSONB | 不屬於單一貓咪的項目（全員、小房間…）的快照 |
-| note | TEXT | 值班回報，下一班到班時會看到 |
+| note | TEXT | 值班回報，下一班在觀察分頁會看到 |
 | member | TEXT | 填表志工名字 |
 | updated_by | UUID | FK → auth.users，Realtime 用來忽略自己的更新 |
 | created_at / updated_at | TIMESTAMPTZ | |
@@ -178,22 +182,35 @@ votes.data
 ```
 [{
   cat_id, name, room,
-  intake:    { feed, feed_detail, can, can_detail, urine, feces, feces_warning },  // 到班，欄位同 regulars
-  medical:   [{ notice_id, treatment, reason, end_date, done }],                 // 照護：醫療＋其他
-  meals:     [{ notice_id, treatment, reason }],                                 // 離班：主食
-  with_meal: [{ notice_id, treatment, reason, end_date, done }],                 // 離班：隨餐
-  released:  false                                                               // 離班：放風（離開時沒關籠）
+  intake:    { feed, feed_detail, can, can_detail, urine, feces, feces_warning },  // 觀察，欄位同 regulars
+  medical:   [{ notice_id, category, treatment, reason, end_date, done }],       // 醫療：吃藥、醫療、其他
+  meals:     [{ notice_id, category, treatment, reason }],                       // 放飯：乾乾、罐罐（只看）
+  with_meal: [{ notice_id, category, treatment, reason, end_date, done }],       // 放飯：補充、其他（打勾）
+  released:  false                                                               // 放飯：放風（離開時沒關籠）
 }]
 ```
 
 `tasks` 是 `[{ notice_id, name, category, treatment, reason, end_date, done }]`，
-`category` 為 `with_meal` 的放離班分頁最上面，其他放照護分頁最下面。
+`category` 為補充、飲食其他的放放飯分頁最上面，其他放醫療分頁最下面。
+藥一律歸醫療管理（曾經有過的 `meal_med` 醫藥已併入 `medication` 吃藥）。
+`meals` / `with_meal` 是沿用的舊 key 名；更早建立的班裡，`category` 可能是舊值 `meal` / `with_meal` 或不存在，畫面要有預設文字。
 
-**也是快照**：這一班第一次被打開時（`server/api/shift/index.get.js`）從未領養的 `cats`
-與符合班別、期間的 `notices` 建立，之後不再同步。貓沒有主食時，`meals` 退回 `cats.diet_note`。
+**快照，但當天的班會同步**：這一班第一次被打開時（`server/api/shift/index.get.js`）從未領養的 `cats`
+與符合班別、期間的 `notices` 建立。之後：
+
+- **當天（台灣時間）的班**：每次載入都用後台最新設定重建，再把這班已填的資料併回去
+  （`syncWithSettings`）。觀察、放風照舊；項目照 `notice_id` 保留「完成」；
+  後台已刪除但已打勾的項目留著，沒打勾的拿掉；乾乾、罐罐一律用最新的；
+  建立後才領養的貓，有填過資料才留著。合併結果不在讀取時寫回，下一次存檔才整筆存回。
+- **過去的班**：不再同步，保持當時的樣子。
+- 不論哪一天，貓的順序都照貓咪管理**目前**的順序重排（`sortByCatOrder`）。
+
+貓沒有乾乾、罐罐時，`meals` 退回 `cats.diet_note`。
+
+> 這跟 `medicines` / `regulars` 不同：那兩張表建立後就完全不同步。
 
 **放風**：下一班用 `/api/shift/previous`（唯讀，不會建立記錄）讀前一班的 `released`，
-在到班分頁標「上一班放風」。
+在觀察分頁標「上一班放風」。
 
 **整筆覆寫**：存檔時整個 `cats` / `tasks` 一起寫回。兩人同時改不同的貓，後存的會蓋掉先存的。
 

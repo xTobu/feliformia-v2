@@ -235,8 +235,10 @@
 </template>
 
 <script setup>
-// 飲食管理與特殊醫療管理共用。兩頁的資料都在 notices 表，靠 category 分開：
-// meal 主食、with_meal 隨餐 → 飲食管理；medical 醫療、other 其他 → 特殊醫療管理
+// 飲食管理與醫療管理共用。兩頁的資料都在 notices 表，靠 category 分開：
+// dry 乾乾、wet 罐罐、supplement 補充、diet_other 其他 → 飲食管理；
+// medication 吃藥、medical 醫療、other 其他 → 醫療管理
+// （藥一律歸醫療管理，就算是拌在飯裡的）
 import draggable from 'vuedraggable';
 import Swal from 'sweetalert2';
 import { ElMessage } from 'element-plus';
@@ -246,7 +248,7 @@ const props = defineProps({
     // 這一頁管的類別，第一個是新增時的預設值
     categories: { type: Array, required: true },
     // 非貓咪的組（全員、小房間…）放最前或最後，跟值班表上出現的位置一致：
-    // 飲食的全員隨餐在離班分頁最上面，醫療的值班事項在照護分頁最下面
+    // 飲食的全員項目在值班表放飯分頁最上面，醫療的值班事項在醫療分頁最下面
     nonCatPosition: { type: String, default: 'top' },
     addLabel: { type: String, default: '＋ 全員或其他' },
     emptyText: { type: String, default: '尚無項目' },
@@ -263,20 +265,24 @@ const props = defineProps({
 });
 
 const ALL_CATEGORIES = [
-    { value: 'meal', label: '主食', page: '飲食管理' },
-    { value: 'with_meal', label: '隨餐', page: '飲食管理' },
-    { value: 'medical', label: '醫療', page: '特殊醫療管理' },
-    { value: 'other', label: '其他', page: '特殊醫療管理' },
+    { value: 'dry', label: '乾乾', page: '飲食管理' },
+    { value: 'wet', label: '罐罐', page: '飲食管理' },
+    { value: 'supplement', label: '補充', page: '飲食管理' },
+    // value 跟醫療管理的 other 分開，兩頁的「其他」才不會混在一起
+    { value: 'diet_other', label: '其他', page: '飲食管理' },
+    { value: 'medication', label: '吃藥', page: '醫療管理' },
+    { value: 'medical', label: '醫療', page: '醫療管理' },
+    { value: 'other', label: '其他', page: '醫療管理' },
 ];
 
 const pageCategories = computed(() =>
     ALL_CATEGORIES.filter((c) => props.categories.includes(c.value))
 );
 
-// 另一頁與搬過去時的類別：搬到飲食管理多半是隨餐藥，搬到特殊醫療管理預設醫療
+// 另一頁與搬過去時的類別：搬到飲食管理預設補充，搬到醫療管理預設吃藥
 const otherPage = computed(() => {
     const others = ALL_CATEGORIES.filter((c) => !props.categories.includes(c.value));
-    const target = others.find((c) => c.value === 'with_meal') || others[0];
+    const target = others.find((c) => ['supplement', 'medication'].includes(c.value)) || others[0];
     return { page: target.page, category: target.value };
 });
 

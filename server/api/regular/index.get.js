@@ -86,7 +86,7 @@ export default defineEventHandler(async (event) => {
     }
 })
 
-// 飲食備註改由飲食管理（notices 的「主食」）提供：這一班、在期間內的主食串起來。
+// 飲食備註改由飲食管理（notices 的乾乾、罐罐）提供：這一班、在期間內的串起來。
 // 還沒在飲食管理設定的貓，退回貓咪資料上的 diet_note，過渡期不會空白
 async function getCatList(date, shift) {
     const [{ data, error }, meals] = await Promise.all([
@@ -106,7 +106,8 @@ async function getCatList(date, shift) {
         }))
 }
 
-// 回傳 Map<cat_id, '主食1；主食2'>。category 欄位還沒加的資料庫會拿到空 Map
+// 回傳 Map<cat_id, '乾乾內容；罐罐內容'>。category 欄位還沒加的資料庫會拿到空 Map
+const FOOD_CATEGORIES = ['dry', 'wet']
 async function getMealNotes(date, shift) {
     const { data, error } = await supabase
         .from('notices')
@@ -117,7 +118,7 @@ async function getMealNotes(date, shift) {
 
     const meals = new Map()
     for (const notice of data) {
-        if (notice.category !== 'meal' || !notice.cat_id) continue
+        if (!FOOD_CATEGORIES.includes(notice.category) || !notice.cat_id) continue
         if (notice.start_date && notice.start_date > date) continue
         if (notice.end_date && notice.end_date < date) continue
         const list = meals.get(notice.cat_id) || []

@@ -2,7 +2,7 @@
     <ClientOnly>
         <CareItemsAdmin
             title="飲食管理"
-            :categories="['meal', 'with_meal']"
+            :categories="['dry', 'wet', 'supplement', 'diet_other']"
             empty-text="尚無貓咪"
             empty-group-text="尚未設定飲食"
             :labels="{ treatment: '內容', reason: '備註' }"

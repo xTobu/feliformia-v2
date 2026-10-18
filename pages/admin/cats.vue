@@ -296,7 +296,7 @@ onMounted(() => {
     }
 }
 
-// 跟飲食管理、特殊醫療管理一致：標題靠左、新增按鈕靠右
+// 跟飲食管理、醫療管理一致：標題靠左、新增按鈕靠右
 .page-header {
     display: flex;
     align-items: center;

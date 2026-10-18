@@ -81,8 +81,10 @@ export default defineEventHandler(async (event) => {
 
 // start_date / end_date 是期間，NULL 代表該端不限。
 // 日期都是 'YYYY-MM-DD'，直接比字串就對了。
-// 主食（category = 'meal'）歸飲食管理，不放進這份紀錄；隨餐藥在值班表做好前先留著。
+// 乾乾、罐罐（放什麼飯）歸飲食管理，不放進這份紀錄；
+// 補充、飲食的其他（加進飯裡、要打勾的）在值班表普及前先留著。
 // 在 JS 濾而不是 .neq()：category 欄位還沒加的資料庫也不會壞
+const FOOD_CATEGORIES = ['dry', 'wet']
 // 貓的順序跟貓咪管理走（後台已經不能拖貓），同一隻貓裡照 notices.order；
 // 不屬於單一貓咪的（全員、小房間…）排最後
 async function getNoticeList(shift, date) {
@@ -98,7 +100,7 @@ async function getNoticeList(shift, date) {
     const rank = (n) => catOrder.get(n.cat_id) ?? Number.MAX_SAFE_INTEGER
 
     return data
-        .filter((notice) => notice.category !== 'meal')
+        .filter((notice) => !FOOD_CATEGORIES.includes(notice.category))
         .filter(
             (notice) =>
                 (!notice.start_date || notice.start_date <= date) &&
