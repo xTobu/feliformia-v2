@@ -152,7 +152,7 @@ votes.data
 |---|---|---|
 | `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order` |
 | `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／補充／其他，`content` |
-| `medical_items` | `/admin/medical` | 醫療。`category` 醫療／吃藥／其他，`treatment`、`reason` |
+| `medical_items` | `/admin/medical` | 醫療。`category` 醫療／吃藥，`treatment`、`reason` |
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `shift_comments` | `/shift` | 每隻貓、每個分頁的留言，只新增不覆寫 |

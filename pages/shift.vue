@@ -1075,7 +1075,7 @@ function groupTasks(filter) {
     return [...map.values()].sort((a, b) => placeRank(a.location) - placeRank(b.location));
 }
 
-// 醫療分頁與吃藥分頁：都是醫療管理的項目，依類別分開（吃藥一頁，醫療、其他一頁）
+// 醫療分頁與吃藥分頁：都是醫療管理的項目，依類別分開（吃藥一頁，醫療一頁；舊資料的其他也算醫療）
 const isMeds = (item) => item.category === '吃藥';
 const medicalSections = computed(() =>
     [

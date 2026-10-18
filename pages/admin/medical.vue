@@ -3,7 +3,7 @@
         <CareItemsAdmin
             title="醫療管理"
             table="medical_items"
-            :categories="['醫療', '吃藥', '其他']"
+            :categories="['醫療', '吃藥']"
             :main-field="{
                 key: 'treatment',
                 label: '事項',
@@ -19,7 +19,7 @@
 </template>
 
 <script setup>
-// 醫療管理（medical_items）。吃藥在值班記錄表的吃藥分頁，醫療、其他在醫療分頁，都要打勾
+// 醫療管理（medical_items）。吃藥在值班記錄表的吃藥分頁，醫療在醫療分頁，都要打勾
 definePageMeta({
     middleware: 'admin',
     ssr: false,
