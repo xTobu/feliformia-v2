@@ -8,24 +8,20 @@
             </el-button>
         </div>
 
-        <!-- 一隻貓一張卡片。☰ 拖整隻貓（listAllCats 時貓的順序跟貓咪管理走，不能拖），⋮⋮ 在同一隻貓裡拖項目 -->
-        <draggable
-            v-model="groups"
-            item-key="key"
-            handle=".group-handle"
-            ghost-class="ghost"
-            :disabled="listAllCats"
-            @end="onDragEnd"
-            class="notices-list"
-        >
-            <template #item="{ element: group }">
-                <div class="cat-group">
+        <!-- 一隻貓一張卡片，順序跟貓咪管理走（要調整請到貓咪管理）。⋮⋮ 在同一隻貓裡拖項目 -->
+        <div class="notices-list">
+            <template v-for="(group, index) in groups" :key="group.key">
+                <!-- 貓與非貓咪項目（全員、小房間、費洛蒙…）交界處隔一條線 -->
+                <div
+                    v-if="index > 0 && group.isCat !== groups[index - 1].isCat"
+                    class="group-divider"
+                    role="separator"
+                ></div>
+                <div
+                    class="cat-group"
+                    :class="{ bare: group.items.length === 0 && !emptyGroupText }"
+                >
                     <div class="cat-group-header">
-                        <span
-                            v-if="!listAllCats"
-                            class="drag-handle group-handle"
-                            >☰</span
-                        >
                         <span class="cat-name">{{ group.name }}</span>
                         <span class="cat-count">{{ group.items.length }} 項</span>
                         <el-button
@@ -36,7 +32,10 @@
                         </el-button>
                     </div>
 
-                    <div v-if="group.items.length === 0" class="cat-empty">
+                    <div
+                        v-if="group.items.length === 0 && emptyGroupText"
+                        class="cat-empty"
+                    >
                         {{ emptyGroupText }}
                     </div>
 
@@ -132,7 +131,7 @@
                     </draggable>
                 </div>
             </template>
-        </draggable>
+        </div>
 
         <!-- 空狀態 -->
         <div v-if="groups.length === 0" class="empty">{{ emptyText }}</div>
@@ -149,7 +148,7 @@
                     <!-- 可以手動輸入：「全員」或「小房間」這類不屬於單一貓咪的項目 -->
                     <el-select
                         v-model="form.name"
-                        placeholder="選擇貓咪，或輸入「全員」等"
+                        placeholder="選擇貓咪或手動輸入"
                         filterable
                         allow-create
                         default-first-option
@@ -163,10 +162,10 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item label="類別">
-                    <!-- 四種都列出來：選了另一頁的類別，存檔後就會移到那一頁 -->
+                    <!-- 只列這一頁的兩個類別；要搬到另一頁，用下面的「移到…」 -->
                     <el-radio-group v-model="form.category" class="category-group">
                         <el-radio
-                            v-for="c in ALL_CATEGORIES"
+                            v-for="c in pageCategories"
                             :key="c.value"
                             :value="c.value"
                         >
@@ -217,6 +216,13 @@
                         />
                     </div>
                 </el-form-item>
+
+                <!-- 只有編輯時才能搬：例如舊資料歸成醫療的隨餐藥，要搬到飲食管理 -->
+                <div v-if="editingNotice" class="move-row">
+                    <el-button link type="primary" @click="moveToOtherPage">
+                        移到{{ otherPage.page }}
+                    </el-button>
+                </div>
             </el-form>
             <template #footer>
                 <el-button @click="dialogVisible = false">取消</el-button>
@@ -239,11 +245,13 @@ const props = defineProps({
     title: { type: String, required: true },
     // 這一頁管的類別，第一個是新增時的預設值
     categories: { type: Array, required: true },
-    // true：列出所有未領養的貓（照貓咪管理的順序），沒有項目的也列
-    listAllCats: { type: Boolean, default: false },
-    addLabel: { type: String, default: '＋ 其他貓咪' },
+    // 非貓咪的組（全員、小房間…）放最前或最後，跟值班表上出現的位置一致：
+    // 飲食的全員隨餐在離班分頁最上面，醫療的值班事項在照護分頁最下面
+    nonCatPosition: { type: String, default: 'top' },
+    addLabel: { type: String, default: '＋ 全員或其他' },
     emptyText: { type: String, default: '尚無項目' },
-    emptyGroupText: { type: String, default: '尚未設定' },
+    // 沒有項目的貓顯示的文字；空字串就只顯示標題列
+    emptyGroupText: { type: String, default: '' },
     labels: {
         type: Object,
         default: () => ({ treatment: '事項', reason: '原因' }),
@@ -260,6 +268,17 @@ const ALL_CATEGORIES = [
     { value: 'medical', label: '醫療', page: '特殊醫療管理' },
     { value: 'other', label: '其他', page: '特殊醫療管理' },
 ];
+
+const pageCategories = computed(() =>
+    ALL_CATEGORIES.filter((c) => props.categories.includes(c.value))
+);
+
+// 另一頁與搬過去時的類別：搬到飲食管理多半是隨餐藥，搬到特殊醫療管理預設醫療
+const otherPage = computed(() => {
+    const others = ALL_CATEGORIES.filter((c) => !props.categories.includes(c.value));
+    const target = others.find((c) => c.value === 'with_meal') || others[0];
+    return { page: target.page, category: target.value };
+});
 
 const supabase = useSupabaseClient();
 const { $dayjs } = useNuxtApp();
@@ -361,8 +380,8 @@ async function loadAll() {
 }
 
 // 分組：有 cat_id 的照貓分，沒有的（全員、小房間…）照 name 分。
-// listAllCats：非貓咪的組放最前面，接著所有貓照貓咪管理的順序；
-// 否則組的順序看該組第一筆的 order（data 已照 order 排好）
+// 列出所有未領養的貓（照貓咪管理的順序），沒有項目的也列；非貓咪的組依 nonCatPosition 放前或後。
+// 對不到現有貓的 cat_id（例如已領養）排在貓的後面
 function buildGroups(list) {
     const catById = new Map(cats.value.map((c) => [c.id, c]));
     const keyOf = (n) => (n.cat_id ? `cat:${n.cat_id}` : `name:${n.name}`);
@@ -371,24 +390,25 @@ function buildGroups(list) {
             ? shortName(catById.get(n.cat_id).name)
             : n.name;
 
-    const map = new Map();
-    if (props.listAllCats) {
-        for (const n of list.filter((n) => !n.cat_id)) {
-            if (!map.has(keyOf(n))) map.set(keyOf(n), { name: n.name, items: [] });
-        }
-        for (const cat of cats.value) {
-            map.set(`cat:${cat.id}`, { name: shortName(cat.name), items: [] });
-        }
-    }
+    const catGroups = new Map(
+        cats.value.map((cat) => [`cat:${cat.id}`, { name: shortName(cat.name), items: [] }])
+    );
+    const otherGroups = new Map();
     for (const n of list) {
-        if (!map.has(keyOf(n))) map.set(keyOf(n), { name: nameOf(n), items: [] });
-        map.get(keyOf(n)).items.push(n);
+        const target = n.cat_id ? catGroups : otherGroups;
+        if (!target.has(keyOf(n))) target.set(keyOf(n), { name: nameOf(n), items: [] });
+        target.get(keyOf(n)).items.push(n);
     }
-    return [...map].map(([key, g]) => ({ key, ...g }));
+
+    const toList = (map, isCat) =>
+        [...map].map(([key, g]) => ({ key, isCat, ...g }));
+    return props.nonCatPosition === 'bottom'
+        ? [...toList(catGroups, true), ...toList(otherGroups, false)]
+        : [...toList(otherGroups, false), ...toList(catGroups, true)];
 }
 
 // 拖拉結束後，照畫面順序（貓 → 項目）重編這一頁的 order，只更新有變的。
-// 兩頁各自從 1 編，數字會跟另一頁重疊；同一頁裡的相對順序才有意義
+// 兩頁各自從 1 編，數字會跟另一頁重疊；同一隻貓裡的相對順序才有意義
 async function onDragEnd() {
     const flat = groups.value.flatMap((group) => group.items);
     const updates = flat
@@ -421,6 +441,12 @@ function openDialog(notice = null, catName = '') {
           }
         : emptyForm(catName);
     dialogVisible.value = true;
+}
+
+// 移到另一頁：換類別後直接存檔（視窗裡其他欄位的修改也一起存）
+async function moveToOtherPage() {
+    form.value.category = otherPage.value.category;
+    await saveNotice();
 }
 
 // 儲存
@@ -549,9 +575,14 @@ onMounted(loadAll);
     margin-bottom: 16px;
 
     h1 {
-        margin: 0;
+        // 全域 h1 有 margin-bottom: 10px !important（element-variables.css），
+        // 不蓋掉的話標題會比按鈕高 5px
+        margin: 0 !important;
         font-size: 22px;
         text-align: left;
+        // 光學補償：Noto Sans TC 22px 中文墨水比行框中心低約 1.7px，
+        // 按鈕文字幾乎沒偏，往上提讓兩邊的字對齊（換字體或字級要重算）
+        transform: translateY(-1.7px);
     }
 
     .el-button {
@@ -565,6 +596,12 @@ onMounted(loadAll);
     gap: 8px;
 }
 
+// 卡片間距是 8px，線上下再各多留 8px，讓兩區明顯分開
+.group-divider {
+    margin: 8px 0;
+    border-top: 1px dashed #b5aea9;
+}
+
 .cat-group {
     background: #fff;
     border: 1px solid #e0e0e0;
@@ -575,6 +612,12 @@ onMounted(loadAll);
     &:hover {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
+}
+
+// 沒有項目又沒有提示文字時，只剩標題列：拿掉它的底線，免得跟卡片外框疊成兩條。
+// （class 不叫 empty：會撞到下面空狀態的 .empty）
+.cat-group.bare .cat-group-header {
+    border-bottom: none;
 }
 
 .cat-group-header {
@@ -644,7 +687,6 @@ onMounted(loadAll);
 }
 
 // 加大可點範圍讓手指好抓，負 margin 抵銷掉，版面位置不變
-.group-handle,
 .item-handle {
     height: auto;
     padding: 12px 10px;
@@ -782,9 +824,8 @@ onMounted(loadAll);
     text-align: left;
 }
 
-// 四個類別一排放不下，換行時保持對齊
-:deep(.category-group) {
-    flex-wrap: wrap;
-    row-gap: 4px;
+.move-row {
+    text-align: left;
+    margin-top: -4px;
 }
 </style>

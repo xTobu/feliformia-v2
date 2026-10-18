@@ -83,13 +83,19 @@ export default defineEventHandler(async (event) => {
 // 日期都是 'YYYY-MM-DD'，直接比字串就對了。
 // 主食（category = 'meal'）歸飲食管理，不放進這份紀錄；隨餐藥在值班表做好前先留著。
 // 在 JS 濾而不是 .neq()：category 欄位還沒加的資料庫也不會壞
+// 貓的順序跟貓咪管理走（後台已經不能拖貓），同一隻貓裡照 notices.order；
+// 不屬於單一貓咪的（全員、小房間…）排最後
 async function getNoticeList(shift, date) {
-    const { data, error } = await supabase
-        .from('notices')
-        .select()
-        .or(`shift.eq.both,shift.eq.${shift}`)
+    const [{ data, error }, { data: cats, error: catError }] = await Promise.all([
+        supabase.from('notices').select().or(`shift.eq.both,shift.eq.${shift}`),
+        supabase.from('cats').select('id, order'),
+    ])
 
     if (error) throw error
+    if (catError) throw catError
+
+    const catOrder = new Map(cats.map((c) => [c.id, c.order]))
+    const rank = (n) => catOrder.get(n.cat_id) ?? Number.MAX_SAFE_INTEGER
 
     return data
         .filter((notice) => notice.category !== 'meal')
@@ -98,6 +104,6 @@ async function getNoticeList(shift, date) {
                 (!notice.start_date || notice.start_date <= date) &&
                 (!notice.end_date || notice.end_date >= date)
         )
-        .sort((a, b) => a.order - b.order)
+        .sort((a, b) => rank(a) - rank(b) || a.order - b.order)
         .map(({ id, ...rest }) => rest)
 }
