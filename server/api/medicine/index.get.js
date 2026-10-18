@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // 沒有記錄，建立新的
-    const notices = await getNoticeList(shift)
+    const notices = await getNoticeList(shift, date)
     const catList = notices.map((notice) => ({
         ...notice,
         done: false,
@@ -79,7 +79,9 @@ export default defineEventHandler(async (event) => {
     }
 })
 
-async function getNoticeList(shift) {
+// start_date / end_date 是療程期間，NULL 代表該端不限。
+// 日期都是 'YYYY-MM-DD'，直接比字串就對了。
+async function getNoticeList(shift, date) {
     const { data, error } = await supabase
         .from('notices')
         .select()
@@ -88,6 +90,11 @@ async function getNoticeList(shift) {
     if (error) throw error
 
     return data
+        .filter(
+            (notice) =>
+                (!notice.start_date || notice.start_date <= date) &&
+                (!notice.end_date || notice.end_date >= date)
+        )
         .sort((a, b) => a.order - b.order)
         .map(({ id, ...rest }) => rest)
 }

@@ -20,7 +20,10 @@
                 class="notices-list"
             >
                 <template #item="{ element: notice }">
-                    <div class="notice-item">
+                    <div
+                        class="notice-item"
+                        :class="{ ended: periodStatus(notice) === 'ended' }"
+                    >
                         <span class="drag-handle">☰</span>
                         <div class="notice-info">
                             <div class="notice-header">
@@ -32,6 +35,29 @@
                                     size="small"
                                 >
                                     {{ shiftLabel(notice.shift) }}
+                                </el-tag>
+                                <el-tag
+                                    v-if="notice.start_date || notice.end_date"
+                                    type="info"
+                                    size="small"
+                                >
+                                    {{ periodLabel(notice) }}
+                                </el-tag>
+                                <el-tag
+                                    v-if="periodStatus(notice) === 'ended'"
+                                    type="info"
+                                    effect="dark"
+                                    size="small"
+                                >
+                                    已結束
+                                </el-tag>
+                                <el-tag
+                                    v-else-if="periodStatus(notice) === 'upcoming'"
+                                    type="success"
+                                    effect="plain"
+                                    size="small"
+                                >
+                                    未開始
                                 </el-tag>
                             </div>
                             <div class="notice-treatment" v-if="notice.treatment">
@@ -105,6 +131,29 @@
                             <el-radio value="both">早晚班</el-radio>
                         </el-radio-group>
                     </el-form-item>
+                    <el-form-item label="期間">
+                        <!-- 不用 daterange：它的面板 646px 寬，手機會爆版 -->
+                        <div class="period-row">
+                            <el-date-picker
+                                v-model="form.start_date"
+                                type="date"
+                                value-format="YYYY-MM-DD"
+                                format="MM/DD"
+                                placeholder="開始"
+                                @change="onStartDateChange"
+                            />
+                            <span>～</span>
+                            <el-date-picker
+                                v-model="form.end_date"
+                                type="date"
+                                value-format="YYYY-MM-DD"
+                                format="MM/DD"
+                                placeholder="結束"
+                                :disabled-date="(d) => isBefore(d, form.start_date)"
+                            />
+                        </div>
+                        <div class="form-hint">留空代表不限</div>
+                    </el-form-item>
                 </el-form>
                 <template #footer>
                     <el-button @click="dialogVisible = false">取消</el-button>
@@ -133,6 +182,7 @@ useHead({
 });
 
 const supabase = useSupabaseClient();
+const { $dayjs } = useNuxtApp();
 
 // 狀態
 const notices = ref([]);
@@ -144,6 +194,8 @@ const form = ref({
     treatment: '',
     reason: '',
     shift: 'both',
+    start_date: null,
+    end_date: null,
 });
 
 // 班別標籤
@@ -154,6 +206,32 @@ function shiftLabel(shift) {
         night: '晚班',
     };
     return labels[shift] || shift;
+}
+
+// 療程期間：NULL 代表該端不限
+function periodLabel({ start_date, end_date }) {
+    const fmt = (d) => $dayjs(d).format('MM/DD');
+    if (start_date && end_date) return `${fmt(start_date)}～${fmt(end_date)}`;
+    if (start_date) return `${fmt(start_date)} 起`;
+    return `至 ${fmt(end_date)}`;
+}
+
+// 開始日不設限，選到結束日之後就清掉結束日，讓使用者重選
+function onStartDateChange(start) {
+    if (start && form.value.end_date && start > form.value.end_date) {
+        form.value.end_date = null;
+    }
+}
+
+function isBefore(date, limit) {
+    return !!limit && $dayjs(date).isBefore(limit, 'day');
+}
+
+function periodStatus({ start_date, end_date }) {
+    const today = $dayjs().format('YYYY-MM-DD');
+    if (end_date && end_date < today) return 'ended';
+    if (start_date && start_date > today) return 'upcoming';
+    return 'active';
 }
 
 function shiftTagType(shift) {
@@ -206,6 +284,8 @@ function openDialog(notice = null) {
             treatment: notice.treatment || '',
             reason: notice.reason || '',
             shift: notice.shift || 'both',
+            start_date: notice.start_date || null,
+            end_date: notice.end_date || null,
         };
     } else {
         form.value = {
@@ -213,6 +293,8 @@ function openDialog(notice = null) {
             treatment: '',
             reason: '',
             shift: 'both',
+            start_date: null,
+            end_date: null,
         };
     }
     dialogVisible.value = true;
@@ -236,6 +318,9 @@ async function saveNotice() {
         return;
     }
 
+    const start_date = form.value.start_date || null;
+    const end_date = form.value.end_date || null;
+
     if (editingNotice.value) {
         // 編輯
         const { error } = await supabase
@@ -245,6 +330,8 @@ async function saveNotice() {
                 treatment: form.value.treatment,
                 reason: form.value.reason || null,
                 shift: form.value.shift,
+                start_date,
+                end_date,
             })
             .eq('id', editingNotice.value.id);
 
@@ -267,6 +354,8 @@ async function saveNotice() {
             treatment: form.value.treatment,
             reason: form.value.reason || null,
             shift: form.value.shift,
+            start_date,
+            end_date,
             order: maxOrder + 1,
         });
 
@@ -366,6 +455,16 @@ onMounted(() => {
     &:hover {
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
     }
+
+    &.ended {
+        background: #f5f5f5;
+
+        .notice-name,
+        .notice-treatment,
+        .notice-reason {
+            color: #aaa;
+        }
+    }
 }
 
 .drag-handle {
@@ -394,6 +493,7 @@ onMounted(() => {
     text-align: left;
     .notice-header {
         display: flex;
+        flex-wrap: wrap;
         align-items: center;
         gap: 8px;
         .notice-name {
@@ -462,5 +562,23 @@ onMounted(() => {
 
 :deep(.el-form-item) {
     align-items: center;
+}
+
+.period-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+
+    :deep(.el-date-editor) {
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+.form-hint {
+    font-size: 12px;
+    line-height: 1.4;
+    color: #999;
 }
 </style>

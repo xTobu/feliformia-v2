@@ -49,6 +49,16 @@
                                         <font class="f_grey">{{
                                             cat.reason && `原因：${cat.reason}`
                                         }}</font>
+                                        <font
+                                            v-if="cat.end_date"
+                                            class="f_grey"
+                                            >療程至
+                                            {{
+                                                $dayjs(cat.end_date).format(
+                                                    'MM/DD'
+                                                )
+                                            }}</font
+                                        >
                                     </div>
                                     <div class="done">
                                         <el-checkbox
