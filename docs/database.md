@@ -228,12 +228,37 @@ votes.data
 
 ---
 
+### shift_comments
+值班留言（`/shift`）。每隻貓、每個分頁（`tab`）各自一串，跟著這一班（`shift_id`）。
+點貓名旁的 💬 從下方滑出面板留言；按鈕上的數字是這一班、這個分頁的留言數。
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | BIGINT | PK |
+| shift_id | BIGINT | FK → shifts.id，刪班會一起刪 |
+| cat_id | BIGINT | FK → cats.id。只有貓咪卡片能留言 |
+| tab | TEXT | `arrive` / `care` / `meds` / `leave` / `todo` |
+| body | TEXT | 內容 |
+| for_next | BOOLEAN | 給下一班看：下一班**同一分頁、同一隻貓**會在面板上方看到「上一班交代」，💬 上有橘點 |
+| author_name | TEXT | 留言當下的暱稱 |
+| created_by | UUID | FK → auth.users |
+| created_at | TIMESTAMPTZ | |
+
+**只新增、不覆寫**：刻意不放進 `shifts` 的 jsonb（那邊整筆覆寫，多人同時留言會互相蓋掉）。
+目前不能編輯或刪除。建表 SQL：[docs/sql/shift_comments.sql](sql/shift_comments.sql)
+
+API：`GET /api/shift/comments?date&shift`（這一班全部＋上一班 `for_next`，唯讀）、
+`POST /api/shift/comments`（新增一則）。
+
+---
+
 ## Realtime
 
 需啟用 Realtime 的表：
 - `votes` - 讓多用戶即時看到彼此的投票
 - `calendar_events` - 讓多用戶即時看到彼此的行事曆異動
 - `shifts` - 讓同一班的志工即時看到彼此的值班記錄
+- `shift_comments` - 留言即時出現（只聽 INSERT）
 
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE votes;

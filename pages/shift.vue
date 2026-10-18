@@ -61,7 +61,22 @@
                         :key="cat.cat_id"
                         class="d_flex record_item intake-card"
                     >
-                        <div class="name">{{ cat.name }}</div>
+                        <div class="name-wrap">
+                            <div class="name">{{ cat.name }}</div>
+                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
+                            <button
+                                type="button"
+                                class="comment-btn"
+                                :class="{ has: commentCount(cat.cat_id) }"
+                                :aria-label="`${cat.name}的留言`"
+                                @click="openComments(cat)"
+                            >
+                                💬<span v-if="commentCount(cat.cat_id)">{{
+                                    commentCount(cat.cat_id)
+                                }}</span>
+                                <i v-if="hasHandover(cat.cat_id)" class="handover-dot"></i>
+                            </button>
+                        </div>
                         <el-tag
                             v-if="prev.released.includes(cat.cat_id)"
                             class="released-badge"
@@ -168,7 +183,22 @@
                             :key="entry.cat.cat_id"
                             class="d_flex record_item"
                         >
+                            <div class="name-wrap">
                             <div class="name">{{ entry.cat.name }}</div>
+                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
+                            <button
+                                type="button"
+                                class="comment-btn"
+                                :class="{ has: commentCount(entry.cat.cat_id) }"
+                                :aria-label="`${entry.cat.name}的留言`"
+                                @click="openComments(entry.cat)"
+                            >
+                                💬<span v-if="commentCount(entry.cat.cat_id)">{{
+                                    commentCount(entry.cat.cat_id)
+                                }}</span>
+                                <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
+                            </button>
+                        </div>
                             <div class="detail">
                                 <div
                                     v-for="(item, index) in entry.items"
@@ -252,7 +282,22 @@
                         :key="entry.cat.cat_id"
                         class="d_flex record_item"
                     >
-                        <div class="name">{{ entry.cat.name }}</div>
+                        <div class="name-wrap">
+                            <div class="name">{{ entry.cat.name }}</div>
+                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
+                            <button
+                                type="button"
+                                class="comment-btn"
+                                :class="{ has: commentCount(entry.cat.cat_id) }"
+                                :aria-label="`${entry.cat.name}的留言`"
+                                @click="openComments(entry.cat)"
+                            >
+                                💬<span v-if="commentCount(entry.cat.cat_id)">{{
+                                    commentCount(entry.cat.cat_id)
+                                }}</span>
+                                <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
+                            </button>
+                        </div>
                         <!-- 放風：離開時沒有關籠，下一班在觀察分頁會看到。貓名同一列最右邊的膠囊按鈕 -->
                         <button
                             type="button"
@@ -345,7 +390,22 @@
                         :key="cat.cat_id"
                         class="d_flex record_item"
                     >
-                        <div class="name">{{ cat.name }}</div>
+                        <div class="name-wrap">
+                            <div class="name">{{ cat.name }}</div>
+                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
+                            <button
+                                type="button"
+                                class="comment-btn"
+                                :class="{ has: commentCount(cat.cat_id) }"
+                                :aria-label="`${cat.name}的留言`"
+                                @click="openComments(cat)"
+                            >
+                                💬<span v-if="commentCount(cat.cat_id)">{{
+                                    commentCount(cat.cat_id)
+                                }}</span>
+                                <i v-if="hasHandover(cat.cat_id)" class="handover-dot"></i>
+                            </button>
+                        </div>
                         <div class="detail">
                             <div
                                 v-for="(todo, index) in cat.todos"
@@ -414,8 +474,8 @@
                     />
                 </div>
 
-                <!-- ========== 每個分頁共用 ========== -->
-                <div class="W100 mb20 report">
+                <!-- ========== 值班回報、填表志工：只在觀察分頁（醫療、吃藥、備餐、待辦不需要） ========== -->
+                <div v-show="tab === 'arrive'" class="W100 mb20 report">
                     <el-input
                         type="textarea"
                         v-model="formData.note"
@@ -425,7 +485,7 @@
                     />
                 </div>
 
-                <div class="W100 mb20">
+                <div v-show="tab === 'arrive'" class="W100 mb20">
                     <div class="member-row">
                         <el-select
                             v-model="formData.member"
@@ -451,6 +511,7 @@
                     </div>
                 </div>
 
+                <!-- ========== 每個分頁共用：儲存狀態、連結 ========== -->
                 <div class="W100">
                     <div class="d_flex space-between">
                         <p class="last-update">
@@ -469,7 +530,12 @@
                         </p>
                     </div>
 
-                    <button type="submit" class="btn" v-show="!isDisabled">
+                    <!-- 其他分頁打勾會自動儲存，不放按鈕；儲存失敗時才出現，讓人能重試 -->
+                    <button
+                        type="submit"
+                        class="btn"
+                        v-show="!isDisabled && (tab === 'arrive' || saveStatus === 'error')"
+                    >
                         <template v-if="saveStatus === 'saving'">儲存中...</template>
                         <template v-else-if="saveStatus === 'error'"
                             >儲存失敗，請手動重試</template
@@ -481,6 +547,65 @@
                     <NuxtLink class="f_red" to="/shift">回到現在這一班</NuxtLink>
                 </div>
             </form>
+
+            <!-- 留言面板：從下方滑出，這個分頁、這隻貓的留言 -->
+            <el-drawer
+                v-model="drawerOpen"
+                direction="btt"
+                size="72%"
+                :with-header="false"
+                class="comment-drawer"
+            >
+                <div class="cd-head">
+                    <span class="cd-title">{{ drawerCat?.name }}</span>
+                    <span class="cd-tab">{{ tabLabel }}留言</span>
+                    <button type="button" class="cd-close" aria-label="關閉" @click="drawerOpen = false">
+                        ✕
+                    </button>
+                </div>
+
+                <div class="cd-list">
+                    <template v-if="drawerHandover.length">
+                        <div class="cd-section">上一班交代</div>
+                        <div v-for="c in drawerHandover" :key="c.id" class="cd-item handover">
+                            <div class="cd-meta">{{ c.author_name || '未命名' }} · {{ formatTime(c.created_at) }}</div>
+                            <div class="cd-body">{{ c.body }}</div>
+                        </div>
+                        <div class="cd-section">這一班</div>
+                    </template>
+                    <div v-for="c in drawerComments" :key="c.id" class="cd-item">
+                        <div class="cd-meta">
+                            {{ c.author_name || '未命名' }} · {{ formatTime(c.created_at) }}
+                            <span v-if="c.for_next" class="cd-next">給下一班</span>
+                        </div>
+                        <div class="cd-body">{{ c.body }}</div>
+                    </div>
+                    <div v-if="!drawerComments.length" class="cd-empty">這一班還沒有留言</div>
+                </div>
+
+                <div class="cd-input">
+                    <el-input
+                        v-model="draft"
+                        type="textarea"
+                        :autosize="{ minRows: 1, maxRows: 4 }"
+                        :disabled="isDisabled"
+                        placeholder="寫下這隻貓的狀況…"
+                    />
+                    <div class="cd-actions">
+                        <el-checkbox v-model="draftForNext" :disabled="isDisabled" class="cd-for-next"
+                            >給下一班</el-checkbox
+                        >
+                        <button
+                            type="button"
+                            class="cd-send"
+                            :disabled="isDisabled || sending || !draft.trim()"
+                            @click="sendComment"
+                        >
+                            {{ sending ? '送出中' : '送出' }}
+                        </button>
+                    </div>
+                </div>
+            </el-drawer>
         </div>
 
         <template #fallback>
@@ -518,6 +643,7 @@ const saveStatus = ref('success');
 const lastUpdatedAt = ref(null);
 const lastSavedAt = ref(null);
 const realtimeChannel = ref(null);
+const commentsChannel = ref(null);
 const isPending = ref(false); // 追蹤是否有待儲存的變更
 const tab = ref('arrive');
 const prev = ref({ note: null, released: [] });
@@ -546,6 +672,98 @@ const formData = ref({
     note: '',
     member: '',
 });
+
+// ---- 留言：每隻貓、每個分頁各自一串，跟著這一班。勾「給下一班」的會在下一班同一分頁出現 ----
+const comments = ref([]); // 這一班的留言
+const handovers = ref([]); // 上一班勾了「給下一班」的留言
+const drawerOpen = ref(false);
+const drawerCat = ref(null);
+const draft = ref('');
+const draftForNext = ref(false);
+const sending = ref(false);
+
+const TAB_LABELS = { arrive: '觀察', care: '醫療', meds: '吃藥', leave: '備餐', todo: '待辦' };
+const tabLabel = computed(() => TAB_LABELS[tab.value]);
+
+const inThisTab = (list, catId) =>
+    list.filter((c) => c.cat_id === catId && c.tab === tab.value);
+const commentCount = (catId) => inThisTab(comments.value, catId).length;
+const hasHandover = (catId) => inThisTab(handovers.value, catId).length > 0;
+const drawerComments = computed(() =>
+    drawerCat.value ? inThisTab(comments.value, drawerCat.value.cat_id) : []
+);
+const drawerHandover = computed(() =>
+    drawerCat.value ? inThisTab(handovers.value, drawerCat.value.cat_id) : []
+);
+
+function formatTime(iso) {
+    return $dayjs(iso).format('MM/DD HH:mm');
+}
+
+function openComments(cat) {
+    drawerCat.value = cat;
+    draft.value = '';
+    draftForNext.value = false;
+    drawerOpen.value = true;
+}
+
+function addComment(row) {
+    if (!comments.value.some((c) => c.id === row.id)) comments.value.push(row);
+}
+
+async function sendComment() {
+    const body = draft.value.trim();
+    if (!body || !drawerCat.value) return;
+    sending.value = true;
+    try {
+        const row = await $fetch('/api/shift/comments', {
+            method: 'POST',
+            body: {
+                shiftId: formData.value.recordId,
+                catId: drawerCat.value.cat_id,
+                tab: tab.value,
+                body,
+                forNext: draftForNext.value,
+            },
+        });
+        addComment(row);
+        draft.value = '';
+        draftForNext.value = false;
+    } catch (e) {
+        console.error('sendComment error:', e);
+        ElMessage.error('留言送出失敗，請再試一次');
+    } finally {
+        sending.value = false;
+    }
+}
+
+async function loadComments(params) {
+    try {
+        const data = await $fetch('/api/shift/comments', { params, cache: 'no-store' });
+        comments.value = data.current;
+        handovers.value = data.previous;
+    } catch (e) {
+        console.error('loadComments error:', e);
+    }
+}
+
+// 別人新增的留言即時出現（自己送出的已經 addComment 過，靠 id 去重）
+function subscribeToComments(recordId) {
+    if (commentsChannel.value) supabase.removeChannel(commentsChannel.value);
+    commentsChannel.value = supabase
+        .channel(`shift-comments-${recordId}`)
+        .on(
+            'postgres_changes',
+            {
+                event: 'INSERT',
+                schema: 'public',
+                table: 'shift_comments',
+                filter: `shift_id=eq.${recordId}`,
+            },
+            (payload) => payload.new && addComment(payload.new)
+        )
+        .subscribe();
+}
 
 // Computed
 
@@ -808,6 +1026,10 @@ async function InitShift() {
     };
 
     subscribeToRealtime(data.recordId);
+
+    // 留言要等這一班建立好才查得到，所以放在後面
+    await loadComments(params);
+    subscribeToComments(data.recordId);
 }
 
 async function UpdateShift() {
@@ -860,7 +1082,8 @@ function subscribeToRealtime(recordId) {
 }
 
 async function Submit() {
-    if (!formData.value.member) {
+    // 填表志工只在觀察分頁出現；其他分頁的按鈕只用來重試失敗的儲存
+    if (tab.value === 'arrive' && !formData.value.member) {
         ElMessage.error('請選擇填表志工');
         return;
     }
@@ -913,6 +1136,9 @@ onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
     if (realtimeChannel.value) {
         supabase.removeChannel(realtimeChannel.value);
+    }
+    if (commentsChannel.value) {
+        supabase.removeChannel(commentsChannel.value);
     }
 });
 
@@ -1285,5 +1511,192 @@ watch(
 :deep(.el-input__wrapper),
 :deep(.el-select__wrapper) {
     height: 45px;
+}
+
+// ---- 留言 ----
+// 貓名標籤原本是 absolute 定位在卡片左上角；包一層讓 💬 能接在名字後面
+.record_item .name-wrap {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+
+    .name {
+        position: static;
+    }
+}
+
+// 不要外框：只有 💬 和數字。全域 button 樣式（width 100%、邊框、底色、padding）每一項都要蓋回來
+.comment-btn {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    width: auto;
+    height: 22px;
+    padding: 0 2px;
+    border: none;
+    background: none;
+    color: #999;
+    font-size: 13px;
+    line-height: 22px;
+    cursor: pointer;
+
+    &.has {
+        color: #6da2c2;
+        font-weight: 500;
+    }
+
+    // 上一班有交代
+    .handover-dot {
+        position: absolute;
+        top: 0;
+        right: -4px;
+        width: 8px;
+        height: 8px;
+        border: 1.5px solid #fff;
+        border-radius: 50%;
+        background: #e6a23c;
+    }
+}
+
+:deep(.comment-drawer) {
+    border-radius: 14px 14px 0 0;
+
+    .el-drawer__body {
+        display: flex;
+        flex-direction: column;
+        padding: 0;
+    }
+}
+
+.cd-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 16px 10px;
+    border-bottom: 1px solid #eee;
+
+    .cd-title {
+        font-size: 16px;
+        font-weight: 500;
+    }
+
+    .cd-tab {
+        font-size: 13px;
+        color: #6da2c2;
+    }
+
+    .cd-close {
+        width: auto;
+        margin-left: auto;
+        padding: 0 4px;
+        border: none;
+        background: none;
+        color: #999;
+        font-size: 16px;
+        cursor: pointer;
+    }
+}
+
+.cd-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 16px 8px;
+    text-align: left;
+}
+
+.cd-section {
+    margin-top: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #8e8783;
+}
+
+.cd-item {
+    padding: 8px 0;
+    border-bottom: 1px solid #f2f0ee;
+
+    &.handover {
+        margin: 4px 0;
+        padding: 8px 10px;
+        border: none;
+        border-radius: 6px;
+        background: #fdf6ec;
+    }
+}
+
+.cd-meta {
+    font-size: 12px;
+    color: #999;
+
+    .cd-next {
+        margin-left: 6px;
+        padding: 0 5px;
+        border-radius: 3px;
+        background: #fdf6ec;
+        color: #b36b00;
+    }
+}
+
+.cd-body {
+    font-size: 15px;
+    line-height: 1.5;
+    color: #222;
+    white-space: pre-line;
+}
+
+.cd-empty {
+    padding: 14px 0;
+    font-size: 14px;
+    color: #aaa;
+}
+
+.cd-input {
+    padding: 10px 16px 16px;
+    border-top: 1px solid #eee;
+
+    // 全域把 textarea 設成至少 100px，這裡一行起跳
+    :deep(.el-textarea__inner) {
+        min-height: 40px !important;
+    }
+
+    .cd-actions {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-top: 8px;
+    }
+
+    // 頁面把 el-checkbox 排成上下兩層，這裡改回左右並排
+    .cd-for-next {
+        flex-direction: row;
+        gap: 6px;
+        width: auto;
+
+        :deep(.el-checkbox__label) {
+            padding: 0;
+            font-size: 14px;
+        }
+    }
+
+    .cd-send {
+        width: auto;
+        height: 36px;
+        padding: 0 18px;
+        border: none;
+        border-radius: 8px;
+        background: #6da2c2;
+        color: #fff;
+        font-size: 14px;
+        cursor: pointer;
+
+        &:disabled {
+            cursor: default;
+            opacity: 0.4;
+        }
+    }
 }
 </style>
