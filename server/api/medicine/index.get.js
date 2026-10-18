@@ -79,8 +79,10 @@ export default defineEventHandler(async (event) => {
     }
 })
 
-// start_date / end_date 是療程期間，NULL 代表該端不限。
+// start_date / end_date 是期間，NULL 代表該端不限。
 // 日期都是 'YYYY-MM-DD'，直接比字串就對了。
+// 主食（category = 'meal'）歸飲食管理，不放進這份紀錄；隨餐藥在值班表做好前先留著。
+// 在 JS 濾而不是 .neq()：category 欄位還沒加的資料庫也不會壞
 async function getNoticeList(shift, date) {
     const { data, error } = await supabase
         .from('notices')
@@ -90,6 +92,7 @@ async function getNoticeList(shift, date) {
     if (error) throw error
 
     return data
+        .filter((notice) => notice.category !== 'meal')
         .filter(
             (notice) =>
                 (!notice.start_date || notice.start_date <= date) &&

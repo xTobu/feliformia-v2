@@ -120,25 +120,82 @@ votes.data
 ---
 
 ### notices
-餵藥及特殊飲食事項（`/admin/notices` 管理）
+飲食與特殊醫療項目。兩個後台共用這張表，靠 `category` 分開
+（共用元件 `components/CareItemsAdmin.vue`）：
+
+| category | 中文 | 後台 |
+|---|---|---|
+| `meal` | 主食 | 飲食管理 `/admin/diet` |
+| `with_meal` | 隨餐 | 飲食管理 `/admin/diet` |
+| `medical` | 醫療 | 特殊醫療管理 `/admin/notices` |
+| `other` | 其他 | 特殊醫療管理 `/admin/notices` |
 
 | Column | Type | Description |
 |--------|------|-------------|
-| id | — | PK |
-| name | TEXT | 貓咪名字 |
-| treatment | TEXT | 事項，必填 |
-| reason | TEXT | 原因，可 NULL |
+| id | BIGINT | PK |
+| name | TEXT | 顯示用名稱。對得到貓時是貓名（取冒號前），對不到時是「全員」「小房間」這類標籤 |
+| cat_id | BIGINT | FK → cats.id，可 NULL。NULL 代表不屬於單一貓咪 |
+| category | TEXT | 見上表，預設 `medical`，有 CHECK 約束 |
+| treatment | TEXT | 內容，必填 |
+| reason | TEXT | 原因／備註，可 NULL |
 | shift | TEXT | `morning` / `night` / `both` |
-| order | INTEGER | 排序（後台拖拉） |
-| start_date | DATE | 療程開始日，NULL 代表不限 |
-| end_date | DATE | 療程結束日（含當天），NULL 代表不限 |
+| order | INTEGER | 排序（後台拖拉）。**兩個後台各自從 1 編**，數字會重疊，只有同一個 category 群裡的相對順序有意義 |
+| start_date | DATE | 期間開始日，NULL 代表不限 |
+| end_date | DATE | 期間結束日（含當天），NULL 代表不限 |
 
 **`medicines.cats` 是快照，不是參照。** 某個 date + shift 的紀錄**第一次被打開**時，
-`server/api/medicine/index.get.js` 才會把當下符合班別、期間的事項整份複製進去，
-之後就不再跟 `notices` 同步。所以修改事項內容或期間，**已經被打開過的班別不會跟著變**，
-從下一個還沒建立的班別開始才會生效。
+`server/api/medicine/index.get.js` 才會把當下符合班別、期間的項目整份複製進去，
+之後就不再跟 `notices` 同步。所以修改內容或期間，**已經被打開過的班別不會跟著變**，
+從下一個還沒建立的班別開始才會生效。快照**不含主食**（`meal`）。
 
-過了 `end_date` 的事項不會自動刪除，後台會標成「已結束」，改期間就能重新使用。
+`regulars` 也一樣是快照：貓名旁的飲食備註取自當下符合班別、期間的主食，
+串成一行；該貓沒有主食時退回 `cats.diet_note`（過渡期用，見 `server/api/regular/index.get.js`）。
+
+過了 `end_date` 的項目不會自動刪除，後台會標成「已結束」，改期間就能重新使用。
+
+---
+
+### shifts
+值班記錄（`/shift`）。一個班（date + shift）一筆，合併到班、照護、離班。
+`/regular`、`/medicine` 維持原樣，跟這張表**不互通**。
+
+| Column | Type | Description |
+|--------|------|-------------|
+| id | BIGINT | PK |
+| date | DATE | 日期 |
+| shift | TEXT | `morning` / `night` |
+| cats | JSONB | 每隻貓這一班的快照（結構見下方） |
+| tasks | JSONB | 不屬於單一貓咪的項目（全員、小房間…）的快照 |
+| note | TEXT | 值班回報，下一班到班時會看到 |
+| member | TEXT | 填表志工名字 |
+| updated_by | UUID | FK → auth.users，Realtime 用來忽略自己的更新 |
+| created_at / updated_at | TIMESTAMPTZ | |
+
+**UNIQUE** (date, shift)。建表 SQL：[docs/sql/shifts.sql](sql/shifts.sql)
+
+#### cats JSONB 結構
+
+```
+[{
+  cat_id, name, room,
+  intake:    { feed, feed_detail, can, can_detail, urine, feces, feces_warning },  // 到班，欄位同 regulars
+  medical:   [{ notice_id, treatment, reason, end_date, done }],                 // 照護：醫療＋其他
+  meals:     [{ notice_id, treatment, reason }],                                 // 離班：主食
+  with_meal: [{ notice_id, treatment, reason, end_date, done }],                 // 離班：隨餐
+  released:  false                                                               // 離班：放風（離開時沒關籠）
+}]
+```
+
+`tasks` 是 `[{ notice_id, name, category, treatment, reason, end_date, done }]`，
+`category` 為 `with_meal` 的放離班分頁最上面，其他放照護分頁最下面。
+
+**也是快照**：這一班第一次被打開時（`server/api/shift/index.get.js`）從未領養的 `cats`
+與符合班別、期間的 `notices` 建立，之後不再同步。貓沒有主食時，`meals` 退回 `cats.diet_note`。
+
+**放風**：下一班用 `/api/shift/previous`（唯讀，不會建立記錄）讀前一班的 `released`，
+在到班分頁標「上一班放風」。
+
+**整筆覆寫**：存檔時整個 `cats` / `tasks` 一起寫回。兩人同時改不同的貓，後存的會蓋掉先存的。
 
 ---
 
@@ -147,6 +204,7 @@ votes.data
 需啟用 Realtime 的表：
 - `votes` - 讓多用戶即時看到彼此的投票
 - `calendar_events` - 讓多用戶即時看到彼此的行事曆異動
+- `shifts` - 讓同一班的志工即時看到彼此的值班記錄
 
 ```sql
 ALTER PUBLICATION supabase_realtime ADD TABLE votes;
@@ -215,11 +273,11 @@ Server API 用 **service key** 連 Supabase，**會繞過上面所有 RLS**。
 | `line/message/push` | `requireUser` |
 | `users/list`、`volunteer/list` | `requireUser` |
 | `admin/profiles` | `requireAdmin` |
-| `medicine/*`、`regular/*` | `requireUser` |
+| `medicine/*`、`regular/*`、`shift/*` | `requireUser` |
 | `mind/list` | `requireUser` |
 | `auth/verify-answer` | **刻意公開** —— 登入前的問答關卡，此時還沒有身分 |
 
 **新增端點時預設加 `requireUser`**，確定要公開才例外，並在程式碼裡註明理由。
 
-> `medicine/index` 與 `regular/index` 雖然是 GET，但查不到當天記錄時會
+> `medicine/index`、`regular/index` 與 `shift/index` 雖然是 GET，但查不到當天記錄時會
 > 順手 INSERT 一筆。它們不是唯讀的，別因為是 GET 就以為不用擋。

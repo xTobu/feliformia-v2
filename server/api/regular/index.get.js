@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     }
 
     // 沒有記錄，建立新的
-    const cats = await getCatList()
+    const cats = await getCatList(date, shift)
     const catList = cats.map((cat) => ({
         cat: cat,
         name: cat.name,
@@ -86,8 +86,13 @@ export default defineEventHandler(async (event) => {
     }
 })
 
-async function getCatList() {
-    const { data, error } = await supabase.from('cats').select()
+// 飲食備註改由飲食管理（notices 的「主食」）提供：這一班、在期間內的主食串起來。
+// 還沒在飲食管理設定的貓，退回貓咪資料上的 diet_note，過渡期不會空白
+async function getCatList(date, shift) {
+    const [{ data, error }, meals] = await Promise.all([
+        supabase.from('cats').select(),
+        getMealNotes(date, shift),
+    ])
     if (error) throw error
 
     return data
@@ -97,6 +102,27 @@ async function getCatList() {
             recordId: record.id,
             name: record.name,
             room: record.room,
-            diet_note: record.diet_note,
+            diet_note: meals.get(record.id) || record.diet_note,
         }))
+}
+
+// 回傳 Map<cat_id, '主食1；主食2'>。category 欄位還沒加的資料庫會拿到空 Map
+async function getMealNotes(date, shift) {
+    const { data, error } = await supabase
+        .from('notices')
+        .select()
+        .or(`shift.eq.both,shift.eq.${shift}`)
+        .order('order')
+    if (error) throw error
+
+    const meals = new Map()
+    for (const notice of data) {
+        if (notice.category !== 'meal' || !notice.cat_id) continue
+        if (notice.start_date && notice.start_date > date) continue
+        if (notice.end_date && notice.end_date < date) continue
+        const list = meals.get(notice.cat_id) || []
+        list.push(notice.treatment)
+        meals.set(notice.cat_id, list)
+    }
+    return new Map([...meals].map(([id, list]) => [id, list.join('；')]))
 }

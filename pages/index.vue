@@ -5,6 +5,7 @@
             管理後台
         </NuxtLink>
         <div class="or">今日照護</div>
+        <NuxtLink class="btn" to="/shift">值班記錄</NuxtLink>
         <NuxtLink class="btn" to="/regular">飲食與如廁紀錄</NuxtLink>
         <NuxtLink class="btn" to="/medicine">餵藥及特殊飲食紀錄</NuxtLink> 
         <div class="or">協作與安排</div>
