@@ -543,6 +543,16 @@
                         <template v-else>儲存表單</template>
                     </button>
 
+                    <!-- 把值班回報手動推到 LINE 群組（同 /regular、/medicine），只在觀察分頁 -->
+                    <button
+                        type="button"
+                        class="btn line-green"
+                        v-show="tab === 'arrive' && !isDisabled"
+                        @click="ManualNotifyLine"
+                    >
+                        {{ loadingNotify ? '通知中...' : 'LINE 手動發送' }}
+                    </button>
+
                     <NuxtLink class="f_red" :to="prevLink">看前班紀錄</NuxtLink>
                     <NuxtLink class="f_red" to="/shift">回到現在這一班</NuxtLink>
                 </div>
@@ -639,6 +649,7 @@ const { nickname, getUserId } = useProfile();
 
 // State
 const loading = ref(true);
+const loadingNotify = ref(false);
 const saveStatus = ref('success');
 const lastUpdatedAt = ref(null);
 const lastSavedAt = ref(null);
@@ -1090,6 +1101,59 @@ async function Submit() {
     await UpdateShift();
 }
 
+// 跟 /regular、/medicine 一樣：先跳確認視窗，按「是的」才推到 LINE 群組
+async function ManualNotifyLine() {
+    const ShiftMap = { morning: '早班', night: '晚班' };
+
+    try {
+        loadingNotify.value = true;
+        const textDate = $dayjs(formData.value.date).format('YYYY/MM/DD');
+        const textShift = ShiftMap[formData.value.shift];
+        const member = formData.value.member || '';
+        const note = formData.value.note || '';
+        const textPush = `值班記錄\n---------------\n日期： ${textDate}\n班別： ${textShift}\n志工： ${member}\n回報：\n${note}`;
+        const textSite =
+            config.public.deploySite === 'feliformia'
+                ? ''
+                : `[${config.public.deploySite || 'Local'}]\n`;
+        const textManual = '[大哥通知]\n';
+
+        // 確認視窗是 HTML：先跳脫，再把換行轉成 <br>，看到的才跟實際送出的一樣
+        const toHtml = (text) =>
+            text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/\n/g, '<br>');
+        const htmlPush = `<div style="text-align: left;"><b><h3>將以下訊息通知大哥</h3></b>值班記錄<br>---------------<br>日期： ${textDate}<br>班別： ${textShift}<br>志工： ${toHtml(member)}<br>回報：<br>${toHtml(note)}</div>`;
+
+        const { isConfirmed } = await Swal.fire({
+            html: htmlPush,
+            showCancelButton: true,
+            cancelButtonText: '取消',
+            confirmButtonColor: '#b33a39',
+            confirmButtonText: '是的',
+        });
+
+        if (isConfirmed) {
+            try {
+                await $fetch('/api/line/message/push', {
+                    method: 'POST',
+                    body: { text: textSite + textManual + textPush },
+                });
+                Swal.fire({ text: '手動發送成功', confirmButtonColor: '#b33a39' });
+            } catch {
+                Swal.fire({
+                    html: '手動發送失敗。<br>請確認網路狀態後重試。',
+                    confirmButtonColor: '#b33a39',
+                });
+            }
+        }
+    } finally {
+        loadingNotify.value = false;
+    }
+}
+
 // 頁面離開前警告
 function handleBeforeUnload(e) {
     if (isPending.value) {
@@ -1162,6 +1226,11 @@ watch(
         margin: 0 0 5px 0;
         color: #ccc;
         font-size: 11px;
+    }
+
+    .line-green {
+        background-color: #03c100;
+        color: white;
     }
 
     .member-row {
