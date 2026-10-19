@@ -2,9 +2,9 @@ import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 
 // 局部更新：前端只送改動的那幾格，由資料庫的 shift_apply 一次套用（同一班會排隊，不會互蓋）。
-// ops 格式見 supabase/migrations/*_reports_per_person.sql
+// ops 格式見 supabase/migrations/*_care_system.sql
 const COLUMNS = ['cats', 'tasks', 'reports']
-const TABS = ['arrive', 'care', 'meds', 'leave', 'required']
+const TABS = ['arrive', 'care', 'leave', 'required']
 const MAX_REPORT_LENGTH = 5000
 
 export default defineEventHandler(async (event) => {

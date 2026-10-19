@@ -3,7 +3,7 @@
         <CareItemsAdmin
             title="飲食管理"
             table="diet_items"
-            :categories="['乾乾', '罐罐', '補充', '其他']"
+            :categories="['乾乾', '罐罐', '隨餐藥', '補充品', '其他']"
             :main-field="{
                 key: 'content',
                 label: '內容',
@@ -15,7 +15,8 @@
 </template>
 
 <script setup>
-// 飲食管理（diet_items）。值班記錄表的備餐分頁只看、不打勾
+// 飲食管理（diet_items）。值班記錄表的備餐分頁只看、不打勾；
+// 只有「隨餐藥」（拌進飯裡、放碗就可以走）要打勾
 definePageMeta({
     middleware: 'admin',
     ssr: false,

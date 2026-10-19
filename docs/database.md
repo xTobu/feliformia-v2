@@ -145,14 +145,14 @@ votes.data
 ## 新版值班系統（試行中）
 
 跟上面的 `cats`、`notices`、`medicines`、`regulars` **並行**，資料各自獨立、不互通，讓大家慢慢換過來。
-建表在 `supabase/migrations/*_create_care_tables.sql`，位置清單在 `composables/locations.js`
+建表在 `supabase/migrations/*_care_system.sql`，位置清單在 `composables/locations.js`
 （資料庫有 check 擋，兩邊要一起改）。
 
 | 表 | 頁面 | 說明 |
 |---|---|---|
 | `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order` |
-| `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／補充／其他，`content` |
-| `medical_items` | `/admin/medical` | 醫療。`category` 醫療／吃藥，`treatment`、`reason` |
+| `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／隨餐藥／補充品／其他，`content`。只有隨餐藥（拌進飯裡、放碗就可以走）要在備餐分頁打勾 |
+| `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用，`treatment`、`reason`；都在醫療分頁打勾 |
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `shift_comments` | `/shift` | 每隻貓、每個分頁的留言，只新增不覆寫 |
@@ -174,6 +174,7 @@ votes.data
 這個值記在這一班自己身上：當天的班每次載入會照上一班現在的記錄重算，有變才寫回（`persistPrevReleased`）。
 
 醫療、吃藥、收尾打勾時記下 `done_by`（登入者暱稱）與 `done_at`，畫面顯示「✓ 阿明 21:40」。
+值班記錄表的分頁是 觀察、醫療、備餐、收尾（`arrive` / `care` / `leave` / `required`）。
 `reports` 是 `{ 分頁: { user_id: { name, text, at } } }`：每個分頁、每個人各一段，用登入身分（沒有「填表志工」）。
 每個人只能改自己那一段，名字與時間由 server 填（`server/api/shift/update.post.js`）。
 下一班在**同一個分頁**上方看到上一班的回報（`components/ShiftReportBlock.vue`，可摺疊，這台裝置會記住），

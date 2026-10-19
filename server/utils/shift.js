@@ -5,7 +5,8 @@ import { supabase } from '~/server/utils/supabase'
 //
 // cats:  { "<cat_id>": { cat_id, name, location, sort, intake, released, prev_released,
 //                        medical: { "<id>": { id, category, treatment, reason, end_date, sort, done, done_by, done_at } },
-//                        diet:    { "<id>": { id, category, content, end_date, sort } } } }
+//                        diet:    { "<id>": { id, category, content, end_date, sort[, done, done_by, done_at] } } } }
+//        飲食只看不勾，只有「隨餐藥」要打勾（多 done / done_by / done_at）
 // tasks: { "medical:<id>" | "diet:<id>": { kind, id, location, ...同上 }  不屬於單一貓咪的項目（location 空 = 全員）
 //          "required:<id>": { kind, id, cat_id, location, content, end_date, sort, done, done_by, done_at } }
 //          收尾：對象可以是某隻貓、全員（都空）、貓屋或某個位置，不管哪一種都是整班勾一次
@@ -31,6 +32,9 @@ export function previousShiftOf(date, shift) {
 export function isValidShiftQuery(date, shift) {
     return /^\d{4}-\d{2}-\d{2}$/.test(date || '') && ['morning', 'night'].includes(shift)
 }
+
+// 飲食裡要打勾的類別：拌進飯裡的藥，放碗就可以走
+export const MEAL_MED = '隨餐藥'
 
 // 到班時還沒填的樣子（欄位與 /regular 相同）
 export function defaultIntake() {
@@ -115,6 +119,7 @@ export async function buildSnapshot(date, shift) {
             content: i.content,
             end_date: i.end_date || null,
             sort: i.sort_order ?? MAX,
+            ...(i.category === MEAL_MED ? { done: false, done_by: null, done_at: null } : {}),
         }),
     }
     const lists = {
@@ -190,11 +195,11 @@ function hasRecord(cat) {
     const intakeChanged =
         !!cat.intake &&
         Object.keys(defaults).some((key) => (cat.intake[key] ?? null) !== defaults[key])
-    return !!cat.released || anyDone(cat.medical) || intakeChanged
+    return !!cat.released || anyDone(cat.medical) || anyDone(cat.diet) || intakeChanged
 }
 
 // 當天的班載入時，用後台現在的設定重建一份，再把這班已經填的資料併回去：
-// 觀察、放風照舊；上一班放風照上一班現在的記錄；醫療、收尾照 id 保留「完成」；飲食一律用最新的；
+// 觀察、放風照舊；上一班放風照上一班現在的記錄；醫療、收尾、隨餐藥照 id 保留「完成」；其他飲食一律用最新的；
 // 這班建立後才領養或刪除的貓，有填過資料就留著。
 // 不寫回資料庫（上一班放風例外，見 persistPrevReleased）：之後打勾時，前端只送那一格，shift_apply 會補上缺的層
 export async function syncWithSettings(record) {
@@ -210,6 +215,7 @@ export async function syncWithSettings(record) {
                   intake: old.intake ?? cat.intake,
                   released: old.released ?? false,
                   medical: mergeItems(cat.medical, old.medical),
+                  diet: mergeItems(cat.diet, old.diet),
               }
             : cat
     }

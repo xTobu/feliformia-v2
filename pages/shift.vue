@@ -174,7 +174,7 @@
                     </div>
                 </div>
 
-                <!-- ========== 醫療、吃藥：醫療管理的項目，依類別分兩個分頁（只列有事項的貓） ========== -->
+                <!-- ========== 醫療：醫療管理的項目（醫療、餵藥、外用），只列有事項的貓 ========== -->
                 <template v-for="section in medicalSections" :key="section.tab">
                     <div v-show="tab === section.tab" class="W100">
                         <ShiftReportBlock v-bind="prevBlock(section.tab)" />
@@ -327,32 +327,47 @@
                             {{ entry.cat.released ? '✓ 放風' : '放風' }}
                         </button>
                         <div class="detail">
-                            <!-- 乾乾、罐罐、補充、其他：只看不打勾。同類別併成一列，全員／位置的標出來源 -->
+                            <!-- 乾乾、罐罐、補充品、其他：只看不打勾；隨餐藥（拌進飯裡）要打勾。
+                                 同類別併成一列，全員／位置的標出來源 -->
                             <div
                                 v-for="(row, index) in entry.dietRows"
                                 :key="row.category"
-                                class="d_flex item-row"
+                                class="d_flex item-row diet-row"
                                 :class="{ divided: index > 0 }"
                             >
                                 <p class="f_blue">{{ row.category }}</p>
                                 <div class="d_flex">
                                     <div class="txt full">
                                         <!-- 文字一律齊左；全員／位置的來源標籤靠右成一欄 -->
-                                        <div v-for="item in row.items" :key="item.key" class="diet-item">
+                                        <div v-for="it in row.items" :key="it.key" class="diet-item">
                                             <div class="diet-line">
-                                                <span class="diet-text">{{ item.content }}</span>
-                                                <span v-if="item.source" class="source-chip">{{
-                                                    item.source
+                                                <span class="diet-text">{{ it.item.content }}</span>
+                                                <span v-if="it.source" class="source-chip">{{
+                                                    it.source
                                                 }}</span>
+                                                <el-checkbox
+                                                    v-if="isMealMed(it.item)"
+                                                    v-model="it.item.done"
+                                                    class="diet-done"
+                                                    :disabled="isDisabled"
+                                                    @change="
+                                                        stampDone(it.item);
+                                                        saveDietItem(entry.cat, it);
+                                                    "
+                                                    >完成</el-checkbox
+                                                >
                                             </div>
-                                            <div v-if="item.end_date" class="diet-note">
-                                                至 {{ $dayjs(item.end_date).format('MM/DD') }}
+                                            <div v-if="it.item.done && it.item.done_by" class="diet-note done-by">
+                                                ✓ {{ doneLabel(it.item) }}
+                                            </div>
+                                            <div v-if="it.item.end_date" class="diet-note">
+                                                至 {{ $dayjs(it.item.end_date).format('MM/DD') }}
                                             </div>
                                         </div>
                                     </div>
                                 </div>
                             </div>
-                            <div v-if="entry.dietRows.length === 0" class="d_flex item-row">
+                            <div v-if="entry.dietRows.length === 0" class="d_flex item-row diet-row">
                                 <p class="f_blue">飲食</p>
                                 <div class="d_flex">
                                     <div class="txt full">
@@ -363,7 +378,7 @@
                         </div>
                     </div>
 
-                    <!-- 貓後面：沒有任何貓適用的飲食項目（例如那個位置還沒有貓），只看 -->
+                    <!-- 貓後面：沒有任何貓適用的飲食項目（例如那個位置還沒有貓） -->
                     <div v-if="leaveCats.length && leaveTaskGroups.length" class="section-title later">
                         全員與位置
                     </div>
@@ -377,13 +392,29 @@
                             <div
                                 v-for="(item, index) in group.items"
                                 :key="item.key"
-                                class="d_flex item-row"
+                                class="d_flex item-row diet-row"
                                 :class="{ divided: index > 0 }"
                             >
                                 <p class="f_blue">{{ item.category }}</p>
                                 <div class="d_flex">
                                     <div class="txt full">
-                                        <font class="treatment">{{ item.content }}</font>
+                                        <div class="diet-line">
+                                            <span class="diet-text">{{ item.content }}</span>
+                                            <el-checkbox
+                                                    v-if="isMealMed(item)"
+                                                    v-model="item.done"
+                                                    class="diet-done"
+                                                    :disabled="isDisabled"
+                                                    @change="
+                                                        stampDone(item);
+                                                        saveTask(item);
+                                                    "
+                                                    >完成</el-checkbox
+                                                >
+                                        </div>
+                                        <div v-if="item.done && item.done_by" class="diet-note done-by">
+                                            ✓ {{ doneLabel(item) }}
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -702,7 +733,7 @@
 </template>
 
 <script setup>
-// 新版值班記錄表：一個班一筆 shifts，合併觀察、醫療、吃藥、備餐、收尾五個分頁。
+// 新版值班記錄表：一個班一筆 shifts，合併觀察、醫療、備餐、收尾四個分頁。
 // 資料來自新版的 cat_profiles 與飲食／醫療／待辦管理；/regular、/medicine 維持原樣，兩邊不互通。
 // 存檔是「局部更新」：每改一格只送那一格（saveIntake、saveCatItem…），
 // 兩個人同時改不同的貓或項目不會互相覆蓋
@@ -937,11 +968,13 @@ function mergeRemote(row) {
         if (raw.intake && !busy('cats', [id, 'intake'])) lc.intake = rc.intake;
         if ('released' in raw && !busy('cats', [id, 'released'])) lc.released = rc.released;
         if ('prev_released' in raw) lc.prev_released = rc.prev_released;
-        for (const ri of rc.medical) {
-            if (busy('cats', [id, 'medical', String(ri.id)])) continue;
-            const li = lc.medical.find((i) => i.id === ri.id);
-            if (li) Object.assign(li, pickDone(ri));
-            else lc.medical.push(ri);
+        for (const list of ['medical', 'diet']) {
+            for (const ri of rc[list]) {
+                if (busy('cats', [id, list, String(ri.id)])) continue;
+                const li = lc[list].find((i) => i.id === ri.id);
+                if (!li) lc[list].push(ri);
+                else if ('done' in ri) Object.assign(li, pickDone(ri));
+            }
         }
     }
     local.cats.sort(bySort);
@@ -949,8 +982,8 @@ function mergeRemote(row) {
     for (const rt of remote.tasks) {
         if (busy('tasks', [rt.key])) continue;
         const lt = local.tasks.find((t) => t.key === rt.key);
-        if (lt) Object.assign(lt, pickDone(rt));
-        else local.tasks.push(rt);
+        if (!lt) local.tasks.push(rt);
+        else if ('done' in rt) Object.assign(lt, pickDone(rt));
     }
 
     for (const [key, byUser] of Object.entries(row.reports || {})) {
@@ -977,9 +1010,9 @@ const draft = ref('');
 const draftForNext = ref(false);
 const sending = ref(false);
 
-const TABS = ['arrive', 'care', 'meds', 'leave', 'required'];
+const TABS = ['arrive', 'care', 'leave', 'required'];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
-const TAB_LABELS = { arrive: '觀察', care: '醫療', meds: '吃藥', leave: '備餐', required: '收尾' };
+const TAB_LABELS = { arrive: '觀察', care: '醫療', leave: '備餐', required: '收尾' };
 const tabLabel = computed(() => TAB_LABELS[tab.value]);
 
 const inThisTab = (list, catId) =>
@@ -1075,13 +1108,10 @@ function groupTasks(filter) {
     return [...map.values()].sort((a, b) => placeRank(a.location) - placeRank(b.location));
 }
 
-// 醫療分頁與吃藥分頁：都是醫療管理的項目，依類別分開（吃藥一頁，醫療一頁；舊資料的其他也算醫療）
-const isMeds = (item) => item.category === '吃藥';
+// 醫療分頁：醫療管理的所有項目（醫療、餵藥、外用），每一項左邊標類別。
+// 拌進飯裡的藥是飲食管理的「隨餐藥」，在備餐分頁
 const medicalSections = computed(() =>
-    [
-        { tab: 'care', match: (i) => !isMeds(i), empty: '這一班沒有醫療事項' },
-        { tab: 'meds', match: isMeds, empty: '這一班沒有要吃的藥' },
-    ].map(({ tab, match, empty }) => ({
+    [{ tab: 'care', match: () => true, empty: '這一班沒有醫療事項' }].map(({ tab, match, empty }) => ({
         tab,
         empty,
         cats: formData.value.cats
@@ -1091,9 +1121,10 @@ const medicalSections = computed(() =>
     }))
 );
 
-// 備餐：全員的飲食併進每隻貓，位置的併進那個位置的貓。全部只看、不打勾。
-// 同類別排在一起：乾乾 → 罐罐 → 補充 → 其他；同類別裡自己的在前、全員／位置的在後（sort 是穩定的）
-const DIET_ORDER = { 乾乾: 0, 罐罐: 1, 補充: 2, 其他: 3 };
+// 備餐：全員的飲食併進每隻貓，位置的併進那個位置的貓。只有隨餐藥要打勾，其他只看。
+// 同類別排在一起：乾乾 → 罐罐 → 隨餐藥 → 補充品 → 其他；同類別裡自己的在前、全員／位置的在後（sort 是穩定的）
+const DIET_ORDER = { 乾乾: 0, 罐罐: 1, 隨餐藥: 2, 補充品: 3, 其他: 4 };
+const isMealMed = (item) => item.category === '隨餐藥';
 const byDietOrder = (a, b) => (DIET_ORDER[a.category] ?? 9) - (DIET_ORDER[b.category] ?? 9);
 
 // 已照類別排好的清單，相鄰同類別的併成 { category, items }
@@ -1109,18 +1140,25 @@ function groupByCategory(list) {
 
 const appliesTo = (task, cat) => !task.location || task.location === cat.location;
 
+// 每一項包成 { key, source, item }：item 是原本的物件（隨餐藥打勾要改到它），source 是全員／位置的來源標籤
 const leaveCats = computed(() => {
     const dietTasks = formData.value.tasks.filter((t) => t.kind === 'diet');
     return formData.value.cats.map((cat) => {
         const items = [
-            ...cat.diet.map((d) => ({ ...d, key: `diet-${d.id}` })),
+            ...cat.diet.map((d) => ({ key: `diet-${d.id}`, source: null, item: d, category: d.category })),
             ...dietTasks
                 .filter((t) => appliesTo(t, cat))
-                .map((t) => ({ ...t, source: placeName(t.location) })),
+                .map((t) => ({ key: t.key, source: placeName(t.location), item: t, category: t.category })),
         ].sort(byDietOrder);
         return { cat, dietRows: groupByCategory(items) };
     });
 });
+
+// 隨餐藥打勾：貓自己的存在那隻貓底下；全員／位置的是整班一份
+function saveDietItem(cat, { source, item }) {
+    if (source) saveTask(item);
+    else saveCatItem(cat, 'diet', item);
+}
 
 // 備餐分頁貓後面那一區：沒有任何貓適用的飲食（例如那個位置還沒有貓），不然會看不到
 const leaveTaskGroups = computed(() =>
@@ -1168,9 +1206,14 @@ const tabList = computed(() => {
     return [
         { value: 'arrive', label: '觀察', remaining: 0 },
         { value: 'care', label: '醫療', remaining: sectionUndone('care') },
-        { value: 'meds', label: '吃藥', remaining: sectionUndone('meds') },
-        // 備餐只是參考，沒有要打勾的
-        { value: 'leave', label: '備餐', remaining: 0 },
+        {
+            value: 'leave',
+            label: '備餐',
+            // 只有隨餐藥要打勾；全員／位置的整班一份，只算一次
+            remaining:
+                formData.value.cats.reduce((sum, c) => sum + undone(c.diet.filter(isMealMed)), 0) +
+                undone(formData.value.tasks.filter((t) => t.kind === 'diet' && isMealMed(t))),
+        },
         {
             value: 'required',
             label: '收尾',
@@ -1303,7 +1346,9 @@ function InitFromQuery() {
         : new Date().getHours() < 18
         ? 'morning'
         : 'night';
-    if (TABS.includes(queryTab)) tab.value = queryTab;
+    // 舊連結的 ?tab=meds（吃藥分頁已併進醫療）
+    const wanted = queryTab === 'meds' ? 'care' : queryTab;
+    if (TABS.includes(wanted)) tab.value = wanted;
 }
 
 async function InitShift() {
@@ -1517,6 +1562,11 @@ watch(
     .line-green {
         background-color: #03c100;
         color: white;
+    }
+
+    // 回報卡片下面的 LINE 按鈕：跟卡片拉開，不要黏在一起
+    .report .line-green {
+        margin-top: 14px;
     }
 
     // ---- 回報：跟上面的項目分開；我的回報收成一張卡片（標題／輸入框／儲存列） ----
@@ -1886,6 +1936,29 @@ watch(
         min-width: 0;
         font-size: 15px;
         color: #222;
+    }
+
+    // 備餐的類別有三個字（隨餐藥、補充品），左邊的類別欄從 40px 放寬，不然會斷行
+    .detail > .d_flex.diet-row {
+        > p {
+            width: 50px;
+            white-space: nowrap;
+        }
+
+        > div {
+            width: calc(100% - 55px);
+        }
+    }
+
+    // 隨餐藥的「完成」在同一列最右邊
+    .diet-done {
+        flex-shrink: 0;
+        margin-left: 4px;
+    }
+
+    .diet-note.done-by {
+        font-size: 12px;
+        color: #6da2c2;
     }
 
     .diet-note {
