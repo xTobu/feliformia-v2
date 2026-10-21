@@ -339,8 +339,10 @@
                                 <div class="d_flex">
                                     <div class="txt full">
                                         <!-- 文字一律齊左；全員／位置的來源標籤靠右成一欄 -->
-                                        <div v-for="it in row.items" :key="it.key" class="diet-item">
+                                        <!-- 同一類別有兩項以上時加序號，才分得出是兩項還是一項換行 -->
+                                        <div v-for="(it, n) in row.items" :key="it.key" class="diet-item">
                                             <div class="diet-line">
+                                                <span v-if="row.items.length > 1" class="diet-no">{{ n + 1 }}.</span>
                                                 <span class="diet-text">{{ it.item.content }}</span>
                                                 <span v-if="it.source" class="source-chip">{{
                                                     it.source
@@ -765,7 +767,7 @@ const lastSavedAt = ref(null);
 const realtimeChannel = ref(null);
 const commentsChannel = ref(null);
 const tab = ref('arrive');
-const prev = ref({ date: null, shift: null, reports: {}, released: [], unfinished: [] });
+const prev = ref({ date: null, shift: null, reports: {}, released: [], unfinished: {} });
 
 const marks = {
     0: '沒吃',
@@ -1176,14 +1178,16 @@ const requiredCats = computed(() =>
 );
 const requiredGroups = computed(() => groupTasks((t) => t.kind === 'required' && !t.cat_id));
 
-// 每個分頁上方：上一班同一個分頁的回報（收尾分頁另外列沒勾完的）
+// 每個分頁上方：上一班同一個分頁的回報，以及那個分頁沒勾完的項目
 function prevBlock(key) {
     const { date, shift, reports, unfinished } = prev.value;
     return {
-        title: `前班${TAB_LABELS[key]}回報`,
-        meta: date ? `${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift]}` : '',
+        // 標題直接寫是哪一班（例如 10/20 晚班），所在的分頁已經說明了是哪一類
+        title: date ? `${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift]}` : '前班',
+        entriesLabel: '前班回報',
+        countLabel: '人回報',
         entries: entriesOf(reports, key),
-        unfinished: key === 'required' ? unfinished : [],
+        unfinished: unfinished?.[key] || [],
         storageKey: `prev:${key}`,
     };
 }
@@ -1380,7 +1384,7 @@ async function InitShift() {
         shift: prevData?.shift || null,
         reports: prevData?.reports || {},
         released: prevData?.released || [],
-        unfinished: prevData?.unfinished || [],
+        unfinished: prevData?.unfinished || {},
     };
 
     subscribeToRealtime(data.recordId);
@@ -1948,6 +1952,14 @@ watch(
         > div {
             width: calc(100% - 55px);
         }
+    }
+
+    // 同一類別多項時的序號
+    .diet-no {
+        flex-shrink: 0;
+        min-width: 16px;
+        font-size: 14px;
+        color: #8e8783;
     }
 
     // 隨餐藥的「完成」在同一列最右邊

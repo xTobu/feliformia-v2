@@ -178,7 +178,7 @@ votes.data
 `reports` 是 `{ 分頁: { user_id: { name, text, at } } }`：每個分頁、每個人各一段，用登入身分（沒有「填表志工」）。
 每個人只能改自己那一段，名字與時間由 server 填（`server/api/shift/update.post.js`）。
 下一班在**同一個分頁**上方看到上一班的回報（`components/ShiftReportBlock.vue`，可摺疊，這台裝置會記住），
-收尾分頁另外列沒勾完的項目。每個分頁的「LINE 發送至群組」只發那個分頁、這一班所有人的回報（標作者），不合在一起。舊格式的回報放在 `legacy` 底下，顯示為「（舊資料）」。
+以及上一班那個分頁沒勾完的項目（醫療：醫療／餵藥／外用；備餐：隨餐藥；收尾），一項一行、對象用小標籤（`unfinishedOf`）。每個分頁的「LINE 發送至群組」只發那個分頁、這一班所有人的回報（標作者），不合在一起。舊格式的回報放在 `legacy` 底下，顯示為「（舊資料）」。
 
 存檔不是整筆覆寫：前端每改一格只送那一格（例如 `cats.12.medical.5`、`reports.care.<user_id>`），
 `/api/shift/update` 呼叫資料庫函式 `shift_apply` 套用，同一班的請求會排隊。

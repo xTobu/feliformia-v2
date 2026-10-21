@@ -9,10 +9,15 @@
             @click="toggle"
         >
             <span class="rb-title">{{ title }}</span>
-            <span class="rb-meta">{{ metaText }}</span>
+            <span v-if="meta" class="rb-meta">{{ meta }}</span>
+            <!-- 人數與未完成數收在一個小標籤裡，跟日期班別分開 -->
+            <span v-if="countText" class="rb-badge">{{
+                countText
+            }}</span>
             <span class="rb-chev" aria-hidden="true">{{ open ? '▴' : '▾' }}</span>
         </button>
         <div v-show="open" class="rb-body">
+            <div v-if="entriesLabel && entries.length" class="rb-section">{{ entriesLabel }}</div>
             <div v-for="entry in entries" :key="entry.key" class="rb-card">
                 <div class="rb-name">
                     <span class="rb-who">{{ entry.name || '（舊資料）' }}</span>
@@ -21,8 +26,18 @@
                 <!-- 回報是 textarea 寫的：保留換行，長的也完整顯示（太長就收起整塊） -->
                 <div class="rb-text">{{ entry.text }}</div>
             </div>
-            <div v-if="unfinished.length" class="rb-unfinished">
-                <b>收尾未完成：</b>{{ unfinished.join('、') }}
+            <!-- 上一班沒勾完的：一項一行，對象用小標籤。上面有回報時才加分隔線 -->
+            <div
+                v-if="unfinished.length"
+                class="rb-unfinished"
+                :class="{ 'after-entries': entries.length }"
+            >
+                <div class="rb-unfinished-title">未完成 {{ unfinished.length }} 項</div>
+                <div v-for="item in unfinished" :key="item.key" class="rb-unfinished-row">
+                    <span v-if="item.target" class="rb-target">{{ item.target }}</span>
+                    <span class="rb-content">{{ item.content }}</span>
+                    <span v-if="item.tag" class="rb-tag">{{ item.tag }}</span>
+                </div>
             </div>
         </div>
     </div>
@@ -35,8 +50,12 @@ const props = defineProps({
     meta: { type: String, default: '' },
     // [{ key, name, text, at }]，只放有內容的
     entries: { type: Array, default: () => [] },
-    // 收尾分頁才有：上一班沒勾完的項目
+    // 上一班這個分頁沒勾完的項目 [{ key, target, content, tag }]（tag：醫療分頁的類別）
     unfinished: { type: Array, default: () => [] },
+    // 回報卡片上方的小標題（前班區塊用「前班○○回報」）；空字串就不顯示
+    entriesLabel: { type: String, default: '' },
+    // 標題列人數後面的字：「2 人」或「2 人回報」
+    countLabel: { type: String, default: '人' },
     // 收起狀態存在這台裝置的 key；沒給就不記
     storageKey: { type: String, default: '' },
 });
@@ -55,10 +74,9 @@ function toggle() {
     if (storeKey.value) storage.set(storeKey.value, !open.value);
 }
 
-const metaText = computed(() =>
+const countText = computed(() =>
     [
-        props.meta,
-        props.entries.length ? `${props.entries.length} 人` : '',
+        props.entries.length ? `${props.entries.length} ${props.countLabel}` : '',
         props.unfinished.length ? `${props.unfinished.length} 項未完成` : '',
     ]
         .filter(Boolean)
@@ -87,7 +105,7 @@ function formatTime(iso) {
     width: 100%;
     height: auto;
     margin: 0;
-    padding: 9px 10px;
+    padding: 11px 12px;
     border: none;
     background: none;
     color: #657181;
@@ -100,6 +118,18 @@ function formatTime(iso) {
         font-size: 14px;
         font-weight: 500;
         color: #4a4542;
+    }
+
+    // 人數・未完成數的小標籤
+    .rb-badge {
+        flex-shrink: 0;
+        padding: 0 7px;
+        border-radius: 10px;
+        background: #f0eeec;
+        color: #767676;
+        font-size: 12px;
+        line-height: 20px;
+        white-space: nowrap;
     }
 
     .rb-meta {
@@ -121,13 +151,35 @@ function formatTime(iso) {
 .rb-body {
     display: flex;
     flex-direction: column;
-    gap: 8px;
-    padding: 8px 10px 10px;
+    gap: 10px;
+    padding: 14px 12px;
     border-top: 1px solid #eee;
 }
 
+// 區塊裡的小標題：前班回報、未完成 N 項。字後面拉一條細線分段；
+// 用小一點的灰字，不搶回報內容與未完成項目
+.rb-section,
+.rb-unfinished-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #8e8783;
+
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #d8d4d1;
+    }
+}
+
+.rb-unfinished-title {
+    margin-bottom: 2px;
+}
+
 .rb-card {
-    padding: 8px 10px;
+    padding: 10px 12px;
     border-radius: 6px;
     background: #f4f5f5;
 }
@@ -159,14 +211,50 @@ function formatTime(iso) {
 }
 
 .rb-unfinished {
-    padding-top: 8px;
-    border-top: 1px dashed #ccc;
-    font-size: 14px;
-    color: #4a4542;
+    // 接在回報後面時多留一點空，靠標題分段，不再用虛線
+    &.after-entries {
+        margin-top: 12px;
+    }
 
-    b {
-        font-weight: 500;
-        color: #b33a39;
+
+    .rb-unfinished-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 9px 0;
+        font-size: 14px;
+        line-height: 1.4;
+        color: #222;
+
+        & + .rb-unfinished-row {
+            border-top: 1px solid #eee;
+        }
+    }
+
+    // 對象標籤：跟備餐分頁「全員」那種來源標籤同一個樣子
+    .rb-target {
+        flex-shrink: 0;
+        min-width: 34px;
+        padding: 0 6px;
+        border-radius: 3px;
+        background: #f0eeec;
+        color: #767676;
+        font-size: 12px;
+        line-height: 20px;
+        text-align: center;
+    }
+
+    .rb-content {
+        flex: 1;
+        min-width: 0;
+        overflow-wrap: anywhere;
+    }
+
+    // 類別（醫療、餵藥、外用）：靠右的小灰字
+    .rb-tag {
+        flex-shrink: 0;
+        font-size: 12px;
+        color: #8e8783;
     }
 }
 </style>

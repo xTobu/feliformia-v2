@@ -263,3 +263,56 @@ export async function persistPrevReleased(stored, synced) {
     })
     if (error) throw createError({ statusCode: 500, message: error.message })
 }
+
+// 一班裡還沒勾的項目，給下一班看（/api/shift/previous）。只看那一班的快照，跟後台現在的設定無關。
+// { care: [...], leave: [...], required: [...] }，每一項 { key, target, content, tag }：
+//   target 是對象（貓名、全員、貓屋或位置），畫面上當小標籤；tag 是類別（醫療分頁才有）
+// 順序：貓在前（照那一班的貓順序），全員 → 貓屋 → 位置在後
+const PLACE_ORDER = ['貓屋', '客廳', '房間', '倉庫', '隔離區']
+const placeRank = (location) => (!location ? 0 : 1 + PLACE_ORDER.indexOf(location))
+const bySort = (a, b) => (a.sort ?? MAX) - (b.sort ?? MAX)
+
+export function unfinishedOf(record) {
+    const cats = Object.values(record?.cats || {}).sort(bySort)
+    const tasks = Object.entries(record?.tasks || {}).map(([key, t]) => ({ key, ...t }))
+    const catName = (id) => record?.cats?.[id]?.name || ''
+    const undone = (i) => 'done' in i && !i.done
+
+    const fromCats = (list, filter, toRow) =>
+        cats.flatMap((cat) =>
+            Object.values(cat[list] || {})
+                .filter((i) => undone(i) && filter(i))
+                .sort(bySort)
+                .map((i) => ({ key: `${list}:${cat.cat_id}:${i.id}`, target: cat.name, ...toRow(i) }))
+        )
+    const fromTasks = (kind, filter, toRow) =>
+        tasks
+            .filter((t) => t.kind === kind && undone(t) && filter(t))
+            .sort((a, b) => placeRank(a.location) - placeRank(b.location) || bySort(a, b))
+            .map((t) => ({
+                key: t.key,
+                target: t.cat_id ? catName(t.cat_id) : t.location || '全員',
+                ...toRow(t),
+            }))
+
+    const medicalRow = (i) => ({ content: i.treatment, tag: i.category })
+    const isMealMed = (i) => i.category === MEAL_MED
+    const dietRow = (i) => ({ content: i.content })
+    const requiredCats = (t) => t.cat_id
+    const requiredRow = (t) => ({ content: t.content })
+
+    return {
+        care: [...fromCats('medical', () => true, medicalRow), ...fromTasks('medical', () => true, medicalRow)],
+        leave: [...fromCats('diet', isMealMed, dietRow), ...fromTasks('diet', isMealMed, dietRow)],
+        // 收尾：指定貓的跟著貓的順序排在前面，其他照全員 → 貓屋 → 位置
+        required: [
+            ...cats.flatMap((cat) =>
+                tasks
+                    .filter((t) => t.kind === 'required' && undone(t) && t.cat_id === cat.cat_id)
+                    .sort(bySort)
+                    .map((t) => ({ key: t.key, target: cat.name, ...requiredRow(t) }))
+            ),
+            ...fromTasks('required', (t) => !requiredCats(t), requiredRow),
+        ],
+    }
+}
