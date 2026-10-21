@@ -78,13 +78,19 @@
                              有看到的話按「仍要登記」展開。已經填過的會自動展開 -->
                         <div v-if="cat.prev_released" class="released-row">
                             <el-tag type="warning" size="small">上一班放風</el-tag>
+                            <!-- 收起時：沒填過寫「仍要登記」，填過寫「已登記」；展開時都可以「收起」 -->
                             <button
-                                v-if="!intakeTouched(cat)"
                                 type="button"
                                 class="released-toggle"
                                 @click="toggleIntake(cat)"
                             >
-                                {{ showIntake(cat) ? '收起' : '仍要登記 ›' }}
+                                {{
+                                    showIntake(cat)
+                                        ? '收起'
+                                        : intakeTouched(cat)
+                                          ? '已登記 ›'
+                                          : '仍要登記 ›'
+                                }}
                             </button>
                         </div>
                         <div v-if="showIntake(cat)" class="detail intake">
@@ -1319,18 +1325,17 @@ function setTab(value) {
     router.replace({ query: { ...route.query, tab: value } });
 }
 
-// 上一班放風的貓：預設收起觀察欄位；按「仍要登記」或已經填過才展開
-const intakeOpened = ref(new Set());
+// 上一班放風的貓：預設收起觀察欄位，已經填過的預設展開；兩種都可以自己展開或收起。
+// intakeToggled 記使用者按過的狀態（cat_id → 要不要展開），沒按過就照預設
+const intakeToggled = ref({});
 function intakeTouched(cat) {
     const defaults = defaultIntake();
     return Object.keys(defaults).some((key) => (cat.intake[key] ?? null) !== defaults[key]);
 }
 const showIntake = (cat) =>
-    !cat.prev_released || intakeOpened.value.has(cat.cat_id) || intakeTouched(cat);
+    !cat.prev_released || (intakeToggled.value[cat.cat_id] ?? intakeTouched(cat));
 function toggleIntake(cat) {
-    const opened = new Set(intakeOpened.value);
-    opened.has(cat.cat_id) ? opened.delete(cat.cat_id) : opened.add(cat.cat_id);
-    intakeOpened.value = opened;
+    intakeToggled.value = { ...intakeToggled.value, [cat.cat_id]: !showIntake(cat) };
 }
 
 function foodHandler(cat, type) {
