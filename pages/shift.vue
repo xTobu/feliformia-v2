@@ -318,7 +318,7 @@
                     </div>
                 </template>
 
-                <!-- ========== 備餐：乾乾、罐罐、隨餐藥、補充品、其他，放風。全員／位置的飲食併進適用的貓 ========== -->
+                <!-- ========== 備餐：乾乾、罐罐、隨餐藥、補充品、放風、其他，放風按鈕。全員／位置的飲食併進適用的貓 ========== -->
                 <div v-show="tab === 'meal'" class="W100">
                     <ShiftReportBlock v-bind="prevBlock('meal')" />
                     <div
@@ -354,7 +354,7 @@
                             {{ entry.cat.released ? '✓ 放風' : '放風' }}
                         </button>
                         <div class="detail">
-                            <!-- 乾乾、罐罐、補充品、其他：只看不打勾；隨餐藥（拌進飯裡）要打勾。
+                            <!-- 乾乾、罐罐、補充品、放風、其他：只看不打勾；隨餐藥（拌進飯裡）要打勾。
                                  同類別併成一列，全員／位置的標出來源 -->
                             <div
                                 v-for="(row, index) in entry.dietRows"
@@ -1633,8 +1633,8 @@ const medicalSections = computed(() =>
 );
 
 // 備餐：全員的飲食併進每隻貓，位置的併進那個位置的貓。只有隨餐藥要打勾，其他只看。
-// 同類別排在一起：乾乾 → 罐罐 → 隨餐藥 → 補充品 → 其他；同類別裡自己的在前、全員／位置的在後（sort 是穩定的）
-const DIET_ORDER = { 乾乾: 0, 罐罐: 1, 隨餐藥: 2, 補充品: 3, 其他: 4 };
+// 同類別排在一起：乾乾 → 罐罐 → 隨餐藥 → 補充品 → 放風 → 其他；同類別裡自己的在前、全員／位置的在後（sort 是穩定的）
+const DIET_ORDER = { 乾乾: 0, 罐罐: 1, 隨餐藥: 2, 補充品: 3, 放風: 4, 其他: 5 };
 const isMealMed = (item) => item.category === '隨餐藥';
 const byDietOrder = (a, b) => (DIET_ORDER[a.category] ?? 9) - (DIET_ORDER[b.category] ?? 9);
 
@@ -1691,7 +1691,8 @@ function prevBlock(key) {
         countLabel: '人回報',
         entries: entriesOf(reports, key),
         unfinished: unfinished?.[key] || [],
-        storageKey: `prev:${key}`,
+        // 前班每次打開頁面都收起，展開不記住（不給 storageKey）
+        defaultCollapsed: true,
     };
 }
 

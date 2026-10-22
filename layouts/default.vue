@@ -4,6 +4,7 @@
             <NuxtLink to="/" class="site-name">Feliformia</NuxtLink>
             <div class="user-actions">
                 <span class="user-name">Hi, {{ displayName }}</span>
+                <NuxtLink v-if="isAdmin" to="/admin" class="admin-tag">後台</NuxtLink>
                 <!-- 設定、登出都收在選單裡（components/SiteMenu.vue） -->
                 <button class="menu-btn" aria-label="選單" @click="menuOpen = !menuOpen">
                     <Icon icon="mdi:menu" width="18" />
@@ -28,7 +29,7 @@ import SiteMenu from '~/components/SiteMenu.vue';
 import { Icon } from '@iconify/vue';
 
 const user = useSupabaseUser();
-const { displayName, loadProfile } = useProfile();
+const { displayName, isAdmin, loadProfile } = useProfile();
 const menuOpen = useState('site-menu-open', () => false);
 
 onMounted(() => {
@@ -76,6 +77,23 @@ $brown: #8e8783;
     .user-name {
         font-size: 13px;
         color: $grey;
+    }
+
+    // 管理員才看得到的後台入口，跟選單鈕同色系，不搶眼。全域 a 有底線與 margin-bottom，這裡蓋回來
+    .admin-tag {
+        margin-bottom: 0;
+        padding: 3px 8px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        background: white;
+        color: $grey;
+        font-size: 12px;
+        line-height: 1.5;
+        text-decoration: none;
+
+        &:hover {
+            background: #f0f0f0;
+        }
     }
 
     // 全域 button 有 width: 100%、padding，這裡蓋回來

@@ -151,7 +151,7 @@ votes.data
 | 表 | 頁面 | 說明 |
 |---|---|---|
 | `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order` |
-| `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／隨餐藥／補充品／其他，`content`。只有隨餐藥（拌進飯裡、放碗就可以走）要在備餐分頁打勾 |
+| `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／隨餐藥／補充品／放風／其他，`content`。只有隨餐藥（拌進飯裡、放碗就可以走）要在備餐分頁打勾。放風＝長期固定放風，內容選填：期間內的班，沒人按過放風的貓 `released` 照它打開（見下方「shifts 的快照與局部更新」） |
 | `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用，`treatment`、`reason`；都在醫療分頁打勾 |
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
@@ -172,7 +172,9 @@ votes.data
 `cats`、`tasks` 是這一班的快照，存成**以 id 為 key 的物件**（不是陣列），結構見 `server/utils/shift.js` 開頭。
 當天（台灣時間）的班每次載入都用後台最新設定重建，再把已填的資料併回去（`syncWithSettings`）；過去的班保持當時的樣子。
 上一班離開時放風的貓，這一班記 `prev_released: true`（貓沒關籠，觀察分頁不用登記吃喝排泄）。
-這個值記在這一班自己身上：當天的班每次載入會照上一班現在的記錄重算，有變才寫回（`persistPrevReleased`）。
+這個值記在這一班自己身上：當天的班每次載入會照上一班現在的記錄重算，有變才寫回（`persistReleased`）。
+備餐的放風 `released`：有人按過就記 `released_set: true`（`update.post.js` 自動加），之後照人選的；
+沒人按過的，當天（含之後）的班照飲食的「放風」項目算，每次載入重算、有變才寫回（後台加刪項目，已開的班也會跟著變）。
 
 醫療、吃藥、收尾打勾時記下 `done_by`（登入者暱稱）與 `done_at`，畫面顯示「✓ 阿明 21:40」。
 值班記錄表的分頁是 觀察、醫療、備餐、收尾（`arrive` / `care` / `meal` / `required`）。

@@ -4,7 +4,7 @@ import {
     applyCurrentCatOrder,
     buildSnapshot,
     isValidShiftQuery,
-    persistPrevReleased,
+    persistReleased,
     syncWithSettings,
     todayInTaipei,
 } from '~/server/utils/shift'
@@ -24,7 +24,7 @@ export default defineEventHandler(async (event) => {
         // 當天（含之後）的班：同步後台最新設定；過去的班保持當時的樣子
         if (date < todayInTaipei()) return toResponse(await applyCurrentCatOrder(existing))
         const record = await syncWithSettings(existing)
-        await persistPrevReleased(existing, record)
+        await persistReleased(existing, record)
         return toResponse(await applyCurrentCatOrder(record))
     }
 

@@ -54,6 +54,13 @@ export default defineEventHandler(async (event) => {
         }
     }
 
+    // 有人按了放風：記下「放風是人決定的」，之後就不再照飲食的「放風」項目自動套用（見 syncWithSettings）
+    for (const op of [...ops]) {
+        if (op.column === 'cats' && op.path.length === 2 && op.path[1] === 'released') {
+            ops.push({ column: 'cats', path: [op.path[0], 'released_set'], value: true })
+        }
+    }
+
     const { error } = await supabase.rpc('shift_apply', {
         p_shift_id: recordId,
         p_ops: ops,

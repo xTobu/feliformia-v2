@@ -103,7 +103,7 @@
                                         </el-tag>
                                     </div>
                                     <!-- 不用圖示，靠字級與深淺分出內容與原因（內容不加粗，免得跟貓名搶） -->
-                                    <div class="item-main">
+                                    <div v-if="item[mainField.key]" class="item-main">
                                         {{ item[mainField.key] }}
                                     </div>
                                     <div
@@ -181,12 +181,14 @@
                         />
                     </el-select>
                 </el-form-item>
-                <el-form-item :label="mainField.label">
+                <el-form-item :label="mainOptional ? `${mainField.label}（選填）` : mainField.label">
                     <el-input
                         v-model="form.main"
                         type="textarea"
                         :rows="2"
-                        :placeholder="mainField.placeholder"
+                        :placeholder="
+                            (mainOptional && mainField.optionalPlaceholder) || mainField.placeholder
+                        "
                     />
                 </el-form-item>
                 <el-form-item v-if="reasonField" :label="reasonField.label">
@@ -247,7 +249,8 @@ const props = defineProps({
     table: { type: String, required: true },
     // 類別清單（資料庫 check 擋的那幾個），第一個是新增時的預設值；空陣列 = 這張表沒有類別
     categories: { type: Array, default: () => [] },
-    // 主要內容欄位：{ key, label, placeholder }
+    // 主要內容欄位：{ key, label, placeholder[, optionalFor, optionalPlaceholder] }
+    //   optionalFor：這些類別可以不填內容（存空字串），例如飲食的「放風」
     mainField: { type: Object, required: true },
     // 補充欄位（醫療的原因）：{ key, label, placeholder }，沒有就不顯示
     reasonField: { type: Object, default: null },
@@ -445,6 +448,11 @@ function openDialog(item = null, target = '') {
 }
 
 // 儲存
+// 這個類別的內容可以不填（mainField.optionalFor）
+const mainOptional = computed(() =>
+    (props.mainField.optionalFor || []).includes(form.value.category)
+);
+
 async function saveItem() {
     if (!form.value.target) {
         Swal.fire({ text: '請選擇對象', confirmButtonColor: '#b33a39' });
@@ -452,7 +460,7 @@ async function saveItem() {
     }
 
     const main = form.value.main.trim();
-    if (!main) {
+    if (!main && !mainOptional.value) {
         Swal.fire({
             text: `請輸入${props.mainField.label}`,
             confirmButtonColor: '#b33a39',

@@ -13,6 +13,8 @@ import { supabase } from '~/server/utils/supabase'
 // done_by / done_at：誰（暱稱）、幾點勾的
 // prev_released：上一班離開時放風了（貓沒關籠，這班吃多少、排泄看不出來，觀察不用登記）。
 //                記在這一班自己身上，之後回頭看也知道為什麼沒有觀察紀錄
+// released_set：有人在這班按過放風。沒按過的，放風照飲食的「放風」項目（長期固定放風）自動套用，
+//               後台加了或刪了項目，當天已開的班也會跟著變；按過一次就照人選的，不再自動改
 
 const MAX = Number.MAX_SAFE_INTEGER
 
@@ -36,6 +38,9 @@ export function isValidShiftQuery(date, shift) {
 // 飲食裡要打勾的類別：拌進飯裡的藥，放碗就可以走
 export const MEAL_MED = '隨餐藥'
 
+// 飲食裡的長期固定放風：期間內新開的班，放風預設打開
+export const RELEASE = '放風'
+
 // 到班時還沒填的樣子（欄位與 /regular 相同）
 export function defaultIntake() {
     return {
@@ -56,22 +61,56 @@ function check(result) {
 
 const byKey = (list, keyOf) => Object.fromEntries(list.map((item) => [keyOf(item), item]))
 
+const inPeriodOn = (date) => (i) =>
+    (!i.start_date || i.start_date <= date) && (!i.end_date || i.end_date >= date)
+
+// 飲食的「放風」項目（這一班、在期間內的）→ 判斷某隻貓預設要不要放風：
+// 指定這隻貓的、全員的、或牠所在位置的都算
+function releaseRule(dietItems) {
+    const items = dietItems.filter((i) => i.category === RELEASE)
+    return (catId, location) =>
+        items.some((i) => i.cat_id === catId || (!i.cat_id && (!i.location || i.location === location)))
+}
+
+async function fetchReleaseRule(date, shift) {
+    const rows = check(
+        await supabase
+            .from('diet_items')
+            .select('cat_id, location, category, start_date, end_date')
+            .eq('category', RELEASE)
+            .or(`shift.eq.both,shift.eq.${shift}`)
+    )
+    return releaseRule(rows.filter(inPeriodOn(date)))
+}
+
+// 一班裡放風的貓（cat_id 的 Set）。當天（含之後）的班，沒人按過放風的貓照「放風」項目算，
+// 跟這一班載入時看到的一樣（就算那班載入後後台才加項目、還沒人重新打開過）；過去的班照存的
+export async function releasedCatIds(record) {
+    const cats = Object.values(record?.cats || {})
+    const untouched = cats.some((c) => !c.released_set)
+    const rule =
+        untouched && record.date >= todayInTaipei()
+            ? await fetchReleaseRule(record.date, record.shift)
+            : null
+    return new Set(
+        cats
+            .filter((c) => (rule && !c.released_set ? rule(c.cat_id, c.location) : !!c.released))
+            .map((c) => c.cat_id)
+    )
+}
+
 // 上一班離開時放風的貓
 async function previousReleased(date, shift) {
     const prev = previousShiftOf(date, shift)
     const row = check(
         await supabase
             .from('shifts')
-            .select('cats')
+            .select('date, shift, cats')
             .eq('date', prev.date)
             .eq('shift', prev.shift)
             .maybeSingle()
     )
-    return new Set(
-        Object.values(row?.cats || {})
-            .filter((c) => c.released)
-            .map((c) => c.cat_id)
-    )
+    return row ? releasedCatIds(row) : new Set()
 }
 
 // 這一班的快照：未領養的貓（照貓咪管理的順序）＋這一班、在期間內的飲食、醫療、收尾
@@ -89,8 +128,7 @@ export async function buildSnapshot(date, shift) {
         previousReleased(date, shift),
     ])
 
-    const inPeriod = (i) =>
-        (!i.start_date || i.start_date <= date) && (!i.end_date || i.end_date >= date)
+    const inPeriod = inPeriodOn(date)
 
     const toItem = {
         medical: (i) => ({
@@ -127,6 +165,9 @@ export async function buildSnapshot(date, shift) {
         required: required.filter(inPeriod),
         diet: diet.filter(inPeriod),
     }
+    // 有「放風」飲食項目的貓（自己的、全員的、所在位置的），放風預設打開
+    const releasedByDefault = releaseRule(lists.diet)
+
     const ofCat = (kind, catId) =>
         byKey(
             lists[kind].filter((i) => i.cat_id === catId).map(toItem[kind]),
@@ -142,7 +183,7 @@ export async function buildSnapshot(date, shift) {
                 location: c.location || null,
                 sort: c.sort_order ?? MAX,
                 intake: defaultIntake(),
-                released: false,
+                released: releasedByDefault(c.id, c.location || null),
                 prev_released: prevReleased.has(c.id),
                 medical: ofCat('medical', c.id),
                 diet: ofCat('diet', c.id),
@@ -199,9 +240,9 @@ function hasRecord(cat) {
 }
 
 // 當天的班載入時，用後台現在的設定重建一份，再把這班已經填的資料併回去：
-// 觀察、放風照舊；上一班放風照上一班現在的記錄；醫療、收尾、隨餐藥照 id 保留「完成」；其他飲食一律用最新的；
+// 觀察照舊；放風有人按過就照舊，沒人按過就照「放風」飲食項目重算；上一班放風照上一班現在的記錄；醫療、收尾、隨餐藥照 id 保留「完成」；其他飲食一律用最新的；
 // 這班建立後才領養或刪除的貓，有填過資料就留著。
-// 不寫回資料庫（上一班放風例外，見 persistPrevReleased）：之後打勾時，前端只送那一格，shift_apply 會補上缺的層
+// 不寫回資料庫（放風、上一班放風例外，見 persistReleased）：之後打勾時，前端只送那一格，shift_apply 會補上缺的層
 export async function syncWithSettings(record) {
     const fresh = await buildSnapshot(record.date, record.shift)
     const stored = record.cats || {}
@@ -213,7 +254,8 @@ export async function syncWithSettings(record) {
             ? {
                   ...cat,
                   intake: old.intake ?? cat.intake,
-                  released: old.released ?? false,
+                  released: old.released_set ? !!old.released : cat.released,
+                  ...(old.released_set ? { released_set: true } : {}),
                   medical: mergeItems(cat.medical, old.medical),
                   diet: mergeItems(cat.diet, old.diet),
               }
@@ -238,22 +280,24 @@ export async function applyCurrentCatOrder(record) {
     return { ...record, cats }
 }
 
-// 上一班放風要記在這一班身上。當天的班每次載入都重算（上一班可能晚一點才按放風），
-// 跟資料庫存的不一樣才寫回去
-export async function persistPrevReleased(stored, synced) {
+// 放風與上一班放風要存回這一班：下一班看「上一班放風」讀的是資料庫。當天的班每次載入都重算
+// （上一班可能晚一點才按放風、後台可能剛加了「放風」項目），跟資料庫存的不一樣才寫回去。
+// 放風只寫沒人按過的貓；載入的同時剛好有人按放風的話，以 released_set 那筆為準（下次載入不會再蓋）
+export async function persistReleased(stored, synced) {
     const ops = []
     for (const [key, cat] of Object.entries(synced.cats || {})) {
-        const before = !!stored.cats?.[key]?.prev_released
-        if (before === !!cat.prev_released) continue
-        ops.push(
-            {
-                column: 'cats',
-                path: [key],
-                value: { cat_id: cat.cat_id, name: cat.name, location: cat.location, sort: cat.sort },
-                if_missing: true,
-            },
-            { column: 'cats', path: [key, 'prev_released'], value: !!cat.prev_released }
+        const old = stored.cats?.[key] || {}
+        const fields = ['prev_released', ...(cat.released_set ? [] : ['released'])].filter(
+            (field) => !!old[field] !== !!cat[field]
         )
+        if (!fields.length) continue
+        ops.push({
+            column: 'cats',
+            path: [key],
+            value: { cat_id: cat.cat_id, name: cat.name, location: cat.location, sort: cat.sort },
+            if_missing: true,
+        })
+        for (const field of fields) ops.push({ column: 'cats', path: [key, field], value: !!cat[field] })
     }
     if (!ops.length) return
     const { error } = await supabase.rpc('shift_apply', {

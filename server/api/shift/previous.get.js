@@ -1,6 +1,6 @@
 import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
-import { isValidShiftQuery, previousShiftOf, unfinishedOf } from '~/server/utils/shift'
+import { isValidShiftQuery, previousShiftOf, releasedCatIds, unfinishedOf } from '~/server/utils/shift'
 
 // 唯讀：給定這一班，回傳前一班的各分頁回報、放風的貓、各分頁沒勾完的項目。前一班沒有記錄就回空的，不會建立
 export default defineEventHandler(async (event) => {
@@ -31,9 +31,7 @@ export default defineEventHandler(async (event) => {
         exists: true,
         // { 分頁: { user_id: { name, text, at } } }
         reports: data.reports || {},
-        released: Object.values(data.cats || {})
-            .filter((c) => c.released)
-            .map((c) => c.cat_id),
+        released: [...(await releasedCatIds({ ...prev, cats: data.cats }))],
         // { care, meal, required }：各分頁沒勾完的項目，見 unfinishedOf
         unfinished: unfinishedOf(data),
     }

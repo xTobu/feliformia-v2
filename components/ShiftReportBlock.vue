@@ -1,6 +1,7 @@
 <template>
     <!-- 值班記錄表的回報區塊：前一班同分頁的回報、這一班其他人的回報。依人分組，一人一張灰底卡片。
-         沒有內容就整塊不顯示；預設展開，收起後這台裝置會記住（每個 storageKey 各自記） -->
+         沒有內容就整塊不顯示；預設展開（defaultCollapsed 就預設收起）。
+         有 storageKey 時展開或收起後這台裝置會記住（每個 key 各自記）；沒有就每次打開、換班都回到預設 -->
     <div v-if="entries.length || unfinished.length" class="report-block">
         <button
             type="button"
@@ -58,15 +59,19 @@ const props = defineProps({
     countLabel: { type: String, default: '人' },
     // 收起狀態存在這台裝置的 key；沒給就不記
     storageKey: { type: String, default: '' },
+    // 預設收起（有 storageKey 時：這台裝置還沒展開或收起過才算）
+    defaultCollapsed: { type: Boolean, default: false },
 });
 
 const { $dayjs } = useNuxtApp();
 const storage = useLocalStorage();
 const storeKey = computed(() => props.storageKey && `shift-report-collapsed:${props.storageKey}`);
 
-const open = ref(!(storeKey.value && storage.get(storeKey.value, false)));
-watch(storeKey, (key) => {
-    open.value = !(key && storage.get(key, false));
+const isCollapsed = (key) => (key ? storage.get(key, props.defaultCollapsed) : props.defaultCollapsed);
+const open = ref(!isCollapsed(storeKey.value));
+// 換班（標題變了）或換 key 時回到預設／記住的狀態
+watch([storeKey, () => props.title], ([key]) => {
+    open.value = !isCollapsed(key);
 });
 
 function toggle() {
