@@ -28,6 +28,12 @@
                                 </span>
                                 {{ cat.name }}
                             </div>
+                            <!-- 暱稱：一個名字一個小灰標籤 -->
+                            <div v-if="cat.nicknames?.length" class="cat-nicknames">
+                                <span v-for="nickname in cat.nicknames" :key="nickname" class="nick-chip">{{
+                                    nickname
+                                }}</span>
+                            </div>
                             <div class="cat-meta">
                                 <div class="cat-status">
                                     <span v-if="cat.location"
@@ -83,6 +89,10 @@
                             v-model="form.name"
                             placeholder="例如：大哥"
                         />
+                    </el-form-item>
+                    <el-form-item label="暱稱">
+                        <!-- 輸入後按 Enter 變成一個標籤，可以填多個 -->
+                        <el-input-tag v-model="form.nicknames" placeholder="輸入後按 Enter" />
                     </el-form-item>
                     <el-form-item label="位置">
                         <!-- 不開搜尋：手機點了不會跳出鍵盤 -->
@@ -196,6 +206,7 @@ const form = ref(emptyForm());
 function emptyForm() {
     return {
         name: '',
+        nicknames: [],
         location: '',
         adopted: false,
         coats: [],
@@ -210,6 +221,13 @@ function emptyForm() {
 }
 
 const savingCat = ref(false);
+
+// 暱稱：去掉空白、重複，以及跟名稱本身一樣的
+function cleanNicknames(name) {
+    return [
+        ...new Set((form.value.nicknames || []).map((n) => n.trim()).filter((n) => n && n !== name)),
+    ];
+}
 
 function toggleCoat(coat) {
     form.value.coats = form.value.coats.includes(coat)
@@ -305,6 +323,7 @@ function openDialog(cat = null) {
     form.value = cat
         ? {
               name: cat.name,
+              nicknames: [...(cat.nicknames || [])],
               location: cat.location || '',
               adopted: cat.adopted,
               coats: [...(cat.coats || [])],
@@ -332,6 +351,7 @@ async function saveCat() {
 
     const payload = {
         name,
+        nicknames: cleanNicknames(name),
         location: form.value.location || null,
         adopted: form.value.adopted,
         // 花色照清單順序存
@@ -533,6 +553,25 @@ onMounted(() => {
     gap: 8px;
     font-weight: 500;
     font-size: 14px;
+}
+
+// 暱稱：一個名字一個小灰標籤，放在名字下面
+.cat-nicknames {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 4px;
+    padding-left: 36px;
+}
+
+.nick-chip {
+    display: inline-block;
+    padding: 0 6px;
+    border-radius: 3px;
+    background: #f0eeec;
+    color: #767676;
+    font-size: 12px;
+    line-height: 20px;
 }
 
 // 列表上的小頭像（沒有就顯示名字第一個字）

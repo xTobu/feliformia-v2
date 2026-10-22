@@ -83,7 +83,7 @@
                         <!-- eslint-disable-next-line vue/no-v-html -- 已先跳脫 HTML，只加上 <mark> -->
                         <span class="ch-result-body" v-html="highlight(r.body, searchedText)"></span>
                     </div>
-                    <button type="button" class="ch-result-jump" aria-label="跳到這則留言" @click="jumpFromSearch(r.id)">
+                    <button type="button" class="ch-result-jump" aria-label="跳到這則留言" @click="jumpFromSearch(r)">
                         ›
                     </button>
                 </div>
@@ -93,13 +93,17 @@
         <!-- ===== 留言 ===== -->
         <div v-show="view === 'messages'" ref="listEl" class="ch-list" @scroll="onScroll">
             <div v-if="loadingMore" class="ch-hint">載入更早的留言…</div>
-            <div v-else-if="hasMore && messages.length" class="ch-hint">往上滑看更早的班</div>
+            <div v-else-if="hasMore" class="ch-hint">往上滑看更早的班</div>
+            <!-- 更早已經沒有任何班的紀錄（新版值班記錄表開始用之前） -->
+            <div v-else-if="loadedShifts.length && !loading" class="ch-hint">已經是最早的班了</div>
             <div v-if="loading" class="ch-hint">載入中…</div>
-            <div v-else-if="!messages.length" class="ch-empty">還沒有留言</div>
-
+            <!-- 每一班都有分隔線（沒留言的班也是，看得出滑到哪一天） -->
             <template v-for="group in groups" :key="group.key">
                 <div class="ch-divider" :class="{ current: group.isCurrent }">
                     {{ shiftText(group) }}
+                </div>
+                <div v-if="!group.messages.length" class="ch-none">
+                    {{ group.isCurrent ? '這一班還沒有留言' : '沒有留言' }}
                 </div>
                 <!-- 每則留言都是一組：頭像、名字、時間，下面是氣泡（有指向頭像的尾巴）與照片。
                      所有人（含自己）都靠左；勾了「重要」的氣泡是橘色 -->
@@ -202,17 +206,17 @@
                         </div>
 
                         <div v-if="m.photos?.length && editingId !== m.id" class="ch-photos">
-                            <el-image
+                            <!-- 點了看大圖：這則留言的照片，下面是誰、幾點、說了什麼 -->
+                            <button
                                 v-for="(photo, index) in m.photos"
                                 :key="photo.id"
+                                type="button"
                                 class="ch-photo"
-                                :src="photo.thumb_url"
-                                fit="cover"
-                                :preview-src-list="m.photos.map((p) => p.url)"
-                                :initial-index="index"
-                                preview-teleported
-                                hide-on-click-modal
-                            />
+                                aria-label="看大圖"
+                                @click="openMessagePhotos(m, index)"
+                            >
+                                <img :src="photo.thumb_url" alt="" loading="lazy" />
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -232,7 +236,7 @@
                         :key="photo.id"
                         type="button"
                         class="ch-wall-item"
-                        @click="viewer = photo"
+                        @click="openWallPhoto(photo)"
                     >
                         <img :src="photo.thumb_url" alt="" loading="lazy" />
                     </button>
@@ -312,24 +316,13 @@
         </div>
     </el-drawer>
 
-    <!-- 照片牆點開的大圖：下面是那則留言，可以跳過去 -->
-    <Teleport to="body">
-        <div v-if="viewer" class="ch-viewer" @click.self="viewer = null">
-            <button type="button" class="ch-viewer-close" aria-label="關閉" @click="viewer = null">✕</button>
-            <img :src="viewer.url" alt="" class="ch-viewer-img" @click="viewer = null" />
-            <div class="ch-viewer-info">
-                <div class="ch-viewer-meta">
-                    {{ shiftText(viewer) }} · {{ viewer.comment?.author_name || '未命名' }}
-                    {{ $dayjs(viewer.comment?.created_at).format('HH:mm') }}
-                    <span v-if="viewer.comment?.edited_at">（已編輯）</span>
-                </div>
-                <div v-if="viewer.comment?.body" class="ch-viewer-body">{{ viewer.comment.body }}</div>
-                <button type="button" class="ch-viewer-jump" @click="jumpTo(viewer.comment_id)">
-                    跳到這則留言
-                </button>
-            </div>
-        </div>
-    </Teleport>
+    <!-- 看大圖（components/PhotoViewer.vue）：留言裡的照片、留言的照片牆都用這個；
+         從照片牆點開的，下面多一個「跳到這則留言」 -->
+    <PhotoViewer v-model:index="viewerIndex" :photos="viewerPhotos" @close="viewerIndex = null">
+        <template #actions="{ photo }">
+            <button v-if="photo.fromWall" type="button" @click="jumpTo(photo.commentId, photo)">跳到這則留言</button>
+        </template>
+    </PhotoViewer>
 </template>
 
 <script setup>
@@ -362,7 +355,8 @@ const MAX_PHOTOS = 10;
 const view = ref('messages');
 const messages = ref([]);
 const hasMore = ref(false);
-const cursor = ref(null);
+const cursor = ref(null); // 已載入最舊的那班 { date, shift }，下次從它往前
+const loadedShifts = ref([]); // 已載入的班（含沒留言的）
 const loading = ref(false);
 const loadingMore = ref(false);
 const wall = ref([]);
@@ -383,7 +377,36 @@ const editAttachments = ref([]); // 編輯時新加的照片 { key, file, previe
 const editFileInput = ref(null);
 const savingEdit = ref(false);
 
-const viewer = ref(null); // 照片牆點開的那張
+// 看大圖：目前的清單與第幾張（null = 關著）
+const viewerPhotos = ref([]);
+const viewerIndex = ref(null);
+
+// 留言裡的照片：這則留言的幾張可以左右換，下面是誰、幾點、說了什麼
+function openMessagePhotos(m, index) {
+    viewerPhotos.value = m.photos.map((p) => ({
+        url: p.url,
+        label: shiftText(m),
+        meta: `${m.author_name || '未命名'} ${timeText(m)}${m.edited_at ? '（已編輯）' : ''}`,
+        text: m.body,
+    }));
+    viewerIndex.value = index;
+}
+
+// 「照片」頁：只在同一班的照片之間左右換，下面是那則留言，可以跳過去
+function openWallPhoto(photo) {
+    const list = wallGroups.value.find((g) => g.photos.some((p) => p.id === photo.id))?.photos || [photo];
+    viewerPhotos.value = list.map((p) => ({
+        url: p.url,
+        label: shiftText(p),
+        meta: `${p.comment?.author_name || '未命名'} ${$dayjs(p.comment?.created_at).format('HH:mm')}${p.comment?.edited_at ? '（已編輯）' : ''}`,
+        text: p.comment?.body,
+        fromWall: true,
+        commentId: p.comment_id,
+        date: p.date,
+        shift: p.shift,
+    }));
+    viewerIndex.value = list.findIndex((p) => p.id === photo.id);
+}
 const flashId = ref(null); // 跳過去的那則，閃一下
 
 // 班的先後：日期，同一天早班在前
@@ -405,17 +428,18 @@ function groupByShift(list, field) {
     return groups;
 }
 
-// 留言：班 → 時間，舊的在上
-const groups = computed(() =>
-    groupByShift(
-        [...messages.value].sort(
-            (a, b) =>
-                shiftKey(a.date, a.shift).localeCompare(shiftKey(b.date, b.shift)) ||
-                a.created_at.localeCompare(b.created_at)
-        ),
-        'messages'
-    )
-);
+// 留言：已載入的每一班一組（沒留言的班也在），舊的在上；同一班裡照時間
+const groups = computed(() => {
+    const map = new Map();
+    const add = ({ date, shift }) => {
+        const key = shiftKey(date, shift);
+        if (!map.has(key)) map.set(key, { key, date, shift, isCurrent: key === currentKey.value, messages: [] });
+        return map.get(key);
+    };
+    loadedShifts.value.forEach(add);
+    [...messages.value].sort((a, b) => a.created_at.localeCompare(b.created_at)).forEach((m) => add(m).messages.push(m));
+    return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+});
 
 // 照片牆：跟留言一樣，舊的班在上、這一班在最下面；同一班裡照時間
 const wallGroups = computed(() =>
@@ -484,11 +508,20 @@ watch(view, (v) => {
     if (v === 'photos') scrollToBottom(wallEl);
 });
 
-async function loadPage() {
+// 一批班：第一次是這一班加前面 4 班，之後從已載入最舊的那班再往前 5 班；
+// until（{ date, shift }）是要跳到很早的某則留言時，一次載到那一班
+async function loadPage(until = null) {
     const data = await $fetch('/api/shift/comments/channel', {
-        params: { ...channelParams(), ...(cursor.value ? { before: cursor.value } : {}) },
+        params: {
+            ...channelParams(),
+            ...(cursor.value ? { cursorDate: cursor.value.date, cursorShift: cursor.value.shift } : {}),
+            ...(cursor.value && until ? { untilDate: until.date, untilShift: until.shift } : {}),
+        },
         cache: 'no-store',
     });
+    loadedShifts.value.push(
+        ...data.shifts.filter((s) => !loadedShifts.value.some((l) => l.date === s.date && l.shift === s.shift))
+    );
     data.messages.forEach(upsert);
     hasMore.value = data.hasMore;
     cursor.value = data.cursor;
@@ -506,11 +539,12 @@ async function open() {
     resetSearch();
     view.value = 'messages';
     messages.value = [];
+    loadedShifts.value = [];
     wall.value = [];
     cursor.value = null;
     hasMore.value = false;
     editingId.value = null;
-    viewer.value = null;
+    viewerIndex.value = null;
     loading.value = true;
     try {
         await loadPage();
@@ -546,17 +580,20 @@ function onScroll() {
     if (listEl.value && listEl.value.scrollTop < 60) loadMore();
 }
 
-// 照片牆 → 那則留言：切回留言，還沒載入到就一頁頁往前載，捲過去閃一下
-async function jumpTo(commentId) {
-    viewer.value = null;
+// 照片牆、搜尋結果 → 那則留言：切回留言，還沒載入到就一次往前載到那則的班（target 是 { date, shift }），
+// 捲過去閃一下
+async function jumpTo(commentId, target = null) {
+    viewerIndex.value = null;
     view.value = 'messages';
-    while (!messages.value.some((m) => m.id === commentId) && hasMore.value) {
-        loadingMore.value = true;
-        try {
-            await loadPage();
-        } finally {
-            loadingMore.value = false;
-        }
+    const loaded = () => messages.value.some((m) => m.id === commentId);
+    loadingMore.value = true;
+    try {
+        if (!loaded() && hasMore.value && target?.date) await loadPage(target);
+        while (!loaded() && hasMore.value) await loadPage();
+    } catch (e) {
+        console.error('jump load error:', e);
+    } finally {
+        loadingMore.value = false;
     }
     await nextTick();
     const el = listEl.value?.querySelector(`[data-id="${commentId}"]`);
@@ -676,12 +713,13 @@ async function runSearch() {
 }
 
 // 跳過去時搜尋結果留著，再按 🔍 會回到同一份結果，並標出這次跳的是哪一則
-function jumpFromSearch(id) {
+function jumpFromSearch(result) {
+    const id = result.id;
     lastJump.set(searchKey(), id);
     lastJumpId.value = id;
     seenIds.value = [...new Set([...seenIds.value, id])];
     seenJumps.set(searchKey(), seenIds.value);
-    jumpTo(id);
+    jumpTo(id, result);
 }
 
 // 搜尋結果：先跳脫 HTML，再把關鍵字包上 <mark>（不分大小寫）
@@ -1151,6 +1189,14 @@ button {
     text-align: center;
 }
 
+// 沒留言的班：分隔線下一行淡淡的小字
+.ch-none {
+    margin: -2px 0 4px;
+    font-size: 12px;
+    color: #c4bfbb;
+    text-align: center;
+}
+
 .ch-empty {
     padding: 18px 0;
     font-size: 14px;
@@ -1321,11 +1367,22 @@ button {
         margin-top: 0;
     }
 
+    // 點了看大圖的縮圖（button）：全域 button 樣式要蓋回來
     .ch-photo {
         width: 88px;
         height: 88px;
+        padding: 0;
+        border: none;
         border-radius: 10px;
         background: #f2f0ee;
+        overflow: hidden;
+
+        img {
+            display: block;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
     }
 }
 
@@ -1537,69 +1594,4 @@ button {
     }
 }
 
-// 照片牆的大圖（Teleport 到 body，蓋在面板上面）
-.ch-viewer {
-    position: fixed;
-    inset: 0;
-    z-index: 4000;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0, 0, 0, 0.88);
-
-    .ch-viewer-close {
-        position: absolute;
-        top: 14px;
-        right: 14px;
-        width: 36px;
-        height: 36px;
-        padding: 0;
-        border: none;
-        border-radius: 50%;
-        background: rgba(255, 255, 255, 0.15);
-        color: #fff;
-        font-size: 16px;
-    }
-
-    .ch-viewer-img {
-        max-width: 100%;
-        max-height: 62vh;
-        object-fit: contain;
-    }
-
-    .ch-viewer-info {
-        width: 100%;
-        max-width: 450px;
-        padding: 14px 18px 20px;
-        color: #fff;
-        text-align: left;
-    }
-
-    .ch-viewer-meta {
-        font-size: 12px;
-        color: rgba(255, 255, 255, 0.7);
-    }
-
-    .ch-viewer-body {
-        margin-top: 4px;
-        font-size: 15px;
-        line-height: 1.5;
-        white-space: pre-line;
-        overflow-wrap: anywhere;
-        max-height: 18vh;
-        overflow-y: auto;
-    }
-
-    .ch-viewer-jump {
-        margin-top: 12px;
-        height: 36px;
-        padding: 0 16px;
-        border: 1px solid rgba(255, 255, 255, 0.5);
-        border-radius: 8px;
-        background: none;
-        color: #fff;
-        font-size: 14px;
-    }
-}
 </style>

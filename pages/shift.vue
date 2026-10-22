@@ -800,10 +800,12 @@
                 </div>
 
                 <!-- 照片牆：照班分組，跟留言頻道一樣跨班往上看（打開時是這一班加前面 4 班，捲到最上面再往前 5 班）。
-                     沒照片的班不顯示；這一班一定有分隔線（藍色），沒照片就寫一句 -->
+                     每一班都有分隔線（沒照片的班也是，看得出滑到哪一天、也能補傳）；這一班是藍色 -->
                 <div v-else ref="photoListEl" class="cd-list" @scroll="onPhotoScroll">
                     <div v-if="historyLoading" class="pd-hint">載入更早的照片…</div>
                     <div v-else-if="historyHasMore" class="pd-hint">往上滑看更早的班</div>
+                    <!-- 更早已經沒有任何班的紀錄（新版值班記錄表開始用之前） -->
+                    <div v-else-if="historyShifts.length" class="pd-hint">已經是最早的班了</div>
                     <template v-for="group in drawerGroups" :key="group.key">
                         <div class="pd-divider" :class="{ current: group.isCurrent }">
                             {{ shiftLabel(group) }}
@@ -819,7 +821,7 @@
                             </button>
                         </div>
                         <div v-if="group.photos.length" class="pd-grid">
-                            <div v-for="(photo, index) in group.photos" :key="photo.id" class="pd-item">
+                            <div v-for="photo in group.photos" :key="photo.id" class="pd-item">
                                 <button
                                     v-if="selecting"
                                     type="button"
@@ -835,16 +837,16 @@
                                     <img :src="photo.thumb_url" alt="" />
                                     <span class="pd-check">✓</span>
                                 </button>
-                                <el-image
+                                <!-- 點了看大圖（PhotoViewer：下面有哪一班、誰、類型、描述，可以左右換張） -->
+                                <button
                                     v-else
-                                    class="pd-thumb"
-                                    :src="photo.thumb_url"
-                                    fit="cover"
-                                    :preview-src-list="group.photos.map((p) => p.url)"
-                                    :initial-index="index"
-                                    preview-teleported
-                                    hide-on-click-modal
-                                />
+                                    type="button"
+                                    class="pd-thumb pd-open"
+                                    :aria-label="`看大圖：${photo.note || ''}`"
+                                    @click="openPhotoViewer(photo)"
+                                >
+                                    <img :src="photo.thumb_url" alt="" loading="lazy" />
+                                </button>
                                 <!-- 類型：縮圖左上角的小標籤 -->
                                 <span v-if="photo.kinds?.length" class="pd-kind">{{ photo.kinds.join('・') }}</span>
                                 <div class="pd-meta">
@@ -871,8 +873,10 @@
                                 </button>
                             </div>
                         </div>
-                        <div v-else class="cd-empty">
-                            {{ photoKindFilter.length ? `這一班沒有${photoKindFilter.join('、')}照片` : '這一班還沒有照片' }}
+                        <div v-else class="pd-none">
+                            {{ group.isCurrent ? '這一班' : '這班' }}{{
+                                photoKindFilter.length ? `沒有${photoKindFilter.join('、')}照片` : '還沒有照片'
+                            }}
                         </div>
                     </template>
                 </div>
@@ -918,6 +922,15 @@
                     </button>
                 </div>
             </el-drawer>
+
+            <!-- 照片牆的看大圖：下面有哪一班、誰傳的、類型、描述；上傳的人或管理員可以直接編輯 -->
+            <PhotoViewer v-model:index="photoViewerIndex" :photos="viewerPhotos" @close="photoViewerIndex = null">
+                <template #actions="{ photo }">
+                    <button v-if="canDeletePhoto(photo.raw)" type="button" @click="editFromViewer(photo.raw)">
+                        ✎ 編輯
+                    </button>
+                </template>
+            </PhotoViewer>
 
             <!-- LINE 發送前的確認：要發的文字＋勾選要附的照片（最多 4 張；文字超過 5000 字會提醒並可以編輯） -->
             <el-dialog
@@ -1454,6 +1467,7 @@ watch(photoKindFilter, () => {
 
 // ---- 照片牆往前翻：這一班的在 photos（即時更新），前面的班在 photoHistory ----
 const photoHistory = ref([]);
+const historyShifts = ref([]); // 已經往前載入的班（含沒照片的）{ date, shift, id }
 const historyCursor = ref(null); // 已載入最舊的那班 { date, shift }，下次從它往前
 const historyHasMore = ref(false);
 const historyLoading = ref(false);
@@ -1472,21 +1486,29 @@ function photoTime(photo, group) {
 }
 
 // 面板裡的照片照班分組，舊的班在上。照片物件都是原本那一份（改描述才會留著）
+// 每一班都有一組（沒照片的班也在，看得出滑到哪一天、也能補傳），舊的在上
 const drawerGroups = computed(() => {
     if (!photoCat.value) return [];
     const { date, shift } = channelCurrent.value;
-    const groups = new Map();
-    for (const photo of photoHistory.value) {
-        if (photo.cat_id !== photoCat.value.cat_id || photo.tab !== photoTab.value || !matchesKindFilter(photo)) continue;
-        const key = shiftKeyOf(photo.date, photo.shift);
-        if (!groups.has(key)) {
-            groups.set(key, { key, date: photo.date, shift: photo.shift, shiftId: photo.shift_id, isCurrent: false, photos: [] });
-        }
-        groups.get(key).photos.push(photo);
-    }
-    const sorted = [...groups.values()].sort((a, b) => a.key.localeCompare(b.key));
+    const groups = historyShifts.value
+        .map((s) => ({
+            key: shiftKeyOf(s.date, s.shift),
+            date: s.date,
+            shift: s.shift,
+            shiftId: s.id,
+            isCurrent: false,
+            photos: photoHistory.value.filter(
+                (p) =>
+                    p.date === s.date &&
+                    p.shift === s.shift &&
+                    p.cat_id === photoCat.value.cat_id &&
+                    p.tab === photoTab.value &&
+                    matchesKindFilter(p)
+            ),
+        }))
+        .sort((a, b) => a.key.localeCompare(b.key));
     return [
-        ...sorted,
+        ...groups,
         {
             key: shiftKeyOf(date, shift),
             date,
@@ -1499,12 +1521,39 @@ const drawerGroups = computed(() => {
 });
 const drawerAllPhotos = computed(() => drawerGroups.value.flatMap((g) => g.photos));
 
+// 看大圖：只在同一班的照片之間左右換張（照畫面順序）
+const photoViewerIndex = ref(null);
+const photoViewerKey = ref(null); // 點開的是哪一班
+const viewerPhotos = computed(() => {
+    const group = drawerGroups.value.find((g) => g.key === photoViewerKey.value);
+    return (group?.photos || []).map((p) => ({
+        url: p.url,
+        label: shiftLabel(group),
+        meta: `${p.author_name || '未命名'} ${photoTime(p, group)}`,
+        kinds: p.kinds,
+        text: p.note,
+        raw: p,
+    }));
+});
+
+function openPhotoViewer(photo) {
+    const group = drawerGroups.value.find((g) => g.photos.some((p) => p.id === photo.id));
+    if (!group) return;
+    photoViewerKey.value = group.key;
+    photoViewerIndex.value = group.photos.findIndex((p) => p.id === photo.id);
+}
+
+function editFromViewer(photo) {
+    photoViewerIndex.value = null;
+    editPhoto(photo);
+}
+
 async function scrollPhotosToBottom() {
     await nextTick();
     if (photoListEl.value) photoListEl.value.scrollTop = photoListEl.value.scrollHeight;
 }
 
-// 往前載入 count 班；那幾班剛好都沒照片就自動再往前，直到有照片或沒有更早的
+// 往前載入 count 班（沒照片的班也算，畫面會顯示分隔線）
 async function loadPhotoHistory(count) {
     const from = historyCursor.value || channelCurrent.value;
     const data = await $fetch('/api/shift/photos/history', {
@@ -1519,13 +1568,16 @@ async function loadPhotoHistory(count) {
         cache: 'no-store',
     });
     photoHistory.value.push(...data.photos.filter((p) => !photoHistory.value.some((h) => h.id === p.id)));
+    historyShifts.value.push(
+        ...data.shifts.filter((s) => !historyShifts.value.some((h) => h.date === s.date && h.shift === s.shift))
+    );
     historyCursor.value = data.cursor;
     historyHasMore.value = data.hasMore;
-    if (!data.photos.length && data.hasMore) await loadPhotoHistory(MORE_SHIFTS);
 }
 
 async function openPhotoHistory() {
     photoHistory.value = [];
+    historyShifts.value = [];
     historyCursor.value = null;
     historyHasMore.value = false;
     historyLoading.value = true;
@@ -3333,6 +3385,22 @@ watch(
     overflow: hidden;
 }
 
+// 點了看大圖的縮圖（button）：全域 button 樣式要蓋回來
+.pd-open {
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    cursor: pointer;
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
 .pd-uploading {
     display: flex;
     align-items: center;
@@ -3974,6 +4042,14 @@ watch(
     font-size: 15px;
     line-height: 1;
     cursor: pointer;
+}
+
+// 沒照片的班：分隔線下一行淡淡的小字（跟留言頻道一樣）
+.pd-none {
+    margin: -4px 0 6px;
+    font-size: 12px;
+    color: #c4bfbb;
+    text-align: center;
 }
 
 .pd-hint {

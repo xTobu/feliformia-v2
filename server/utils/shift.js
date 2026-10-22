@@ -31,6 +31,60 @@ export function previousShiftOf(date, shift) {
     return { date: d.toISOString().slice(0, 10), shift: 'night' }
 }
 
+// 班的 key（date-shift），比大小用 shiftOrder
+export const shiftKey = ({ date, shift }) => `${date}-${shift}`
+// 可以排序的版本：同一天早班在前
+export const shiftOrder = ({ date, shift }) => `${date}-${shift === 'night' ? 1 : 0}`
+
+// 從某一班往前數 count 班，新的在前。include 為 true 時包含這一班本身
+export function shiftsBack(date, shift, count, include = false) {
+    const list = []
+    let cursor = { date, shift }
+    if (include) list.push(cursor)
+    while (list.length < count) {
+        cursor = previousShiftOf(cursor.date, cursor.shift)
+        list.push(cursor)
+    }
+    return list
+}
+
+// 從某一班（不含）往前，一直數到 until 那班（含），最多 max 班。新的在前
+export function shiftsBackUntil(date, shift, until, max = 400) {
+    const list = []
+    let cursor = { date, shift }
+    const target = shiftOrder(until)
+    while (list.length < max) {
+        cursor = previousShiftOf(cursor.date, cursor.shift)
+        list.push(cursor)
+        if (shiftOrder(cursor) <= target) break
+    }
+    return list
+}
+
+// 一串班在 shifts 表裡的 id（還沒人打開過的班沒有紀錄，id 是 null）
+export async function withShiftIds(list) {
+    if (!list.length) return []
+    const dates = list.map((s) => s.date).sort()
+    const { data, error } = await supabase
+        .from('shifts')
+        .select('id, date, shift')
+        .gte('date', dates[0])
+        .lte('date', dates[dates.length - 1])
+    if (error) throw createError({ statusCode: 500, message: error.message })
+    const idOf = new Map(data.map((r) => [shiftKey(r), r.id]))
+    return list.map((s) => ({ ...s, id: idOf.get(shiftKey(s)) ?? null }))
+}
+
+// 比這一班更早還有沒有班的紀錄（往上滑到最早的班就停）
+export async function hasShiftBefore({ date, shift }) {
+    const queries = [supabase.from('shifts').select('id').lt('date', date).limit(1)]
+    if (shift === 'night') queries.push(supabase.from('shifts').select('id').eq('date', date).eq('shift', 'morning').limit(1))
+    const results = await Promise.all(queries)
+    const failed = results.find((r) => r.error)
+    if (failed) throw createError({ statusCode: 500, message: failed.error.message })
+    return results.some((r) => r.data.length > 0)
+}
+
 export function isValidShiftQuery(date, shift) {
     return /^\d{4}-\d{2}-\d{2}$/.test(date || '') && ['morning', 'night'].includes(shift)
 }
