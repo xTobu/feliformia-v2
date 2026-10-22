@@ -807,7 +807,7 @@
                     <!-- 更早已經沒有任何班的紀錄（新版值班記錄表開始用之前） -->
                     <div v-else-if="historyShifts.length" class="pd-hint">已經是最早的班了</div>
                     <template v-for="group in drawerGroups" :key="group.key">
-                        <div class="pd-divider" :class="{ current: group.isCurrent }">
+                        <div class="pd-divider" :class="{ current: group.isCurrent }" :data-shift="group.key">
                             {{ shiftLabel(group) }}
                             <!-- 以前的班也可以補傳照片（還能編輯的班才有） -->
                             <button
@@ -1589,6 +1589,17 @@ async function scrollPhotosToBottom() {
     if (photoListEl.value) photoListEl.value.scrollTop = photoListEl.value.scrollHeight;
 }
 
+// 傳好後捲到傳到的那一班：這一班就到最下面；以前的班把那班的分隔線捲到最上面，新照片就在下面
+async function scrollPhotosToShift({ date, shift }) {
+    if (date === channelCurrent.value.date && shift === channelCurrent.value.shift) return scrollPhotosToBottom();
+    await nextTick();
+    const list = photoListEl.value;
+    const divider = list?.querySelector(`[data-shift="${shiftKeyOf(date, shift)}"]`);
+    if (!divider) return;
+    // 傳完預覽收起、照片格重新出現時是在最上面；直接跳過去（慢慢捲會經過頂端、觸發載入更早的班）
+    list.scrollTop += divider.getBoundingClientRect().top - list.getBoundingClientRect().top - 8;
+}
+
 // 往前載入 count 班（沒照片的班也算，畫面會顯示分隔線）
 async function loadPhotoHistory(count) {
     const from = historyCursor.value || channelCurrent.value;
@@ -1804,6 +1815,7 @@ async function uploadItems(items) {
     if (group.every((p) => p.status === 'done')) {
         dropPending(group);
         ElMessage.success(`已上傳 ${group.length} 張`);
+        scrollPhotosToShift(items[0]);
     } else if (group.some((p) => p.status === 'error')) {
         ElMessage.error('有照片上傳失敗，可以按「重試」');
     }
