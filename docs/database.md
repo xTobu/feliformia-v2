@@ -157,7 +157,7 @@ votes.data
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `profiles.avatar_path` | `/settings` | 志工頭像（`avatars` bucket，公開）。上傳走 `/api/avatar/upload-url` → 直傳 Storage → `/api/avatar/save`（換頭像會刪舊檔）；留言頻道會顯示 |
 | `shift_comments` | `/shift` | 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看（`/api/shift/comments/channel`，班與班之間有分隔線）。可以附照片、只附照片時 `body` 是空字串。作者本人可以編輯（`edited_at`，顯示「已編輯」）與刪除（附的照片連 Storage 檔一起刪）。可以搜尋（`/api/shift/comments/search`，這個頻道所有的班）。`for_next` 是「重要」：整則橘底；下一班的 💬 旁有橘點（只維持一班） |
-| `shift_photos` | `/shift` | 每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kinds` 是類型（選填、可多選，照片牆上方可以篩選，觀察 食物／貓砂／嘔吐／血跡／毛髮皮膚／其他，醫療 傷口／皮膚／眼耳口鼻／治療／用藥／其他，清單在 `composables/photoKinds.js`）。`comment_id` 空的是 🗂️ 照片牆（觀察、醫療，照班分組往上看：打開時這一班加前 4 班，往上再 5 班，`/api/shift/photos/history`），有值的是留言附的照片（只在留言頻道與它的「照片」頁） |
+| `shift_photos` | `/shift` | 每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kinds` 是類型（選填、可多選，照片牆上方可以篩選，觀察 食物／貓砂／嘔吐／血跡／毛髮皮膚／其他，醫療 傷口／皮膚／眼耳口鼻／治療／用藥／其他，備餐 乾乾／罐罐／加藥／其他，清單在 `composables/photoKinds.js`）。`comment_id` 空的是 🗂️ 照片牆（觀察、醫療、備餐，照班分組往上看：打開時這一班加前 4 班，往上再 5 班，`/api/shift/photos/history`），有值的是留言附的照片（只在留言頻道與它的「照片」頁） |
 
 **三張事項表的共同欄位**：`shift` 是 `morning` / `night` / `both`，`start_date` / `end_date` 空代表不限。
 三張都有對象：`cat_id` 有值 = 那隻貓；`location` 有值 = 那個位置；兩個都空 = 全員
@@ -184,7 +184,7 @@ votes.data
 下一班在**同一個分頁**上方看到上一班的回報（`components/ShiftReportBlock.vue`，可摺疊，這台裝置會記住），
 以及上一班那個分頁沒勾完的項目（醫療：醫療／餵藥／外用；備餐：隨餐藥；收尾），一項一行、對象用小標籤（`unfinishedOf`）。每個分頁的「LINE 發送至群組」只發那個分頁、這一班所有人的回報（標作者），不合在一起。舊格式的回報放在 `legacy` 底下，顯示為「（舊資料）」。
 
-**照片**：觀察、醫療分頁貓名旁的 📷 打開下方面板（兩個分頁的照片分開）。選好照片先預覽、每張可寫描述再上傳；上傳後描述可在縮圖下修改（`/api/shift/photos/update`）。手機上傳前自動壓縮（`composables/useImageCompress.js`：
+**照片**：觀察、醫療、備餐分頁貓名旁的 🗂️ 打開下方面板（各分頁的照片分開）。選好照片先預覽、每張可寫描述再上傳；上傳後描述可在縮圖下修改（`/api/shift/photos/update`）。手機上傳前自動壓縮（`composables/useImageCompress.js`：
 大圖最長邊 1600px 約 300KB、縮圖 400px），用 server 發的一次性上傳網址直接傳到 Storage（不經過 Vercel 的 4.5MB 上限），
 再 `POST /api/shift/photos` 記一筆；看照片用 server 發的有時效網址（12 小時）。只有上傳的人或管理員能刪（`/api/shift/photos/delete`，可一次傳多個 id，面板的「選取」模式用）。
 

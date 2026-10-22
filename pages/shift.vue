@@ -341,6 +341,18 @@
                                 }}</span>
                                 <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
                             </button>
+                            <!-- 這一班、這隻貓的備餐照片（盛好的乾乾、罐罐、加藥…） -->
+                            <button
+                                type="button"
+                                class="comment-btn"
+                                :class="{ has: photoCount(entry.cat.cat_id, 'meal') }"
+                                :aria-label="`${entry.cat.name}的照片`"
+                                @click="openPhotos(entry.cat, 'meal')"
+                            >
+                                🗂️<span v-if="photoCount(entry.cat.cat_id, 'meal')">{{
+                                    photoCount(entry.cat.cat_id, 'meal')
+                                }}</span>
+                            </button>
                         </div>
                         <!-- 放風：離開時沒有關籠，下一班在觀察分頁會看到。貓名同一列最右邊的膠囊按鈕 -->
                         <button
@@ -1432,7 +1444,7 @@ const inThisTab = (list, catId) =>
 const commentCount = (catId) => inThisTab(comments.value, catId).length;
 const hasHandover = (catId) => inThisTab(handovers.value, catId).length > 0;
 
-// ---- 照片：這一班、這隻貓、這個分頁（觀察、醫療）的照片。檔案在 Storage，網址由 server 發 ----
+// ---- 照片：這一班、這隻貓、這個分頁（觀察、醫療、備餐）的照片。檔案在 Storage，網址由 server 發 ----
 const photos = ref([]); // 這一班的照片（含 url、thumb_url）
 const photoTab = ref('arrive'); // 面板目前是哪個分頁的照片
 // 選好的照片（含上傳中、失敗的）：{ key, file, previewUrl, note, catId, tab, status }
