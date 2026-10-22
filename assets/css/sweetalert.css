@@ -1,0 +1,54 @@
+/*
+ * 全站 SweetAlert 統一成跟 el-dialog（編輯照片、發送至 LINE 群組）一樣的樣子：
+ * 圓角、按鈕左右並排（左邊白底灰框「取消」、右邊實心），一般是藍色。
+ * 刪除這類危險操作在呼叫時帶 confirmButtonColor: '#b33a39'（SweetAlert 會把它寫成按鈕上的 CSS 變數，蓋過這裡的藍色）。
+ * 顏色用 SweetAlert 自己的 CSS 變數設定；它執行時才把樣式插進 <head>，同樣寫 :root 會被蓋掉，所以寫 :root:root 提高權重。
+ * 其他樣式它用 :where() 降低權重，這裡的一般選擇器就蓋得過去
+ */
+:root:root {
+    --swal2-confirm-button-background-color: #6da2c2;
+    --swal2-cancel-button-background-color: #fff;
+    --swal2-cancel-button-color: #657181;
+    --swal2-color: #4a4542;
+}
+
+.swal2-popup {
+    border-radius: 12px;
+    color: #4a4542;
+    font-family: inherit;
+}
+
+.swal2-title,
+.swal2-html-container {
+    color: #4a4542;
+}
+
+.swal2-actions {
+    flex-direction: row-reverse;
+    flex-wrap: nowrap;
+    gap: 10px;
+    width: 100%;
+    padding: 0 16px;
+    box-sizing: border-box;
+}
+
+.swal2-actions .swal2-styled {
+    height: 44px;
+    margin: 0;
+    border-radius: 8px;
+    font-size: 15px;
+}
+
+.swal2-actions .swal2-confirm {
+    flex: 1;
+}
+
+.swal2-actions .swal2-cancel {
+    width: 36%;
+    border: 1px solid #ddd;
+}
+
+.swal2-actions .swal2-styled:focus,
+.swal2-actions .swal2-styled:focus-visible {
+    box-shadow: none;
+}

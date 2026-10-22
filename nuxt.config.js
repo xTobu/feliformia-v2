@@ -17,6 +17,7 @@ export default defineNuxtConfig({
   css: [
     'element-plus/dist/index.css',
     '~/assets/css/element-variables.css',
+    '~/assets/css/sweetalert.css',
   ],
 
   runtimeConfig: {

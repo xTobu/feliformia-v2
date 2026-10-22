@@ -197,7 +197,7 @@ async function unbindLine(profile) {
         .eq('id', profile.id);
 
     if (error) {
-        Swal.fire({ text: '解除失敗，請稍後再試', confirmButtonColor: '#b33a39' });
+        Swal.fire({ text: '解除失敗，請稍後再試' });
         return;
     }
 
@@ -233,7 +233,6 @@ async function saveProfile() {
     if (error) {
         Swal.fire({
             text: '更新失敗',
-            confirmButtonColor: '#b33a39',
         });
         return;
     }

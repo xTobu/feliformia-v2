@@ -326,7 +326,6 @@ async function saveCat() {
     if (!name) {
         Swal.fire({
             text: '請輸入貓咪名稱',
-            confirmButtonColor: '#b33a39',
         });
         return;
     }
@@ -364,7 +363,6 @@ async function writeCat(payload) {
         if (error) {
             Swal.fire({
                 text: '更新失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }
@@ -385,7 +383,6 @@ async function writeCat(payload) {
         if (error) {
             Swal.fire({
                 text: '新增失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }
@@ -408,7 +405,7 @@ async function saveAvatarSafely(catId) {
         return true;
     } catch (e) {
         console.error('save cat avatar error:', e);
-        Swal.fire({ text: '資料已儲存，但頭像上傳失敗，請再按一次儲存', confirmButtonColor: '#b33a39' });
+        Swal.fire({ text: '資料已儲存，但頭像上傳失敗，請再按一次儲存' });
         return false;
     }
 }
@@ -432,7 +429,6 @@ async function confirmDelete(cat) {
         if (error) {
             Swal.fire({
                 text: '刪除失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }

@@ -455,7 +455,7 @@ const mainOptional = computed(() =>
 
 async function saveItem() {
     if (!form.value.target) {
-        Swal.fire({ text: '請選擇對象', confirmButtonColor: '#b33a39' });
+        Swal.fire({ text: '請選擇對象' });
         return;
     }
 
@@ -463,7 +463,6 @@ async function saveItem() {
     if (!main && !mainOptional.value) {
         Swal.fire({
             text: `請輸入${props.mainField.label}`,
-            confirmButtonColor: '#b33a39',
         });
         return;
     }
@@ -487,7 +486,7 @@ async function saveItem() {
             .eq('id', editingItem.value.id);
 
         if (error) {
-            Swal.fire({ text: '更新失敗', confirmButtonColor: '#b33a39' });
+            Swal.fire({ text: '更新失敗' });
             return;
         }
     } else {
@@ -501,7 +500,7 @@ async function saveItem() {
             .insert({ ...payload, sort_order: maxOrder + 1 });
 
         if (error) {
-            Swal.fire({ text: '新增失敗', confirmButtonColor: '#b33a39' });
+            Swal.fire({ text: '新增失敗' });
             return;
         }
     }
@@ -527,7 +526,7 @@ async function confirmDelete(item, groupName) {
             .eq('id', item.id);
 
         if (error) {
-            Swal.fire({ text: '刪除失敗', confirmButtonColor: '#b33a39' });
+            Swal.fire({ text: '刪除失敗' });
             return;
         }
 

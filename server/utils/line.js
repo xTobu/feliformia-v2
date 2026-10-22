@@ -12,6 +12,8 @@ function textMessage(text) {
     return [{ type: 'text', text }]
 }
 
+export { LINE_TEXT_MAX, LINE_MESSAGES_MAX, splitText } from '~/composables/lineText'
+
 // 驗證 LINE webhook 的簽章。
 // ⚠️ 一定要用「原始的 body 字串」，解析過的 JSON 重新 stringify 會對不起來
 //（鍵的順序、空白都可能不同）。呼叫端要用 readRawBody() 不是 readBody()。
@@ -44,13 +46,13 @@ export async function pushToUser(lineUserId, text) {
     }
 }
 
-// 推播到志工群組。
+// 推播到志工群組。可以給一段文字，或已經組好的訊息陣列（文字＋圖片，最多 5 則）。
 // 正式環境才發主群組，測試環境只發夥伴群組 —— 這個安全閥是既有行為，保留。
-export async function pushToGroups(text) {
+export async function pushToGroups(textOrMessages) {
     const client = getClient()
     const groupIdMain = process.env.LINE_GROUPID_FELIFORMIA_MAIN
     const groupIdPartner = process.env.LINE_GROUPID_FELIFORMIA_PARTNER
-    const messages = textMessage(text)
+    const messages = Array.isArray(textOrMessages) ? textOrMessages : textMessage(textOrMessages)
 
     if (process.env.DEPLOY_SITE === 'feliformia' && groupIdMain) {
         await client.pushMessage(groupIdMain, messages)

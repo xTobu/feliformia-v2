@@ -543,7 +543,6 @@ async function ManualNotifyLine() {
             html: htmlPush,
             showCancelButton: true,
             cancelButtonText: '取消',
-            confirmButtonColor: '#b33a39',
             confirmButtonText: '是的',
         });
 
@@ -555,12 +554,10 @@ async function ManualNotifyLine() {
                 });
                 Swal.fire({
                     text: '手動發送成功',
-                    confirmButtonColor: '#b33a39',
                 });
             } catch {
                 Swal.fire({
                     html: '手動發送失敗。<br>請確認網路狀態後重試。',
-                    confirmButtonColor: '#b33a39',
                 });
             }
         }
@@ -601,7 +598,6 @@ onMounted(async () => {
     } catch (error) {
         Swal.fire({
             html: `網路連線異常<br>請確認連線後重試。<br><br>錯誤：${error.message}`,
-            confirmButtonColor: '#b33a39',
         });
     } finally {
         loading.value = false;

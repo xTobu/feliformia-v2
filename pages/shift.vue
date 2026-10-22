@@ -919,6 +919,117 @@
                 </div>
             </el-drawer>
 
+            <!-- LINE 發送前的確認：要發的文字＋勾選要附的照片（最多 4 張；文字超過 5000 字會提醒並可以編輯） -->
+            <el-dialog
+                :model-value="!!linePush"
+                title="發送至 LINE 群組"
+                width="90%"
+                class="line-push-dialog"
+                align-center
+                append-to-body
+                @update:model-value="(v) => !v && closeLinePush(null)"
+            >
+                <template v-if="linePush">
+                    <div v-if="linePush.editable" class="lp-warn">
+                        <template v-if="linePushBudget.chunks > 1">
+                            內容有 {{ linePushBudget.length }} 字，超過 LINE 一則 {{ LINE_TEXT_MAX }} 字，會分成
+                            {{ linePushBudget.chunks }} 則發送<template v-if="linePush.photos.length"
+                                >，照片最多只能附 {{ linePushBudget.room }} 張</template
+                            >。可以直接在下面刪減。
+                        </template>
+                        <template v-else>現在 {{ linePushBudget.length }} 字，一則就發得完。</template>
+                    </div>
+                    <el-input
+                        v-if="linePush.editable"
+                        v-model="linePush.text"
+                        type="textarea"
+                        :autosize="{ minRows: 8, maxRows: 14 }"
+                        class="lp-textarea"
+                    />
+                    <!-- 換行與縮排都照實際發出去的樣子 -->
+                    <div v-else class="lp-text">{{ linePush.text }}</div>
+
+                    <template v-if="linePush.photos.length">
+                        <!-- 跟上面的文字用分隔線隔開，提示可以點照片勾選；預設都不勾 -->
+                        <div class="lp-section">
+                            <div class="lp-section-title">
+                                附上照片
+                                <span v-if="linePushBudget.room" class="lp-count"
+                                    >{{ linePush.selected.length }} / {{ linePushBudget.room }}</span
+                                >
+                            </div>
+                            <div class="lp-section-hint">
+                                <template v-if="linePushBudget.room">
+                                    點照片勾選要一起發到群組的，最多 {{ linePushBudget.room }} 張；不勾就只發文字
+                                </template>
+                                <template v-else>文字太長，這次不能附照片</template>
+                            </div>
+                        </div>
+                        <!-- 照片牆的照片：一張一格，下面寫哪隻貓、誰傳的、類型、描述 -->
+                        <template v-if="linePushGroups.wall.length">
+                            <div class="lp-sub">🗂️ 照片牆</div>
+                            <div class="lp-grid">
+                                <div v-for="photo in linePushGroups.wall" :key="photo.id" class="lp-cell">
+                                    <button
+                                        type="button"
+                                        class="lp-photo"
+                                        :class="{ on: linePush.selected.includes(photo.id) }"
+                                        :disabled="!linePushBudget.room"
+                                        :aria-pressed="linePush.selected.includes(photo.id)"
+                                        @click="toggleLinePhoto(photo)"
+                                    >
+                                        <img :src="photo.thumb_url" alt="" />
+                                        <span class="lp-mark">{{ linePush.selected.includes(photo.id) ? '✓' : '' }}</span>
+                                    </button>
+                                    <div class="lp-wall-who">
+                                        <b>{{ catNameOf(photo.cat_id) }}</b>・{{ photo.author_name || '未命名' }}
+                                        {{ $dayjs(photo.created_at).format('HH:mm') }}
+                                    </div>
+                                    <div v-if="photo.kinds?.length" class="lp-wall-kinds">
+                                        <span v-for="kind in photo.kinds" :key="kind">{{ kind }}</span>
+                                    </div>
+                                    <div v-if="photo.note" class="lp-wall-note">{{ photo.note }}</div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <!-- 留言附的照片：一則留言一塊（哪隻貓、誰、幾點、說了什麼），下面是那則的照片 -->
+                        <template v-if="linePushGroups.comments.length">
+                            <div class="lp-sub">💬 留言的照片</div>
+                            <div v-for="group in linePushGroups.comments" :key="group.comment.id" class="lp-comment">
+                                <div class="lp-comment-head">
+                                    <b>{{ catNameOf(group.comment.cat_id) }}</b>
+                                    <span>{{ group.comment.author_name || '未命名' }} {{ $dayjs(group.comment.created_at).format('HH:mm') }}</span>
+                                    <span v-if="group.comment.for_next" class="lp-important-tag">重要</span>
+                                </div>
+                                <div class="lp-comment-body">{{ group.comment.body || '（只有照片）' }}</div>
+                                <div class="lp-grid">
+                                    <button
+                                        v-for="photo in group.photos"
+                                        :key="photo.id"
+                                        type="button"
+                                        class="lp-photo"
+                                        :class="{ on: linePush.selected.includes(photo.id) }"
+                                        :disabled="!linePushBudget.room"
+                                        :aria-pressed="linePush.selected.includes(photo.id)"
+                                        @click="toggleLinePhoto(photo)"
+                                    >
+                                        <img :src="photo.thumb_url" alt="" />
+                                        <span class="lp-mark">{{ linePush.selected.includes(photo.id) ? '✓' : '' }}</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </template>
+                    </template>
+                </template>
+                <template #footer>
+                    <div class="pd-confirm">
+                        <button type="button" class="pd-cancel" @click="closeLinePush(null)">取消</button>
+                        <button type="button" class="pd-add" @click="sendLinePush">發送</button>
+                    </div>
+                </template>
+            </el-dialog>
+
             <!-- 編輯照片：類型（跟上傳時一樣點標籤、可多選）與描述在同一個視窗，按儲存一起改；也可以刪除這張 -->
             <el-dialog
                 :model-value="!!photoEditing"
@@ -2109,70 +2220,192 @@ function subscribeToRealtime(recordId) {
         .subscribe();
 }
 
-// 跟 /regular、/medicine 一樣：先跳確認視窗，按「是的」才推到 LINE 群組
-// 把目前這個分頁、這一班所有人的回報推到 LINE 群組（每個分頁各發各的）。
-// 跟 /regular、/medicine 一樣：先跳確認視窗，按「是的」才送
+// 「LINE 發送至群組」：這一班、這個分頁的回報＋留言（照貓分組），可以勾選最多 4 張照片一起發。
+// 跟 /regular、/medicine 一樣先跳確認視窗，按「是的」才送。回報、留言、照片都沒有才擋下
+const LINE_PHOTOS_MAX = 4;
+
 async function sendTabToLine() {
     const key = tab.value;
     const label = TAB_LABELS[key];
-    const entries = entriesOf(formData.value.reports, key);
-    if (!entries.length) {
-        Swal.fire({ text: `這一班還沒有人寫${label}回報`, confirmButtonColor: '#b33a39' });
-        return;
-    }
 
     try {
         loadingNotify.value = true;
         // 先把還沒存的回報存掉，發出去的才跟資料庫一致
         await saveNow();
 
-        const d = $dayjs(formData.value.date);
-        const textDate = `${d.format('YYYY/MM/DD')}（${WEEKDAYS[d.day()]}）`;
-        const textShift = SHIFT_LABELS[formData.value.shift];
-        const reportText = entries
-            .map((e) => `${e.name || '（舊資料）'}：\n${e.text.trim()}`)
-            .join('\n\n');
-        const textPush = `值班記錄｜${label}回報\n---------------\n日期： ${textDate}\n班別： ${textShift}\n---------------\n${reportText}`;
-        const textSite =
-            config.public.deploySite === 'feliformia'
-                ? ''
-                : `[${config.public.deploySite || 'Local'}]\n`;
-        const textManual = '[大哥通知]\n';
-
-        // 確認視窗是 HTML：先跳脫，再把換行轉成 <br>，看到的才跟實際送出的一樣
-        const toHtml = (text) =>
-            text
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/\n/g, '<br>');
-        const htmlPush = `<div style="text-align: left;"><b><h3>將以下訊息發送至群組</h3></b>${toHtml(textPush)}</div>`;
-
-        const { isConfirmed } = await Swal.fire({
-            html: htmlPush,
-            showCancelButton: true,
-            cancelButtonText: '取消',
-            confirmButtonColor: '#b33a39',
-            confirmButtonText: '是的',
+        const entries = entriesOf(formData.value.reports, key);
+        const preview = await $fetch('/api/shift/line/preview', {
+            params: { shiftId: formData.value.recordId, tab: key },
+            cache: 'no-store',
         });
-
-        if (isConfirmed) {
-            try {
-                await $fetch('/api/line/message/push', {
-                    method: 'POST',
-                    body: { text: textSite + textManual + textPush },
-                });
-                Swal.fire({ text: '已發送至群組', confirmButtonColor: '#b33a39' });
-            } catch {
-                Swal.fire({
-                    html: '發送失敗。<br>請確認網路狀態後重試。',
-                    confirmButtonColor: '#b33a39',
-                });
-            }
+        if (!entries.length && !preview.comments.length && !preview.photos.length) {
+            ElMessage.warning(`這一班還沒有${label}回報或留言`);
+            return;
         }
+
+        const textSite =
+            config.public.deploySite === 'feliformia' ? '' : `[${config.public.deploySite || 'Local'}]\n`;
+        const prefix = textSite;
+
+        const result = await confirmLinePush({
+            text: buildLineText(label, entries, preview.comments),
+            photos: preview.photos,
+            comments: preview.comments,
+            // 整段實際要發的文字（文字太長會切成好幾則，算還能附幾張照片用）
+            fullText: (text) => prefix + text,
+        });
+        if (!result) return;
+
+        try {
+            await $fetch('/api/shift/line/push', {
+                method: 'POST',
+                body: {
+                    shiftId: formData.value.recordId,
+                    tab: key,
+                    text: prefix + result.text,
+                    photoIds: result.photoIds,
+                },
+            });
+            // 成功、失敗都用畫面上方的小提示，不用再按 OK
+            ElMessage.success('已發送至群組');
+        } catch {
+            ElMessage.error({ message: '發送失敗，請確認網路狀態後重試', duration: 5000 });
+        }
+    } catch (e) {
+        console.error('sendTabToLine error:', e);
+        ElMessage.error({ message: '讀取內容失敗，請再試一次', duration: 5000 });
     } finally {
         loadingNotify.value = false;
     }
+}
+
+// 發到 LINE 的文字：標題、日期班別，再來【回報】（一人一段）與【留言】（照貓分組，順序跟頁面一樣）
+function buildLineText(label, entries, comments) {
+    const d = $dayjs(formData.value.date);
+    const lines = [
+        `值班記錄｜${label}`,
+        '---------------',
+        `日期： ${d.format('YYYY/MM/DD')}（${WEEKDAYS[d.day()]}）`,
+        `班別： ${SHIFT_LABELS[formData.value.shift]}`,
+        '---------------',
+    ];
+    if (entries.length) {
+        // 跟留言同一個格式：「・名字 時間」，內容在下一行縮兩格
+        lines.push('【回報】');
+        for (const e of entries) {
+            lines.push(`・${e.name || '（舊資料）'}${e.at ? ` ${$dayjs(e.at).format('HH:mm')}` : ''}`);
+            lines.push(...e.text.trim().split('\n').map((l) => `  ${l}`));
+        }
+    }
+    if (comments.length) {
+        if (entries.length) lines.push('');
+        lines.push('【留言】');
+        const catOrder = formData.value.cats.map((c) => c.cat_id);
+        const rank = (catId) => (catOrder.includes(catId) ? catOrder.indexOf(catId) : 9999);
+        const catIds = [...new Set(comments.map((c) => c.cat_id))].sort((a, b) => rank(a) - rank(b));
+        catIds.forEach((catId, i) => {
+            if (i > 0) lines.push('');
+            const name = formData.value.cats.find((c) => c.cat_id === catId)?.name || '（已刪除的貓）';
+            // 每隻貓一段：貓頭＋名字＋分隔線，貓與貓之間空一行
+            lines.push(`🐱 ${name} ─────`);
+            for (const c of comments.filter((x) => x.cat_id === catId)) {
+                const tags = [c.for_next ? '★重要' : '', c.photo_count ? `📷${c.photo_count}` : '']
+                    .filter(Boolean)
+                    .join(' ');
+                lines.push(`・${c.author_name || '未命名'} ${$dayjs(c.created_at).format('HH:mm')}${tags ? ` ${tags}` : ''}`);
+                if (c.body) lines.push(...c.body.trim().split('\n').map((l) => `  ${l}`));
+            }
+        });
+    }
+    return lines.join('\n');
+}
+
+// 這段文字發出去會分成幾則、還能附幾張照片（一次推播最多 5 則：文字先佔，剩下的給照片，最多 4 張）
+function lineBudget(fullText) {
+    const chunks = splitText(fullText).length;
+    return { chunks, room: Math.max(0, Math.min(LINE_PHOTOS_MAX, LINE_MESSAGES_MAX - chunks)) };
+}
+
+// 確認視窗（el-dialog，跟「編輯照片」同一種樣子）：上面是要發的文字，下面是這班照片可以勾（預設都不勾）。
+// 文字超過 LINE 一則 5000 字時，提醒會分成幾則，並把文字變成可以編輯的輸入框（字數、則數、照片上限即時更新）。
+// 回傳 { text, photoIds }，按取消回傳 null
+const linePush = ref(null); // { text, editable, photos, comments, fullText, selected, resolve }
+
+function confirmLinePush({ text, photos, comments, fullText }) {
+    const ordered = [...photos].sort(
+        (a, b) => Number(b.important) - Number(a.important) || b.created_at.localeCompare(a.created_at)
+    );
+    const initial = lineBudget(fullText(text, Math.min(LINE_PHOTOS_MAX, photos.length)));
+    return new Promise((resolve) => {
+        linePush.value = {
+            text,
+            editable: initial.chunks > 1,
+            photos: ordered,
+            comments,
+            fullText,
+            selected: [], // 預設不附照片，要的自己勾
+            resolve,
+        };
+    });
+}
+
+function closeLinePush(result) {
+    const current = linePush.value;
+    linePush.value = null;
+    current?.resolve(result);
+}
+
+const linePushBudget = computed(() => {
+    const lp = linePush.value;
+    if (!lp) return { chunks: 1, room: 0, length: 0 };
+    const full = lp.fullText(lp.text, lp.selected.length);
+    return { ...lineBudget(full), length: full.length };
+});
+
+// 文字變長、能附的變少：多勾的從後面拿掉
+watch(
+    () => linePushBudget.value.room,
+    (room) => {
+        if (linePush.value && linePush.value.selected.length > room) {
+            linePush.value.selected = linePush.value.selected.slice(0, room);
+        }
+    }
+);
+
+function toggleLinePhoto(photo) {
+    const lp = linePush.value;
+    if (lp.selected.includes(photo.id)) {
+        lp.selected = lp.selected.filter((id) => id !== photo.id);
+    } else if (lp.selected.length >= linePushBudget.value.room) {
+        ElMessage.warning(`最多只能附 ${linePushBudget.value.room} 張`);
+    } else {
+        lp.selected = [...lp.selected, photo.id];
+    }
+}
+
+const catNameOf = (catId) => formData.value.cats.find((c) => c.cat_id === catId)?.name || '（已刪除的貓）';
+
+// 確認視窗裡的照片分兩區：留言附的（照留言分組，留言照時間）、照片牆的（照時間）
+const linePushGroups = computed(() => {
+    const lp = linePush.value;
+    if (!lp) return { comments: [], wall: [] };
+    const byTime = (a, b) => a.created_at.localeCompare(b.created_at);
+    const comments = lp.comments
+        .map((comment) => ({ comment, photos: lp.photos.filter((p) => p.comment_id === comment.id).sort(byTime) }))
+        .filter((g) => g.photos.length)
+        .sort((a, b) => byTime(a.comment, b.comment));
+    return { comments, wall: lp.photos.filter((p) => !p.comment_id).sort(byTime) };
+});
+
+function sendLinePush() {
+    const lp = linePush.value;
+    const text = lp.text.trim();
+    if (!text) {
+        ElMessage.warning('內容不能是空的');
+        return;
+    }
+    // 照顯示的順序發
+    closeLinePush({ text, photoIds: lp.photos.filter((p) => lp.selected.includes(p.id)).map((p) => p.id) });
 }
 
 // 頁面離開前警告
@@ -2204,7 +2437,6 @@ async function load() {
     } catch (error) {
         Swal.fire({
             html: `網路連線異常<br>請確認連線後重試。<br><br>錯誤：${error.message}`,
-            confirmButtonColor: '#b33a39',
         });
     } finally {
         loading.value = false;
@@ -3314,6 +3546,231 @@ watch(
     }
 }
 
+// ---- LINE 發送確認視窗 ----
+.lp-text {
+    max-height: 40vh;
+    overflow-y: auto;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: #f7f6f5;
+    color: #333;
+    font-size: 14px;
+    line-height: 1.55;
+    text-align: left;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+.lp-warn {
+    margin-bottom: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: #fdf6ec;
+    color: #b36b00;
+    font-size: 13px;
+    line-height: 1.5;
+    text-align: left;
+}
+
+.lp-textarea :deep(.el-textarea__inner) {
+    font-size: 14px;
+    line-height: 1.5;
+}
+
+// 「附上照片」：上面一條分隔線跟文字分開，標題＋已選張數，下面一行提示可以點照片勾選
+.lp-section {
+    margin: 18px 0 4px;
+    padding-top: 14px;
+    border-top: 1px solid #e5e2df;
+    text-align: left;
+
+    .lp-section-title {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        font-size: 15px;
+        font-weight: 500;
+        color: #4a4542;
+    }
+
+    .lp-count {
+        padding: 0 8px;
+        border-radius: 10px;
+        background: #eef4f8;
+        color: #3f7ea3;
+        font-size: 12px;
+        line-height: 20px;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .lp-section-hint {
+        margin-top: 2px;
+        font-size: 12px;
+        color: #8e8783;
+    }
+}
+
+.lp-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px 6px;
+    text-align: left;
+}
+
+.lp-cell {
+    min-width: 0;
+}
+
+// 照片：勾了是藍框＋右上角 ✓
+.lp-photo {
+    position: relative;
+    display: block;
+    width: 100%;
+    height: auto;
+    aspect-ratio: 1;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    overflow: hidden;
+    cursor: pointer;
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .lp-mark {
+        position: absolute;
+        top: 4px;
+        right: 4px;
+        width: 22px;
+        height: 22px;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.25);
+        box-sizing: border-box;
+        color: #fff;
+        font-size: 13px;
+        line-height: 18px;
+        text-align: center;
+    }
+
+    &.on {
+        outline: 3px solid #6da2c2;
+        outline-offset: -3px;
+
+        .lp-mark {
+            background: #6da2c2;
+        }
+    }
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.5;
+    }
+
+    .lp-important {
+        position: absolute;
+        bottom: 3px;
+        left: 3px;
+        padding: 0 4px;
+        border-radius: 3px;
+        background: #fde9cc;
+        color: #b36b00;
+        font-size: 10px;
+    }
+}
+
+// 兩區的小標題（留言的照片、照片牆）
+.lp-sub {
+    margin: 12px 0 6px;
+    font-size: 13px;
+    color: #4a4542;
+    text-align: left;
+}
+
+// 一則留言一塊：灰底卡片，上面是貓、誰、幾點、說了什麼，下面是照片
+.lp-comment {
+    margin-bottom: 8px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #f7f6f5;
+    text-align: left;
+
+    .lp-comment-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: #8e8783;
+
+        b {
+            font-weight: 500;
+            color: #4a4542;
+        }
+    }
+
+    .lp-comment-body {
+        margin: 2px 0 8px;
+        font-size: 14px;
+        line-height: 1.45;
+        color: #222;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+    }
+}
+
+.lp-important-tag {
+    padding: 0 5px;
+    border-radius: 3px;
+    background: #fde9cc;
+    color: #b36b00;
+    font-size: 11px;
+}
+
+// 照片牆的每張：哪隻貓・誰傳的、類型標籤、描述
+.lp-wall-who {
+    margin-top: 4px;
+    font-size: 11px;
+    line-height: 1.35;
+    color: #8e8783;
+
+    b {
+        font-weight: 500;
+        color: #4a4542;
+    }
+}
+
+.lp-wall-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 3px;
+    margin-top: 3px;
+
+    span {
+        padding: 0 5px;
+        border-radius: 3px;
+        background: #eef4f8;
+        color: #3f7ea3;
+        font-size: 10px;
+        line-height: 16px;
+    }
+}
+
+.lp-wall-note {
+    display: -webkit-box;
+    margin-top: 2px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 1.35;
+    color: #222;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 3;
+}
+
 // 編輯照片視窗裡的「刪除這張照片」：紅字，放在描述下面
 .pe-delete {
     width: auto;
@@ -3558,6 +4015,17 @@ watch(
 </style>
 
 <style lang="scss">
+/* LINE 發送確認：內容長時視窗裡面捲動 */
+.line-push-dialog {
+    max-width: 480px;
+    border-radius: 12px;
+
+    .el-dialog__body {
+        max-height: 70vh;
+        overflow-y: auto;
+    }
+}
+
 /* 編輯照片的視窗：el-dialog 會 teleport 到 body，scoped 選不到 dialog 本身，這塊不加 scoped */
 .photo-edit-dialog {
     max-width: 400px;
