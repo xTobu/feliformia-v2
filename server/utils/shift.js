@@ -75,6 +75,26 @@ export async function withShiftIds(list) {
     return list.map((s) => ({ ...s, id: idOf.get(shiftKey(s)) ?? null }))
 }
 
+// 最早有紀錄的那一班（新版值班記錄表開始用的那天）；往前翻時比它早的班不顯示
+export async function earliestShift() {
+    const { data, error } = await supabase
+        .from('shifts')
+        .select('date, shift')
+        .order('date')
+        .order('shift') // 'morning' 排在 'night' 前
+        .limit(1)
+        .maybeSingle()
+    if (error) throw createError({ statusCode: 500, message: error.message })
+    return data
+}
+
+// 一批班裡比最早那班還早的拿掉（沒有更早的班時才需要）
+export async function trimBeforeEarliest(list, hasMore) {
+    if (hasMore) return list
+    const earliest = await earliestShift()
+    return earliest ? list.filter((s) => shiftOrder(s) >= shiftOrder(earliest)) : list
+}
+
 // 比這一班更早還有沒有班的紀錄（往上滑到最早的班就停）
 export async function hasShiftBefore({ date, shift }) {
     const queries = [supabase.from('shifts').select('id').lt('date', date).limit(1)]

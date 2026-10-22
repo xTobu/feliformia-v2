@@ -1627,9 +1627,29 @@ function addPhoto(row) {
 // 照片要傳到哪一班：null = 正在看的這一班；按以前某班分隔線上的 📷 就是那一班 { shiftId, date, shift }
 const photoTarget = ref(null);
 
-// 還能編輯的班才能補傳（跟頁面的 isDisabled 同一個規則）
-const canUploadTo = (group) =>
-    !!group.shiftId && $dayjs(group.date) >= $dayjs().subtract(config.public.disabledDays || 2, 'day');
+// 還在編輯期限內的班都能補傳（跟頁面的 isDisabled 同一個規則）。
+// 那班還沒有紀錄（沒人打開過）的話，上傳時先建一筆（見 ensureShiftId）
+const canUploadTo = (group) => isEditableDate(group.date);
+
+// 補傳到還沒有紀錄的班：先用 GET /api/shift 建好那一班（跟有人打開那班一樣），同一班只建一次
+const creatingShifts = new Map();
+function ensureShiftId(item) {
+    if (item.shiftId) return Promise.resolve(item.shiftId);
+    const key = shiftKeyOf(item.date, item.shift);
+    if (!creatingShifts.has(key)) {
+        creatingShifts.set(
+            key,
+            $fetch('/api/shift', { params: { date: item.date, shift: item.shift }, cache: 'no-store' })
+                .then((data) => {
+                    const known = historyShifts.value.find((s) => s.date === item.date && s.shift === item.shift);
+                    if (known) known.id = data.recordId;
+                    return data.recordId;
+                })
+                .finally(() => creatingShifts.delete(key))
+        );
+    }
+    return creatingShifts.get(key).then((id) => (item.shiftId = id));
+}
 
 function pickPhotosFor(group) {
     photoTarget.value = group ? { shiftId: group.shiftId, date: group.date, shift: group.shift } : null;
@@ -1689,11 +1709,12 @@ const { uploadFile } = usePhotoUpload();
 // 一張：壓縮 → 拿一次性上傳網址 → 大圖、縮圖直接傳到 Storage → 記一筆（含描述）。
 // 進度：壓縮 0～10%、大圖 10～85%（照實際傳了多少）、縮圖 85～95%、記錄 95～100%
 async function uploadOne(item) {
-    const shiftId = item.shiftId ?? formData.value.recordId;
+    let shiftId = item.shiftId;
     const step = (from, to) => (ratio) => {
         item.progress = Math.round(from + (to - from) * Math.min(1, Math.max(0, ratio)));
     };
     try {
+        shiftId = await ensureShiftId(item);
         item.status = 'compressing';
         item.progress = 3;
         const { full, thumb } = await compressPhoto(item.file);
@@ -2159,11 +2180,14 @@ function goTo({ date, shift }) {
     router.push({ name: 'shift', query: { date, shift, tab: tab.value } });
 }
 
-const isDisabled = computed(() => {
-    const day = $dayjs(formData.value.date);
-    const disabled = $dayjs().subtract(config.public.disabledDays || 2, 'day');
-    return day < disabled;
-});
+// 編輯期限：照「日期」算，今天加前 N 天（DISABLED_DAYS，預設 2）的早晚班都能改、能補傳照片。
+// 例如今天 10/22：10/20、10/21、10/22 的早晚班都可以，10/19 以前不行
+function isEditableDate(date) {
+    const earliest = $dayjs().startOf('day').subtract(config.public.disabledDays || 2, 'day');
+    return !$dayjs(date).startOf('day').isBefore(earliest);
+}
+
+const isDisabled = computed(() => !isEditableDate(formData.value.date));
 
 // Methods
 function setTab(value) {

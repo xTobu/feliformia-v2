@@ -6,6 +6,7 @@ import {
     shiftKey,
     shiftsBack,
     shiftsBackUntil,
+    trimBeforeEarliest,
 } from '~/server/utils/shift'
 import { COMMENT_COLUMNS, COMMENT_TABS, toMessages } from '~/server/utils/comments'
 
@@ -52,5 +53,5 @@ export default defineEventHandler(async (event) => {
         toMessages(data.filter((r) => inWindow.has(shiftKey(r.shifts)))),
         hasShiftBefore(oldest),
     ])
-    return { shifts: window, messages, cursor: oldest, hasMore }
+    return { shifts: await trimBeforeEarliest(window, hasMore), messages, cursor: oldest, hasMore }
 })

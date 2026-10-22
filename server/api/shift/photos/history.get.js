@@ -1,6 +1,6 @@
 import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
-import { hasShiftBefore, isValidShiftQuery, shiftKey, shiftsBack, withShiftIds } from '~/server/utils/shift'
+import { hasShiftBefore, isValidShiftQuery, shiftKey, shiftsBack, trimBeforeEarliest, withShiftIds } from '~/server/utils/shift'
 import { PHOTO_COLUMNS, PHOTO_TABS, withSignedUrls } from '~/server/utils/photos'
 import { isPhotoKinds } from '~/composables/photoKinds'
 
@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
         withSignedUrls(data.filter((r) => inWindow.has(shiftKey(r.shifts)))),
     ])
     return {
-        shifts,
+        shifts: await trimBeforeEarliest(shifts, hasMore),
         photos: signed.map(({ shifts: s, ...photo }) => ({ ...photo, date: s.date, shift: s.shift })),
         cursor: oldest,
         hasMore,
