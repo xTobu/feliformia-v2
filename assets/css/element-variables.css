@@ -64,6 +64,38 @@ form {
   padding-bottom: 24px;
 }
 
+/* 標題置中＋✕ 與標題同一條水平線（原本只有 /calendar 有，改成全站）。
+   Element Plus 預設 header 只在右邊留 ✕ 的空間，左右不對稱 → 標題偏左；
+   改成 flex：[左邊留跟 ✕ 一樣寬的空白][標題][✕] */
+.el-dialog .el-dialog__header.show-close {
+  display: flex;
+  align-items: center;
+  padding-left: 32px;
+  padding-right: 0;
+}
+
+.el-dialog .el-dialog__title {
+  flex: 1;
+  min-width: 0;
+}
+
+.el-dialog .el-dialog__headerbtn {
+  position: static;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  /* 點擊區比行高大，用負 margin 避免把 header 撐高 */
+  margin: calc((var(--el-dialog-font-line-height) - 32px) * 0.5) 0;
+}
+
+/* 中文字的墨水中心比 line box 低一點，✕ 也往下挪 1px 才看起來齊 */
+.el-dialog .el-dialog__headerbtn .el-icon {
+  transform: translateY(1px);
+}
+
 .el-select__wrapper {
   height: 45px;
 }

@@ -943,26 +943,61 @@
                 @update:model-value="(v) => !v && closeLinePush(null)"
             >
                 <template v-if="linePush">
-                    <div v-if="linePush.editable" class="lp-warn">
+                    <div v-if="linePush.editing || linePushBudget.chunks > 1" class="lp-warn">
                         <template v-if="linePushBudget.chunks > 1">
                             內容有 {{ linePushBudget.length }} 字，超過 LINE 一則 {{ LINE_TEXT_MAX }} 字，會分成
                             {{ linePushBudget.chunks }} 則發送<template v-if="linePush.photos.length"
                                 >，照片最多只能附 {{ linePushBudget.room }} 張</template
-                            >。可以直接在下面刪減。
+                            >。<template v-if="linePush.editing">可以直接在下面刪減。</template>
+                            <template v-else
+                                >可以取消不重要的留言，或
+                                <button type="button" class="lp-link" @click="editLinePushText">直接編輯文字</button>
+                            </template>
                         </template>
                         <template v-else>現在 {{ linePushBudget.length }} 字，一則就發得完。</template>
                     </div>
-                    <el-input
-                        v-if="linePush.editable"
-                        v-model="linePush.text"
-                        type="textarea"
-                        :autosize="{ minRows: 8, maxRows: 14 }"
-                        class="lp-textarea"
-                    />
-                    <!-- 換行與縮排都照實際發出去的樣子 -->
-                    <div v-else class="lp-text">{{ linePush.text }}</div>
+                    <template v-if="linePush.editing">
+                        <el-input
+                            v-model="linePush.text"
+                            type="textarea"
+                            :autosize="{ minRows: 8, maxRows: 14 }"
+                            class="lp-textarea"
+                        />
+                        <button type="button" class="lp-link lp-back" @click="linePush.editing = false">
+                            回到勾選留言（手動改的內容會不見）
+                        </button>
+                    </template>
+                    <!-- 換行與縮排都照實際發出去的樣子；留言一則一列，點了切換要不要發 -->
+                    <template v-else>
+                        <div v-if="linePush.comments.length" class="lp-hint">
+                            點留言可以取消，沒勾的不會發出去（{{ linePush.chosen.length }} / {{ linePush.comments.length }}）
+                        </div>
+                        <div class="lp-text">
+                            <div>{{ linePushPreview.head }}</div>
+                            <template v-if="linePushPreview.groups.length">
+                                <div>{{ linePushPreview.commentsTitle }}</div>
+                                <div v-for="(group, i) in linePushPreview.groups" :key="group.catId" :class="{ 'lp-cat-gap': i > 0 }">
+                                    <div>{{ group.title }}</div>
+                                    <button
+                                        v-for="item in group.comments"
+                                        :key="item.comment.id"
+                                        type="button"
+                                        class="lp-pick"
+                                        :class="{ off: !linePush.chosen.includes(item.comment.id) }"
+                                        role="checkbox"
+                                        :aria-checked="linePush.chosen.includes(item.comment.id)"
+                                        @click="toggleLineComment(item.comment.id)"
+                                    >
+                                        <span class="lp-check">{{ linePush.chosen.includes(item.comment.id) ? '✓' : '' }}</span>
+                                        <span class="lp-pick-text">{{ item.text }}</span>
+                                    </button>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
 
-                    <template v-if="linePush.photos.length">
+                    <!-- 沒勾的留言，它的照片不會出現在這裡 -->
+                    <template v-if="linePushGroups.wall.length || linePushGroups.comments.length">
                         <!-- 跟上面的文字用分隔線隔開，提示可以點照片勾選；預設都不勾 -->
                         <div class="lp-section">
                             <div class="lp-section-title">
@@ -2404,7 +2439,8 @@ async function sendTabToLine() {
         const prefix = textSite;
 
         const result = await confirmLinePush({
-            text: buildLineText(label, entries, preview.comments),
+            label,
+            entries,
             photos: preview.photos,
             comments: preview.comments,
             // 整段實際要發的文字（文字太長會切成好幾則，算還能附幾張照片用）
@@ -2454,25 +2490,36 @@ function buildLineText(label, entries, comments) {
         }
     }
     if (comments.length) {
-        if (entries.length) lines.push('');
-        lines.push('【留言】');
-        const catOrder = formData.value.cats.map((c) => c.cat_id);
-        const rank = (catId) => (catOrder.includes(catId) ? catOrder.indexOf(catId) : 9999);
-        const catIds = [...new Set(comments.map((c) => c.cat_id))].sort((a, b) => rank(a) - rank(b));
-        catIds.forEach((catId, i) => {
+        lines.push(lineCommentsTitle(entries));
+        lineCatGroups(comments).forEach((group, i) => {
             if (i > 0) lines.push('');
-            const name = formData.value.cats.find((c) => c.cat_id === catId)?.name || '（已刪除的貓）';
-            // 每隻貓一段：貓頭＋名字＋分隔線，貓與貓之間空一行
-            lines.push(`🐱 ${name} ─────`);
-            for (const c of comments.filter((x) => x.cat_id === catId)) {
-                const tags = [c.for_next ? '★重要' : '', c.photo_count ? `📷${c.photo_count}` : '']
-                    .filter(Boolean)
-                    .join(' ');
-                lines.push(`・${c.author_name || '未命名'} ${$dayjs(c.created_at).format('HH:mm')}${tags ? ` ${tags}` : ''}`);
-                if (c.body) lines.push(...c.body.trim().split('\n').map((l) => `  ${l}`));
-            }
+            lines.push(group.title);
+            for (const c of group.comments) lines.push(lineCommentText(c));
         });
     }
+    return lines.join('\n');
+}
+
+// 【留言】標題；前面有回報就空一行
+const lineCommentsTitle = (entries) => (entries.length ? '\n【留言】' : '【留言】');
+
+// 留言照貓分組，貓的順序跟頁面一樣；每隻貓一段：貓頭＋名字＋分隔線，貓與貓之間空一行
+function lineCatGroups(comments) {
+    const catOrder = formData.value.cats.map((c) => c.cat_id);
+    const rank = (catId) => (catOrder.includes(catId) ? catOrder.indexOf(catId) : 9999);
+    const catIds = [...new Set(comments.map((c) => c.cat_id))].sort((a, b) => rank(a) - rank(b));
+    return catIds.map((catId) => ({
+        catId,
+        title: `🐱 ${catNameOf(catId)} ─────`,
+        comments: comments.filter((c) => c.cat_id === catId),
+    }));
+}
+
+// 一則留言：「・名字 時間 標記」，內容在下一行縮兩格
+function lineCommentText(c) {
+    const tags = [c.for_next ? '★重要' : '', c.photo_count ? `📷${c.photo_count}` : ''].filter(Boolean).join(' ');
+    const lines = [`・${c.author_name || '未命名'} ${$dayjs(c.created_at).format('HH:mm')}${tags ? ` ${tags}` : ''}`];
+    if (c.body) lines.push(...c.body.trim().split('\n').map((l) => `  ${l}`));
     return lines.join('\n');
 }
 
@@ -2482,27 +2529,69 @@ function lineBudget(fullText) {
     return { chunks, room: Math.max(0, Math.min(LINE_PHOTOS_MAX, LINE_MESSAGES_MAX - chunks)) };
 }
 
-// 確認視窗（el-dialog，跟「編輯照片」同一種樣子）：上面是要發的文字，下面是這班照片可以勾（預設都不勾）。
-// 文字超過 LINE 一則 5000 字時，提醒會分成幾則，並把文字變成可以編輯的輸入框（字數、則數、照片上限即時更新）。
+// 確認視窗（el-dialog，跟「編輯照片」同一種樣子）：上面是要發的文字，留言可以直接在預覽裡點掉（預設全勾，
+// 沒勾的變灰劃線、不會發出去）；下面是這班照片可以勾（預設都不勾）。
+// 文字超過 LINE 一則 5000 字時，提醒會分成幾則，可以再取消幾則留言，或改成直接編輯文字（字數、則數、照片上限即時更新）。
 // 回傳 { text, photoIds }，按取消回傳 null
-const linePush = ref(null); // { text, editable, photos, comments, fullText, selected, resolve }
+const linePush = ref(null); // { label, entries, comments, chosen, editing, text, photos, fullText, selected, resolve }
 
-function confirmLinePush({ text, photos, comments, fullText }) {
+function confirmLinePush({ label, entries, photos, comments, fullText }) {
     const ordered = [...photos].sort(
         (a, b) => Number(b.important) - Number(a.important) || b.created_at.localeCompare(a.created_at)
     );
-    const initial = lineBudget(fullText(text, Math.min(LINE_PHOTOS_MAX, photos.length)));
     return new Promise((resolve) => {
         linePush.value = {
-            text,
-            editable: initial.chunks > 1,
-            photos: ordered,
+            label,
+            entries,
             comments,
+            chosen: comments.map((c) => c.id), // 預設每則留言都發
+            editing: false, // 改成直接編輯文字後，text 才是要發的內容
+            text: '',
+            photos: ordered,
             fullText,
             selected: [], // 預設不附照片，要的自己勾
             resolve,
         };
     });
+}
+
+// 要發的文字：還沒改成直接編輯時，照勾選的留言組出來
+const linePushText = computed(() => {
+    const lp = linePush.value;
+    if (!lp) return '';
+    if (lp.editing) return lp.text;
+    return buildLineText(lp.label, lp.entries, lp.comments.filter((c) => lp.chosen.includes(c.id)));
+});
+
+// 預覽：回報那一段照原樣，留言照貓分組、一則一列可以點掉
+const linePushPreview = computed(() => {
+    const lp = linePush.value;
+    if (!lp) return null;
+    return {
+        head: buildLineText(lp.label, lp.entries, []),
+        commentsTitle: lp.comments.length ? lineCommentsTitle(lp.entries) : '',
+        groups: lineCatGroups(lp.comments).map((g) => ({
+            ...g,
+            comments: g.comments.map((c) => ({ comment: c, text: lineCommentText(c) })),
+        })),
+    };
+});
+
+function toggleLineComment(id) {
+    const lp = linePush.value;
+    lp.chosen = lp.chosen.includes(id) ? lp.chosen.filter((x) => x !== id) : [...lp.chosen, id];
+    // 沒要發的留言，它的照片也拿掉
+    lp.selected = lp.selected.filter((pid) => {
+        const photo = lp.photos.find((p) => p.id === pid);
+        return !photo?.comment_id || lp.chosen.includes(photo.comment_id);
+    });
+}
+
+// 改成直接編輯：從現在勾選組出的文字開始改；回到勾選會丟掉手動改的內容
+function editLinePushText() {
+    const lp = linePush.value;
+    lp.text = linePushText.value;
+    lp.editing = true;
 }
 
 function closeLinePush(result) {
@@ -2514,7 +2603,7 @@ function closeLinePush(result) {
 const linePushBudget = computed(() => {
     const lp = linePush.value;
     if (!lp) return { chunks: 1, room: 0, length: 0 };
-    const full = lp.fullText(lp.text, lp.selected.length);
+    const full = lp.fullText(linePushText.value, lp.selected.length);
     return { ...lineBudget(full), length: full.length };
 });
 
@@ -2547,6 +2636,7 @@ const linePushGroups = computed(() => {
     if (!lp) return { comments: [], wall: [] };
     const byTime = (a, b) => a.created_at.localeCompare(b.created_at);
     const comments = lp.comments
+        .filter((comment) => lp.chosen.includes(comment.id))
         .map((comment) => ({ comment, photos: lp.photos.filter((p) => p.comment_id === comment.id).sort(byTime) }))
         .filter((g) => g.photos.length)
         .sort((a, b) => byTime(a.comment, b.comment));
@@ -2555,9 +2645,13 @@ const linePushGroups = computed(() => {
 
 function sendLinePush() {
     const lp = linePush.value;
-    const text = lp.text.trim();
+    const text = linePushText.value.trim();
     if (!text) {
         ElMessage.warning('內容不能是空的');
+        return;
+    }
+    if (!lp.editing && !lp.entries.length && !lp.chosen.length && !lp.selected.length) {
+        ElMessage.warning('沒有要發送的回報、留言或照片');
         return;
     }
     // 照顯示的順序發
@@ -3723,6 +3817,89 @@ watch(
     text-align: left;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+// 預覽裡的一則留言：左邊勾選框，沒勾的變灰劃線
+.lp-pick {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    width: 100%;
+    height: auto;
+    margin: 2px 0;
+    padding: 4px 0;
+    border: none;
+    background: none;
+    color: inherit;
+    font: inherit;
+    line-height: inherit;
+    text-align: left;
+    cursor: pointer;
+
+    .lp-check {
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin-top: 2px;
+        border: 1.5px solid #6da2c2;
+        border-radius: 4px;
+        background: #6da2c2;
+        box-sizing: border-box;
+        color: #fff;
+        font-size: 12px;
+        line-height: 1;
+    }
+
+    .lp-pick-text {
+        flex: 1;
+        min-width: 0;
+        white-space: pre-wrap;
+    }
+
+    &.off {
+        .lp-check {
+            background: #fff;
+        }
+
+        .lp-pick-text {
+            color: #b5b0ac;
+            text-decoration: line-through;
+        }
+    }
+}
+
+.lp-cat-gap {
+    margin-top: 1.55em;
+}
+
+.lp-hint {
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #8e8783;
+    text-align: left;
+}
+
+// 提示裡的文字按鈕
+.lp-link {
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #6da2c2;
+    font: inherit;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.lp-back {
+    display: block;
+    margin-top: 6px;
+    font-size: 12px;
 }
 
 .lp-warn {

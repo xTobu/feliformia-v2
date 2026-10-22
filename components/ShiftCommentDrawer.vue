@@ -221,6 +221,12 @@
                     </div>
                 </div>
             </template>
+            <!-- 別人的新留言進來、自己正往上看舊的：浮在最下面提示，點了滑到最新 -->
+            <div v-if="newCount" class="ch-new-wrap">
+                <button type="button" class="ch-new" @click="scrollToBottom()">
+                    <el-icon class="ch-new-icon"><Bottom /></el-icon>{{ newCount }} 則新留言
+                </button>
+            </div>
         </div>
 
         <!-- ===== 照片：留言裡的所有照片，依班分組；點了看大圖、看那則留言、可以跳過去 ===== -->
@@ -327,6 +333,7 @@
 
 <script setup>
 import { ElMessage } from 'element-plus';
+import { Bottom } from '@element-plus/icons-vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
@@ -500,6 +507,24 @@ function removeLocal(id) {
 async function scrollToBottom(el = listEl) {
     await nextTick();
     if (el.value) el.value.scrollTop = el.value.scrollHeight;
+    if (el === listEl) newCount.value = 0;
+}
+
+// 別人的新留言：正在看最下面就跟著捲下去；往上看舊留言時不打斷，改成「↓ N 則新留言」
+const NEAR_BOTTOM_PX = 80;
+const newCount = ref(0);
+const nearBottom = () => {
+    const el = listEl.value;
+    return !!el && el.scrollHeight - el.scrollTop - el.clientHeight < NEAR_BOTTOM_PX;
+};
+
+async function receiveMessage(message) {
+    const isNew = visible(message) && !messages.value.some((m) => m.id === message.id);
+    const follow = view.value === 'messages' && nearBottom();
+    upsert(message);
+    if (!isNew) return;
+    if (follow) scrollToBottom();
+    else newCount.value++;
 }
 
 // 切到照片頁：跟留言一樣從最下面（這一班）開始看
@@ -546,6 +571,7 @@ async function open() {
 // 從頭載入這個頻道（打開時、斷線重連或從背景回來時）
 async function reloadChannel() {
     messages.value = [];
+    newCount.value = 0;
     loadedShifts.value = [];
     wall.value = [];
     cursor.value = null;
@@ -582,6 +608,7 @@ async function loadMore() {
 
 function onScroll() {
     if (listEl.value && listEl.value.scrollTop < 60) loadMore();
+    if (newCount.value && nearBottom()) newCount.value = 0;
 }
 
 // 照片牆、搜尋結果 → 那則留言：切回留言，還沒載入到就一次往前載到那則的班（target 是 { date, shift }），
@@ -944,7 +971,7 @@ function subscribe() {
         {
             message: ({ action, message, id }) => {
                 if (action === 'delete') removeLocal(id);
-                else upsert(message);
+                else receiveMessage(message);
                 // 照片頁也可能變了（新增、拿掉照片）
                 reloadWallSoon();
             },
@@ -1170,6 +1197,40 @@ button {
     overflow-y: auto;
     padding: 4px 16px 10px;
     text-align: left;
+}
+
+// 高度 0、黏在捲動區底部，藥丸才浮在最下面又不佔版面
+.ch-new-wrap {
+    position: sticky;
+    bottom: 0;
+    height: 0;
+}
+
+.ch-new {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    height: 32px;
+    margin: 0;
+    padding: 0 14px;
+    border: none;
+    border-radius: 16px;
+    background: #6da2c2;
+    color: #fff;
+    font-size: 13px;
+    white-space: nowrap;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15);
+    transform: translateX(-50%);
+    cursor: pointer;
+
+    // 中文字的墨水中心比 line box 低一點，箭頭跟著往下 1px 才看起來齊
+    .ch-new-icon {
+        transform: translateY(1px);
+    }
 }
 
 .ch-hint {
