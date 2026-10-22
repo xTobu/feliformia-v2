@@ -1,10 +1,10 @@
 <template>
     <div class="care-admin">
-        <!-- 已有卡片的貓在卡片上新增；這顆是給全員或某個位置用的 -->
+        <!-- 新增任何對象（貓咪、全員、位置）的項目；每隻貓的卡片上也有自己的「＋ 新增」 -->
         <div class="page-header">
             <h1>{{ title }}</h1>
             <el-button type="primary" @click="openDialog()">
-                ＋ 全員或位置
+                ＋ 新增項目
             </el-button>
         </div>
 

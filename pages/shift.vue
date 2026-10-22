@@ -73,6 +73,18 @@
                                 }}</span>
                                 <i v-if="hasHandover(cat.cat_id)" class="handover-dot"></i>
                             </button>
+                            <!-- 這一班、這隻貓的觀察照片（食物、便便…），點了從下方滑出 -->
+                            <button
+                                type="button"
+                                class="comment-btn"
+                                :class="{ has: photoCount(cat.cat_id, 'arrive') }"
+                                :aria-label="`${cat.name}的照片`"
+                                @click="openPhotos(cat, 'arrive')"
+                            >
+                                📷<span v-if="photoCount(cat.cat_id, 'arrive')">{{
+                                    photoCount(cat.cat_id, 'arrive')
+                                }}</span>
+                            </button>
                         </div>
                         <!-- 上一班放風：貓沒關籠，吃多少、排泄看不出來，預設不登記，卡片只剩一行；
                              有看到的話按「仍要登記」展開。已經填過的會自動展開 -->
@@ -208,6 +220,18 @@
                                     }}</span>
                                     <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
                                 </button>
+                                <!-- 這一班、這隻貓的醫療照片（傷口、病情…） -->
+                                <button
+                                    type="button"
+                                    class="comment-btn"
+                                    :class="{ has: photoCount(entry.cat.cat_id, 'care') }"
+                                    :aria-label="`${entry.cat.name}的醫療照片`"
+                                    @click="openPhotos(entry.cat, 'care')"
+                                >
+                                    📷<span v-if="photoCount(entry.cat.cat_id, 'care')">{{
+                                        photoCount(entry.cat.cat_id, 'care')
+                                    }}</span>
+                                </button>
                             </div>
                             <div class="detail">
                                 <div
@@ -294,12 +318,9 @@
                     </div>
                 </template>
 
-                <!-- ========== 備餐：乾乾、罐罐、補充、其他（只看）、放風 ========== -->
-                <div v-show="tab === 'leave'" class="W100">
-                    <ShiftReportBlock v-bind="prevBlock('leave')" />
-                    <div v-if="leaveCats.length && leaveTaskGroups.length" class="section-title">
-                        貓咪
-                    </div>
+                <!-- ========== 備餐：乾乾、罐罐、隨餐藥、補充品、其他，放風。全員／位置的飲食併進適用的貓 ========== -->
+                <div v-show="tab === 'meal'" class="W100">
+                    <ShiftReportBlock v-bind="prevBlock('meal')" />
                     <div
                         v-for="entry in leaveCats"
                         :key="entry.cat.cat_id"
@@ -386,48 +407,6 @@
                         </div>
                     </div>
 
-                    <!-- 貓後面：沒有任何貓適用的飲食項目（例如那個位置還沒有貓） -->
-                    <div v-if="leaveCats.length && leaveTaskGroups.length" class="section-title later">
-                        全員與位置
-                    </div>
-                    <div
-                        v-for="group in leaveTaskGroups"
-                        :key="group.name"
-                        class="d_flex record_item"
-                    >
-                        <div class="name">{{ group.name }}</div>
-                        <div class="detail">
-                            <div
-                                v-for="(item, index) in group.items"
-                                :key="item.key"
-                                class="d_flex item-row diet-row"
-                                :class="{ divided: index > 0 }"
-                            >
-                                <p class="f_blue">{{ item.category }}</p>
-                                <div class="d_flex">
-                                    <div class="txt full">
-                                        <div class="diet-line">
-                                            <span class="diet-text">{{ item.content }}</span>
-                                            <el-checkbox
-                                                    v-if="isMealMed(item)"
-                                                    v-model="item.done"
-                                                    class="diet-done"
-                                                    :disabled="isDisabled"
-                                                    @change="
-                                                        stampDone(item);
-                                                        saveTask(item);
-                                                    "
-                                                    >完成</el-checkbox
-                                                >
-                                        </div>
-                                        <div v-if="item.done && item.done_by" class="diet-note done-by">
-                                            ✓ {{ doneLabel(item) }}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
 
                 <!-- ========== 收尾：這一班離開前一定要勾完的清單（備餐右邊）。
@@ -674,6 +653,206 @@
                 </button>
             </el-drawer>
 
+            <!-- 照片面板：從下方滑出，這一班、這隻貓、這個分頁（觀察或醫療）的照片。點縮圖全螢幕看，可左右滑 -->
+            <el-drawer
+                v-model="photoOpen"
+                direction="btt"
+                size="72%"
+                :with-header="false"
+                class="comment-drawer"
+            >
+                <div class="cd-head">
+                    <span class="cd-title">{{ photoCat?.name }}</span>
+                    <span v-if="selecting" class="cd-tab">已選 {{ selectedIds.length }} 張</span>
+                    <span v-else class="cd-tab">{{ TAB_LABELS[photoTab] }}照片 · {{ drawerPhotos.length }} 張</span>
+                    <!-- 選取模式：一次刪多張。只能選自己傳的（管理員可選全部） -->
+                    <template v-if="!drawerPending.length && deletablePhotos.length">
+                        <button v-if="selecting" type="button" class="cd-link" @click="toggleSelectAll">
+                            {{ allSelected ? '取消全選' : '全選' }}
+                        </button>
+                        <button type="button" class="cd-link" @click="toggleSelectMode">
+                            {{ selecting ? '完成' : '選取' }}
+                        </button>
+                    </template>
+                    <button
+                        type="button"
+                        class="cd-close"
+                        :class="{ 'after-link': !drawerPending.length && deletablePhotos.length }"
+                        aria-label="關閉"
+                        @click="photoOpen = false"
+                    >
+                        ✕
+                    </button>
+                </div>
+
+                <!-- 上傳中的整體進度：固定在標題列下面，不用滑到每張照片才看得到 -->
+                <div v-if="isUploading" class="pu-progress">
+                    <div class="pu-text">
+                        <span>上傳中 {{ uploadedCount }}/{{ uploadBatch.length }} 張</span>
+                        <b>{{ uploadPercent }}%</b>
+                    </div>
+                    <div class="pu-bar"><i :style="{ width: `${uploadPercent}%` }"></i></div>
+                </div>
+
+                <!-- 選好照片後先預覽：每張照片滿版、描述在正下方，往下滑看下一張；點圖全螢幕看。
+                     每張可以寫描述或取消選取，按「上傳」才開始傳 -->
+                <div v-if="drawerPending.length" class="cd-list">
+                    <div v-if="!isUploading" class="cd-section">
+                        <template v-if="failedCount">{{ failedCount }} 張上傳失敗</template>
+                        <template v-else>準備上傳 {{ drawerPending.length }} 張</template>
+                    </div>
+                    <div v-for="(item, index) in drawerPending" :key="item.key" class="pp-item">
+                        <div class="pp-stage">
+                            <el-image
+                                class="pp-image"
+                                :src="item.previewUrl"
+                                fit="contain"
+                                :preview-src-list="drawerPending.map((p) => p.previewUrl)"
+                                :initial-index="index"
+                                preview-teleported
+                                hide-on-click-modal
+                            />
+                            <!-- 按了上傳之後，每張蓋上自己的狀態：排隊中、壓縮中、上傳中、✓ 完成、失敗可重試 -->
+                            <div v-if="item.status !== 'idle'" class="pp-status" :class="item.status">
+                                <span>
+                                    {{ STATUS_TEXT[item.status] }}
+                                    <b v-if="['compressing', 'uploading', 'saving'].includes(item.status)"
+                                        >{{ item.progress }}%</b
+                                    >
+                                </span>
+                                <span
+                                    v-if="['compressing', 'uploading', 'saving'].includes(item.status)"
+                                    class="pp-bar"
+                                ><i :style="{ width: `${item.progress}%` }"></i></span>
+                                <button
+                                    v-if="item.status === 'error'"
+                                    type="button"
+                                    class="pp-retry"
+                                    @click="retryUpload(item)"
+                                >
+                                    重試
+                                </button>
+                            </div>
+                            <!-- 取消選取這一張（其他張還在）；全部不要就按下面的「取消」 -->
+                            <button
+                                v-if="item.status === 'idle' || item.status === 'error'"
+                                type="button"
+                                class="pp-remove"
+                                aria-label="取消選取這張"
+                                @click="removePending(item)"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <el-input
+                            v-model="item.note"
+                            :disabled="item.status !== 'idle' && item.status !== 'error'"
+                            class="pp-note"
+                            type="textarea"
+                            :autosize="{ minRows: 2, maxRows: 4 }"
+                            maxlength="500"
+                            placeholder="描述（選填）"
+                        />
+                    </div>
+                </div>
+
+                <div v-else class="cd-list">
+                    <div v-if="drawerPhotos.length" class="pd-grid">
+                        <div v-for="(photo, index) in drawerPhotos" :key="photo.id" class="pd-item">
+                            <button
+                                v-if="selecting"
+                                type="button"
+                                class="pd-thumb pd-selectable"
+                                :class="{
+                                    selected: selectedIds.includes(photo.id),
+                                    locked: !canDeletePhoto(photo),
+                                }"
+                                :disabled="!canDeletePhoto(photo)"
+                                :aria-pressed="selectedIds.includes(photo.id)"
+                                @click="toggleSelect(photo)"
+                            >
+                                <img :src="photo.thumb_url" alt="" />
+                                <span class="pd-check">✓</span>
+                            </button>
+                            <el-image
+                                v-else
+                                class="pd-thumb"
+                                :src="photo.thumb_url"
+                                fit="cover"
+                                :preview-src-list="drawerPhotos.map((p) => p.url)"
+                                :initial-index="index"
+                                preview-teleported
+                                hide-on-click-modal
+                            />
+                            <div class="pd-meta">
+                                {{ photo.author_name || '未命名' }} {{ $dayjs(photo.created_at).format('HH:mm') }}
+                            </div>
+                            <div v-if="photo.note" class="pd-note">{{ photo.note }}</div>
+                            <!-- 上傳的人或管理員可以補寫、修改描述 -->
+                            <button
+                                v-if="canDeletePhoto(photo) && !selecting"
+                                type="button"
+                                class="pd-edit"
+                                @click="editPhotoNote(photo)"
+                            >
+                                {{ photo.note ? '✎ 修改描述' : '＋ 描述' }}
+                            </button>
+                            <button
+                                v-if="canDeletePhoto(photo) && !selecting"
+                                type="button"
+                                class="pd-del"
+                                aria-label="刪除這張照片"
+                                @click="deletePhoto(photo)"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                    </div>
+                    <div v-else class="cd-empty">這一班還沒有照片</div>
+                </div>
+
+                <div class="cd-input">
+                    <!-- 不加 capture：手機會讓人選要拍照還是從相簿選，可以一次選多張 -->
+                    <input
+                        ref="photoInput"
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        class="pd-file"
+                        @change="onPickPhotos"
+                    />
+                    <div v-if="selecting" class="pd-confirm">
+                        <button type="button" class="pd-cancel" @click="toggleSelectMode">取消</button>
+                        <button
+                            type="button"
+                            class="pd-add pd-danger"
+                            :disabled="!selectedIds.length || deleting"
+                            @click="deleteSelected"
+                        >
+                            {{ deleting ? '刪除中…' : `刪除 ${selectedIds.length} 張` }}
+                        </button>
+                    </div>
+                    <button v-else-if="isUploading" type="button" class="pd-add" disabled>
+                        上傳中 {{ uploadedCount }}/{{ uploadBatch.length }}…
+                    </button>
+                    <div v-else-if="drawerPending.length" class="pd-confirm">
+                        <button type="button" class="pd-cancel" @click="clearPending">取消</button>
+                        <button type="button" class="pd-add" @click="uploadPending">
+                            {{ failedCount ? `重試 ${failedCount} 張` : `上傳 ${drawerPending.length} 張` }}
+                        </button>
+                    </div>
+                    <button
+                        v-else
+                        type="button"
+                        class="pd-add"
+                        :disabled="isDisabled"
+                        @click="photoInput?.click()"
+                    >
+                        📷 拍照或選照片
+                    </button>
+                </div>
+            </el-drawer>
+
             <!-- 留言面板：從下方滑出，這個分頁、這隻貓的留言 -->
             <el-drawer
                 v-model="drawerOpen"
@@ -762,7 +941,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
-const { nickname, getUserId } = useProfile();
+const { nickname, getUserId, isAdmin } = useProfile();
 
 // State
 const loading = ref(true);
@@ -1018,9 +1197,9 @@ const draft = ref('');
 const draftForNext = ref(false);
 const sending = ref(false);
 
-const TABS = ['arrive', 'care', 'leave', 'required'];
+const TABS = ['arrive', 'care', 'meal', 'required'];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
-const TAB_LABELS = { arrive: '觀察', care: '醫療', leave: '備餐', required: '收尾' };
+const TAB_LABELS = { arrive: '觀察', care: '醫療', meal: '備餐', required: '收尾' };
 const tabLabel = computed(() => TAB_LABELS[tab.value]);
 
 const inThisTab = (list, catId) =>
@@ -1036,6 +1215,330 @@ const drawerHandover = computed(() =>
 
 function formatTime(iso) {
     return $dayjs(iso).format('MM/DD HH:mm');
+}
+
+// ---- 照片：這一班、這隻貓、這個分頁（觀察、醫療）的照片。檔案在 Storage，網址由 server 發 ----
+const photos = ref([]); // 這一班的照片（含 url、thumb_url）
+const photoTab = ref('arrive'); // 面板目前是哪個分頁的照片
+// 選好的照片（含上傳中、失敗的）：{ key, file, previewUrl, note, catId, tab, status }
+// status：idle 還沒按上傳 → queued 排隊中 → compressing 壓縮中 → uploading 上傳中 → saving 儲存中 → done／error
+const pendingPhotos = ref([]);
+const BUSY = ['queued', 'compressing', 'uploading', 'saving'];
+
+const photoOpen = ref(false);
+const photoCat = ref(null);
+const photoInput = ref(null);
+const photosChannel = ref(null);
+
+const photosOf = (catId, key) => photos.value.filter((p) => p.cat_id === catId && p.tab === key);
+const photoCount = (catId, key) => photosOf(catId, key).length;
+const drawerPhotos = computed(() =>
+    photoCat.value ? photosOf(photoCat.value.cat_id, photoTab.value) : []
+);
+// 面板目前這隻貓、這個分頁的預覽與上傳狀態
+const drawerPending = computed(() =>
+    photoCat.value
+        ? pendingPhotos.value.filter((p) => p.catId === photoCat.value.cat_id && p.tab === photoTab.value)
+        : []
+);
+const isUploading = computed(() => drawerPending.value.some((p) => BUSY.includes(p.status)));
+const uploadedCount = computed(() => drawerPending.value.filter((p) => p.status === 'done').length);
+const failedCount = computed(() => drawerPending.value.filter((p) => p.status === 'error').length);
+// 這一輪在傳的：排隊、進行中、已完成（沒按上傳的與失敗的不算，重試一張時就只算那一張）
+const uploadBatch = computed(() =>
+    drawerPending.value.filter((p) => p.status === 'done' || BUSY.includes(p.status))
+);
+const uploadPercent = computed(() => {
+    const batch = uploadBatch.value;
+    if (!batch.length) return 0;
+    const sum = batch.reduce((total, p) => total + (p.status === 'done' ? 100 : p.progress), 0);
+    return Math.round(sum / batch.length);
+});
+const STATUS_TEXT = {
+    queued: '排隊中',
+    compressing: '壓縮中',
+    uploading: '上傳中',
+    saving: '儲存中',
+    done: '✓ 完成',
+    error: '上傳失敗',
+};
+const canDeletePhoto = (photo) => photo.uploaded_by === me.value || isAdmin.value;
+
+function openPhotos(cat, key) {
+    photoCat.value = cat;
+    photoTab.value = key;
+    photoOpen.value = true;
+}
+
+async function loadPhotos(recordId) {
+    try {
+        photos.value = await $fetch('/api/shift/photos', {
+            params: { shiftId: recordId },
+            cache: 'no-store',
+        });
+    } catch (e) {
+        console.error('loadPhotos error:', e);
+    }
+}
+
+function addPhoto(row) {
+    if (!photos.value.some((p) => p.id === row.id)) photos.value.push(row);
+}
+
+// 選了照片：先放進預覽，讓人每張寫描述，按「上傳」才開始傳
+function onPickPhotos(event) {
+    const files = [...(event.target.files || [])];
+    event.target.value = ''; // 同一張再選一次也會觸發
+    if (!files.length || !photoCat.value) return;
+    pendingPhotos.value.push(
+        ...files.map((file) => ({
+            key: `${Date.now()}-${Math.random()}`,
+            file,
+            previewUrl: URL.createObjectURL(file),
+            note: '',
+            catId: photoCat.value.cat_id,
+            tab: photoTab.value,
+            status: 'idle',
+            progress: 0,
+        }))
+    );
+}
+
+function dropPending(items) {
+    const keys = new Set(items.map((p) => p.key));
+    items.forEach((p) => URL.revokeObjectURL(p.previewUrl));
+    pendingPhotos.value = pendingPhotos.value.filter((p) => !keys.has(p.key));
+}
+
+const removePending = (item) => dropPending([item]);
+
+// 「取消」：清掉這個面板還沒傳、或傳失敗的（傳好的已經在照片格裡了）
+const clearPending = () => dropPending(drawerPending.value.filter((p) => !BUSY.includes(p.status)));
+
+// 關掉面板：還沒按上傳的就放棄；正在上傳的會在背景繼續傳完
+watch(photoOpen, (open) => {
+    if (!open && !isUploading.value) clearPending();
+});
+
+// 傳一個檔到一次性上傳網址，回報傳了多少（0～1）。
+// 跟 supabase-js 的 uploadToSignedUrl 送一樣的請求，只是改用 XMLHttpRequest 才拿得到上傳進度；
+// 萬一失敗就退回 supabase-js 再傳一次（只是沒有進度）
+const { url: SUPABASE_URL, key: SUPABASE_KEY } = config.public.supabase;
+function putWithProgress(path, token, blob, onProgress) {
+    return new Promise((resolve, reject) => {
+        const form = new FormData();
+        form.append('cacheControl', '3600');
+        form.append('', blob);
+        const xhr = new XMLHttpRequest();
+        xhr.open(
+            'PUT',
+            `${SUPABASE_URL}/storage/v1/object/upload/sign/shift-photos/${path}?token=${encodeURIComponent(token)}`
+        );
+        xhr.setRequestHeader('apikey', SUPABASE_KEY);
+        xhr.setRequestHeader('x-upsert', 'false');
+        xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
+        xhr.onload = () =>
+            xhr.status >= 200 && xhr.status < 300
+                ? resolve()
+                : reject(new Error(`upload ${xhr.status}: ${xhr.responseText}`));
+        xhr.onerror = () => reject(new Error('upload network error'));
+        xhr.send(form);
+    });
+}
+
+async function uploadFile(path, token, blob, onProgress) {
+    try {
+        await putWithProgress(path, token, blob, onProgress);
+    } catch (e) {
+        console.warn('XHR upload failed, retry with supabase-js:', e);
+        const { error } = await supabase.storage
+            .from('shift-photos')
+            .uploadToSignedUrl(path, token, blob, { contentType: 'image/jpeg' });
+        if (error) throw error;
+    }
+    onProgress(1);
+}
+
+// 一張：壓縮 → 拿一次性上傳網址 → 大圖、縮圖直接傳到 Storage → 記一筆（含描述）。
+// 進度：壓縮 0～10%、大圖 10～85%（照實際傳了多少）、縮圖 85～95%、記錄 95～100%
+async function uploadOne(item) {
+    const shiftId = formData.value.recordId;
+    const step = (from, to) => (ratio) => {
+        item.progress = Math.round(from + (to - from) * Math.min(1, Math.max(0, ratio)));
+    };
+    try {
+        item.status = 'compressing';
+        item.progress = 3;
+        const { full, thumb } = await compressPhoto(item.file);
+        item.progress = 10;
+        item.status = 'uploading';
+        const [slot] = await $fetch('/api/shift/photos/upload-url', {
+            method: 'POST',
+            body: { shiftId, catId: item.catId, tab: item.tab, count: 1 },
+        });
+        await uploadFile(slot.path, slot.token, full.blob, step(10, 85));
+        await uploadFile(slot.thumbPath, slot.thumbToken, thumb.blob, step(85, 95));
+        item.status = 'saving';
+        item.progress = 97;
+        const row = await $fetch('/api/shift/photos', {
+            method: 'POST',
+            body: {
+                shiftId,
+                catId: item.catId,
+                tab: item.tab,
+                note: item.note,
+                path: slot.path,
+                thumbPath: slot.thumbPath,
+                width: full.width,
+                height: full.height,
+                size: full.blob.size,
+            },
+        });
+        addPhoto(row);
+        item.progress = 100;
+        item.status = 'done';
+    } catch (e) {
+        console.error('upload photo error:', e);
+        item.status = 'error';
+    }
+}
+
+// 一張一張傳。全部成功就回到照片格；有失敗的留在預覽，讓人按「重試」
+async function uploadItems(items) {
+    if (!formData.value.recordId || !items.length) return;
+    items.forEach((p) => {
+        p.status = 'queued';
+        p.progress = 0;
+    });
+    for (const item of items) await uploadOne(item);
+
+    const group = pendingPhotos.value.filter((p) => p.catId === items[0].catId && p.tab === items[0].tab);
+    if (group.every((p) => p.status === 'done')) {
+        dropPending(group);
+        ElMessage.success(`已上傳 ${group.length} 張`);
+    } else if (group.some((p) => p.status === 'error')) {
+        ElMessage.error('有照片上傳失敗，可以按「重試」');
+    }
+}
+
+const uploadPending = () =>
+    uploadItems(drawerPending.value.filter((p) => p.status === 'idle' || p.status === 'error'));
+const retryUpload = (item) => uploadItems([item]);
+
+async function editPhotoNote(photo) {
+    const { isConfirmed, value } = await Swal.fire({
+        title: '照片描述',
+        input: 'textarea',
+        inputValue: photo.note || '',
+        inputPlaceholder: '例如 左後腳傷口比昨天紅',
+        inputAttributes: { maxlength: 500 },
+        showCancelButton: true,
+        confirmButtonText: '儲存',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#b33a39',
+    });
+    if (!isConfirmed) return;
+    try {
+        const res = await $fetch('/api/shift/photos/update', {
+            method: 'POST',
+            body: { id: photo.id, note: value },
+        });
+        photo.note = res.note;
+    } catch (e) {
+        console.error('editPhotoNote error:', e);
+        ElMessage.error('描述儲存失敗，請再試一次');
+    }
+}
+
+// ---- 選取模式：勾多張一次刪 ----
+const selecting = ref(false);
+const selectedIds = ref([]);
+const deleting = ref(false);
+const deletablePhotos = computed(() => drawerPhotos.value.filter(canDeletePhoto));
+const allSelected = computed(
+    () => deletablePhotos.value.length > 0 && selectedIds.value.length === deletablePhotos.value.length
+);
+
+function toggleSelectMode() {
+    selecting.value = !selecting.value;
+    selectedIds.value = [];
+}
+
+function toggleSelect(photo) {
+    if (!canDeletePhoto(photo)) return;
+    selectedIds.value = selectedIds.value.includes(photo.id)
+        ? selectedIds.value.filter((id) => id !== photo.id)
+        : [...selectedIds.value, photo.id];
+}
+
+function toggleSelectAll() {
+    selectedIds.value = allSelected.value ? [] : deletablePhotos.value.map((p) => p.id);
+}
+
+// 關掉面板或換一隻貓就離開選取模式
+watch([photoOpen, photoCat, photoTab], () => {
+    selecting.value = false;
+    selectedIds.value = [];
+});
+
+async function deleteSelected() {
+    const ids = [...selectedIds.value];
+    if (!ids.length) return;
+    const { isConfirmed } = await Swal.fire({
+        text: `確定要刪除這 ${ids.length} 張照片嗎？刪除後無法復原。`,
+        showCancelButton: true,
+        confirmButtonText: '刪除',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#b33a39',
+    });
+    if (!isConfirmed) return;
+    deleting.value = true;
+    try {
+        await $fetch('/api/shift/photos/delete', { method: 'POST', body: { ids } });
+        photos.value = photos.value.filter((p) => !ids.includes(p.id));
+        ElMessage.success(`已刪除 ${ids.length} 張`);
+        selecting.value = false;
+        selectedIds.value = [];
+    } catch (e) {
+        console.error('deleteSelected error:', e);
+        ElMessage.error('刪除失敗，請再試一次');
+    } finally {
+        deleting.value = false;
+    }
+}
+
+async function deletePhoto(photo) {
+    const { isConfirmed } = await Swal.fire({
+        text: '確定要刪除這張照片嗎？',
+        showCancelButton: true,
+        confirmButtonText: '刪除',
+        cancelButtonText: '取消',
+        confirmButtonColor: '#b33a39',
+    });
+    if (!isConfirmed) return;
+    try {
+        await $fetch('/api/shift/photos/delete', { method: 'POST', body: { id: photo.id } });
+        photos.value = photos.value.filter((p) => p.id !== photo.id);
+    } catch (e) {
+        console.error('deletePhoto error:', e);
+        ElMessage.error('刪除失敗，請再試一次');
+    }
+}
+
+// 別人上傳的照片即時出現：收到新增就重新拿一次清單（網址要 server 發）
+const reloadPhotos = debounce(() => loadPhotos(formData.value.recordId), 500);
+function subscribeToPhotos(recordId) {
+    if (photosChannel.value) supabase.removeChannel(photosChannel.value);
+    photosChannel.value = supabase
+        .channel(`shift-photos-${recordId}`)
+        .on(
+            'postgres_changes',
+            { event: 'INSERT', schema: 'public', table: 'shift_photos', filter: `shift_id=eq.${recordId}` },
+            (payload) => {
+                if (payload.new && !photos.value.some((p) => p.id === payload.new.id)) reloadPhotos();
+            }
+        )
+        .subscribe();
 }
 
 function openComments(cat) {
@@ -1168,13 +1671,7 @@ function saveDietItem(cat, { source, item }) {
     else saveCatItem(cat, 'diet', item);
 }
 
-// 備餐分頁貓後面那一區：沒有任何貓適用的飲食（例如那個位置還沒有貓），不然會看不到
-const leaveTaskGroups = computed(() =>
-    groupTasks(
-        (t) => t.kind === 'diet' && !formData.value.cats.some((cat) => appliesTo(t, cat))
-    )
-);
-
+// 全員／位置的飲食只併進適用的貓；那個位置現在沒有貓的就不顯示，也不算未完成
 // 收尾分頁：有收尾項目的貓（照貓的順序），以及全員、貓屋、位置的（groupTasks 照 placeRank 排）
 const requiredItems = computed(() => formData.value.tasks.filter((t) => t.kind === 'required'));
 const requiredCats = computed(() =>
@@ -1217,12 +1714,19 @@ const tabList = computed(() => {
         { value: 'arrive', label: '觀察', remaining: 0 },
         { value: 'care', label: '醫療', remaining: sectionUndone('care') },
         {
-            value: 'leave',
+            value: 'meal',
             label: '備餐',
             // 只有隨餐藥要打勾；全員／位置的整班一份，只算一次
             remaining:
                 formData.value.cats.reduce((sum, c) => sum + undone(c.diet.filter(isMealMed)), 0) +
-                undone(formData.value.tasks.filter((t) => t.kind === 'diet' && isMealMed(t))),
+                undone(
+                    formData.value.tasks.filter(
+                        (t) =>
+                            t.kind === 'diet' &&
+                            isMealMed(t) &&
+                            formData.value.cats.some((cat) => appliesTo(t, cat))
+                    )
+                ),
         },
         {
             value: 'required',
@@ -1355,8 +1859,8 @@ function InitFromQuery() {
         : new Date().getHours() < 18
         ? 'morning'
         : 'night';
-    // 舊連結的 ?tab=meds（吃藥分頁已併進醫療）
-    const wanted = queryTab === 'meds' ? 'care' : queryTab;
+    // 舊連結：?tab=meds（吃藥分頁已併進醫療）、?tab=leave（備餐改叫 meal）
+    const wanted = { meds: 'care', leave: 'meal' }[queryTab] || queryTab;
     if (TABS.includes(wanted)) tab.value = wanted;
 }
 
@@ -1394,9 +1898,10 @@ async function InitShift() {
 
     subscribeToRealtime(data.recordId);
 
-    // 留言要等這一班建立好才查得到，所以放在後面
-    await loadComments(params);
+    // 留言、照片要等這一班建立好才查得到，所以放在後面
+    await Promise.all([loadComments(params), loadPhotos(data.recordId)]);
     subscribeToComments(data.recordId);
+    subscribeToPhotos(data.recordId);
 }
 
 function subscribeToRealtime(recordId) {
@@ -1539,6 +2044,9 @@ onBeforeUnmount(() => {
     }
     if (commentsChannel.value) {
         supabase.removeChannel(commentsChannel.value);
+    }
+    if (photosChannel.value) {
+        supabase.removeChannel(photosChannel.value);
     }
 });
 
@@ -2305,6 +2813,314 @@ watch(
     }
 }
 
+// ---- 照片面板 ----
+// 標題列的文字按鈕（選取、全選、完成）。全域 button 樣式要蓋回來
+.cd-link {
+    width: auto;
+    margin-left: auto;
+    padding: 0 4px;
+    border: none;
+    background: none;
+    color: #3f7ea3;
+    font-size: 14px;
+    cursor: pointer;
+
+    & + .cd-link {
+        margin-left: 10px;
+    }
+}
+
+// 標題列有「選取」時，關閉鈕不再自己靠右
+.cd-head .cd-close.after-link {
+    margin-left: 10px;
+}
+
+// 選取模式的縮圖：可點選，右上角圓圈打勾
+.pd-selectable {
+    position: relative;
+    padding: 0;
+    border: 2px solid transparent;
+    cursor: pointer;
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+
+    .pd-check {
+        position: absolute;
+        top: 6px;
+        right: 6px;
+        width: 24px;
+        height: 24px;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.25);
+        color: transparent;
+        font-size: 14px;
+        line-height: 20px;
+        text-align: center;
+    }
+
+    &.selected {
+        border-color: #6da2c2;
+
+        .pd-check {
+            background: #6da2c2;
+            color: #fff;
+        }
+    }
+
+    // 別人傳的（不是管理員）不能選
+    &.locked {
+        cursor: default;
+        opacity: 0.4;
+
+        .pd-check {
+            display: none;
+        }
+    }
+}
+
+.pd-danger {
+    background: #b33a39 !important;
+}
+
+.pd-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+    padding-top: 10px;
+}
+
+.pd-item {
+    position: relative;
+    min-width: 0;
+}
+
+.pd-thumb {
+    display: block;
+    width: 100%;
+    aspect-ratio: 1;
+    border-radius: 6px;
+    background: #f0eeec;
+    overflow: hidden;
+}
+
+.pd-uploading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: #8e8783;
+}
+
+.pd-meta {
+    margin-top: 3px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 11px;
+    color: #8e8783;
+}
+
+// 全域 button 有 width: 100%、邊框、底色、padding，這裡每一項都要蓋回來
+.pd-del {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.5);
+    color: #fff;
+    font-size: 12px;
+    line-height: 22px;
+    cursor: pointer;
+}
+
+.pd-file {
+    display: none;
+}
+
+.pd-note {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    margin-top: 2px;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #222;
+    overflow-wrap: anywhere;
+}
+
+// 全域 button 有 width: 100%、邊框、底色、padding，這裡蓋回來
+.pd-edit {
+    width: auto;
+    height: auto;
+    margin: 2px 0 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #3f7ea3;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+// 上傳前的預覽：每張照片滿版、描述在正下方。全域 button 樣式要蓋回來
+.pp-item {
+    padding: 10px 0 14px;
+
+    & + .pp-item {
+        border-top: 1px solid #f2f0ee;
+    }
+}
+
+.pp-stage {
+    position: relative;
+    border-radius: 8px;
+    background: #f4f3f2;
+    overflow: hidden;
+}
+
+.pp-image {
+    display: block;
+    width: 100%;
+    height: min(38vh, 280px);
+}
+
+.pp-remove {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 15px;
+    line-height: 30px;
+    cursor: pointer;
+}
+
+// 上傳狀態：蓋在照片上
+.pp-status {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: rgba(0, 0, 0, 0.45);
+    color: #fff;
+    font-size: 15px;
+    pointer-events: none;
+
+    &.queued {
+        background: rgba(255, 255, 255, 0.6);
+        color: #657181;
+    }
+
+    &.done {
+        background: rgba(0, 0, 0, 0.2);
+        font-weight: 500;
+    }
+
+    &.error {
+        background: rgba(179, 58, 57, 0.6);
+        pointer-events: auto;
+    }
+}
+
+// 進行中：實際的進度（百分比跟著上傳的位元組數走）
+.pp-bar {
+    width: 70%;
+    height: 6px;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.35);
+    overflow: hidden;
+
+    i {
+        display: block;
+        height: 100%;
+        border-radius: 3px;
+        background: #fff;
+        transition: width 0.2s linear;
+    }
+}
+
+.pp-status b {
+    margin-left: 4px;
+    font-weight: 500;
+    font-variant-numeric: tabular-nums;
+}
+
+.pp-retry {
+    width: auto;
+    height: 30px;
+    padding: 0 16px;
+    border: none;
+    border-radius: 15px;
+    background: #fff;
+    color: #b33a39;
+    font-size: 14px;
+    cursor: pointer;
+}
+
+.pp-note {
+    margin-top: 8px;
+
+    :deep(.el-textarea__inner) {
+        min-height: 56px !important;
+        font-size: 15px;
+    }
+}
+
+.pd-confirm {
+    display: flex;
+    gap: 8px;
+
+    .pd-cancel {
+        width: 90px;
+        flex-shrink: 0;
+        height: 42px;
+        border: 1px solid #d8d4d1;
+        border-radius: 8px;
+        background: #fff;
+        color: #657181;
+        font-size: 15px;
+        cursor: pointer;
+    }
+
+    .pd-add {
+        flex: 1;
+    }
+}
+
+.pd-add {
+    width: 100%;
+    height: 42px;
+    border: none;
+    border-radius: 8px;
+    background: #6da2c2;
+    color: #fff;
+    font-size: 15px;
+    cursor: pointer;
+
+    &:disabled {
+        cursor: default;
+        opacity: 0.5;
+    }
+}
+
 .cd-head {
     display: flex;
     align-items: center;
@@ -2331,6 +3147,42 @@ watch(
         color: #999;
         font-size: 16px;
         cursor: pointer;
+    }
+}
+
+// 上傳中的整體進度（標題列下面那條）
+.pu-progress {
+    padding: 10px 16px 12px;
+    border-bottom: 1px solid #eee;
+    background: #fafafa;
+
+    .pu-text {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 6px;
+        font-size: 13px;
+        color: #4a4542;
+
+        b {
+            font-weight: 500;
+            color: #6da2c2;
+            font-variant-numeric: tabular-nums;
+        }
+    }
+
+    .pu-bar {
+        height: 6px;
+        border-radius: 3px;
+        background: #eceae8;
+        overflow: hidden;
+
+        i {
+            display: block;
+            height: 100%;
+            border-radius: 3px;
+            background: #6da2c2;
+            transition: width 0.2s linear;
+        }
     }
 }
 

@@ -1,7 +1,7 @@
 import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 
-const TABS = ['arrive', 'care', 'leave', 'required']
+const TABS = ['arrive', 'care', 'meal', 'required']
 
 // 新增一則留言。只新增、不覆蓋，多人同時留言不會互相蓋掉
 export default defineEventHandler(async (event) => {

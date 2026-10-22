@@ -265,7 +265,7 @@ export async function persistPrevReleased(stored, synced) {
 }
 
 // 一班裡還沒勾的項目，給下一班看（/api/shift/previous）。只看那一班的快照，跟後台現在的設定無關。
-// { care: [...], leave: [...], required: [...] }，每一項 { key, target, content, tag }：
+// { care: [...], meal: [...], required: [...] }，每一項 { key, target, content, tag }：
 //   target 是對象（貓名、全員、貓屋或位置），畫面上當小標籤；tag 是類別（醫療分頁才有）
 // 順序：貓在前（照那一班的貓順序），全員 → 貓屋 → 位置在後
 const PLACE_ORDER = ['貓屋', '客廳', '房間', '倉庫', '隔離區']
@@ -303,7 +303,11 @@ export function unfinishedOf(record) {
 
     return {
         care: [...fromCats('medical', () => true, medicalRow), ...fromTasks('medical', () => true, medicalRow)],
-        leave: [...fromCats('diet', isMealMed, dietRow), ...fromTasks('diet', isMealMed, dietRow)],
+        // 全員／位置的隨餐藥：那個位置當時沒有貓就不算（備餐分頁也不會顯示）
+        meal: [
+            ...fromCats('diet', isMealMed, dietRow),
+            ...fromTasks('diet', (t) => isMealMed(t) && cats.some((c) => !t.location || t.location === c.location), dietRow),
+        ],
         // 收尾：指定貓的跟著貓的順序排在前面，其他照全員 → 貓屋 → 位置
         required: [
             ...cats.flatMap((cat) =>

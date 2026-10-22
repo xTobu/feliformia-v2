@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
         released: Object.values(data.cats || {})
             .filter((c) => c.released)
             .map((c) => c.cat_id),
-        // { care, leave, required }：各分頁沒勾完的項目，見 unfinishedOf
+        // { care, meal, required }：各分頁沒勾完的項目，見 unfinishedOf
         unfinished: unfinishedOf(data),
     }
 })

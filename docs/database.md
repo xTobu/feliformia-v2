@@ -156,6 +156,7 @@ votes.data
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `shift_comments` | `/shift` | 每隻貓、每個分頁的留言，只新增不覆寫 |
+| `shift_photos` | `/shift` | 每隻貓、每個分頁的照片（觀察、醫療）。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kind` 留給之後的類型 |
 
 **三張事項表的共同欄位**：`shift` 是 `morning` / `night` / `both`，`start_date` / `end_date` 空代表不限。
 三張都有對象：`cat_id` 有值 = 那隻貓；`location` 有值 = 那個位置；兩個都空 = 全員
@@ -174,11 +175,15 @@ votes.data
 這個值記在這一班自己身上：當天的班每次載入會照上一班現在的記錄重算，有變才寫回（`persistPrevReleased`）。
 
 醫療、吃藥、收尾打勾時記下 `done_by`（登入者暱稱）與 `done_at`，畫面顯示「✓ 阿明 21:40」。
-值班記錄表的分頁是 觀察、醫療、備餐、收尾（`arrive` / `care` / `leave` / `required`）。
+值班記錄表的分頁是 觀察、醫療、備餐、收尾（`arrive` / `care` / `meal` / `required`）。
 `reports` 是 `{ 分頁: { user_id: { name, text, at } } }`：每個分頁、每個人各一段，用登入身分（沒有「填表志工」）。
 每個人只能改自己那一段，名字與時間由 server 填（`server/api/shift/update.post.js`）。
 下一班在**同一個分頁**上方看到上一班的回報（`components/ShiftReportBlock.vue`，可摺疊，這台裝置會記住），
 以及上一班那個分頁沒勾完的項目（醫療：醫療／餵藥／外用；備餐：隨餐藥；收尾），一項一行、對象用小標籤（`unfinishedOf`）。每個分頁的「LINE 發送至群組」只發那個分頁、這一班所有人的回報（標作者），不合在一起。舊格式的回報放在 `legacy` 底下，顯示為「（舊資料）」。
+
+**照片**：觀察、醫療分頁貓名旁的 📷 打開下方面板（兩個分頁的照片分開）。選好照片先預覽、每張可寫描述再上傳；上傳後描述可在縮圖下修改（`/api/shift/photos/update`）。手機上傳前自動壓縮（`composables/useImageCompress.js`：
+大圖最長邊 1600px 約 300KB、縮圖 400px），用 server 發的一次性上傳網址直接傳到 Storage（不經過 Vercel 的 4.5MB 上限），
+再 `POST /api/shift/photos` 記一筆；看照片用 server 發的有時效網址（12 小時）。只有上傳的人或管理員能刪（`/api/shift/photos/delete`，可一次傳多個 id，面板的「選取」模式用）。
 
 存檔不是整筆覆寫：前端每改一格只送那一格（例如 `cats.12.medical.5`、`reports.care.<user_id>`），
 `/api/shift/update` 呼叫資料庫函式 `shift_apply` 套用，同一班的請求會排隊。
