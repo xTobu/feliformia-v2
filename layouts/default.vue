@@ -4,8 +4,10 @@
             <NuxtLink to="/" class="site-name">Feliformia</NuxtLink>
             <div class="user-actions">
                 <span class="user-name">Hi, {{ displayName }}</span>
-                <NuxtLink to="/settings" class="settings-link">設定</NuxtLink>
-                <button class="logout-btn" @click="signOut">登出</button>
+                <!-- 設定、登出都收在選單裡（components/SiteMenu.vue） -->
+                <button class="menu-btn" aria-label="選單" @click="menuOpen = !menuOpen">
+                    <Icon icon="mdi:menu" width="18" />
+                </button>
             </div>
         </div>
         <div class="wrapper">
@@ -16,17 +18,18 @@
         <!-- 掛在 layout 而不是各頁面，這樣每一頁都有選單，
              「今日活動提醒」的自動跳出也才涵蓋得到整站。
              未登入時不掛 —— 它裡面的 API 都需要身分。 -->
-        <FloatButton v-if="user" />
+        <SiteMenu v-if="user" />
     </div>
 </template>
 
 <script setup>
 import Footer from '~/components/Footer.vue';
-import FloatButton from '~/components/FloatButton.vue';
+import SiteMenu from '~/components/SiteMenu.vue';
+import { Icon } from '@iconify/vue';
 
 const user = useSupabaseUser();
-const supabase = useSupabaseClient();
-const { displayName, loadProfile, clearProfile } = useProfile();
+const { displayName, loadProfile } = useProfile();
+const menuOpen = useState('site-menu-open', () => false);
 
 onMounted(() => {
     if (user.value) {
@@ -39,12 +42,6 @@ watch(user, (newUser) => {
         loadProfile();
     }
 });
-
-const signOut = async () => {
-    clearProfile();
-    await supabase.auth.signOut();
-    window.location.href = '/login';
-};
 </script>
 
 <style lang="scss">
@@ -81,32 +78,19 @@ $brown: #8e8783;
         color: $grey;
     }
 
-    .settings-link {
-        font-size: 12px;
-        color: $grey;
-        text-decoration: underline;
-        margin-bottom: 0;
-    }
-
-    .admin-link {
-        font-size: 12px;
-        color: $red;
-        text-decoration: underline;
-        margin-bottom: 0;
-        font-weight: 500;
-    }
-
-    .logout-btn {
-        padding: 4px 12px;
-        font-size: 12px;
-        background: white;
+    // 全域 button 有 width: 100%、padding，這裡蓋回來
+    .menu-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 30px;
+        height: 30px;
+        padding: 0;
         border: 1px solid #ddd;
-        border-radius: 4px;
-        cursor: pointer;
+        border-radius: 6px;
+        background: white;
         color: $grey;
-        width: auto;
-        height: auto;
-        line-height: 1.5;
+        cursor: pointer;
 
         &:hover {
             background: #f0f0f0;

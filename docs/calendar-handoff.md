@@ -149,7 +149,7 @@
 
 ### 4.1.1 `/api/calendar/today` — 我今天的活動
 
-[components/FloatButton.vue](../components/FloatButton.vue) 的「今日活動提醒」彈窗在用。
+[components/SiteMenu.vue](../components/SiteMenu.vue) 的「今日活動提醒」彈窗在用。
 
 回傳 `[{ id, time: '09:00 ~ 09:15', text: '[體驗] 內容' }]`，
 只包含**登入者自己**有份的活動。

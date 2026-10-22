@@ -2,7 +2,7 @@ import { requireUser } from '~/server/utils/auth'
 import { loadUserEvents, todayInTaipei } from '~/server/utils/calendar-today'
 import { CalendarTypeLabel } from '~/server/utils/constant'
 
-// 登入者今天的活動，給 FloatButton 的「今日活動提醒」彈窗用。
+// 登入者今天的活動，給 SiteMenu（全站選單）的「今日活動提醒」彈窗用。
 //
 // 名單規則與每日 LINE 提醒、以及大哥的「我的活動提醒」完全共用
 //（server/utils/calendar-today.js），三個入口看到的一定一致。
