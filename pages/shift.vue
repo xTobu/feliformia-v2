@@ -2940,8 +2940,8 @@ watch(
     top: 0;
     left: 0;
     display: flex;
-    align-items: center;
-    gap: 6px;
+    align-items: flex-start;
+    gap: 4px;
 
     .name {
         position: static;
@@ -2949,20 +2949,33 @@ watch(
 }
 
 // 不要外框：只有 💬 和數字。全域 button 樣式（width 100%、邊框、底色、padding）每一項都要蓋回來
+// 圖示放大，按鈕跟名字標籤一樣高（26px，不然標籤會被擠下來、上面露出白條）；
+// 手指可點的範圍用 ::after 往上下再撐 8px，實際約 36×42
 .comment-btn {
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 2px;
+    gap: 3px;
     width: auto;
-    height: 22px;
-    padding: 0 2px;
+    min-width: 36px;
+    height: 26px;
+    padding: 0 6px;
     border: none;
     background: none;
     color: #999;
-    font-size: 13px;
-    line-height: 22px;
+    font-size: 19px;
+    line-height: 26px;
     cursor: pointer;
+
+    span {
+        font-size: 14px;
+    }
+
+    &::after {
+        content: '';
+        position: absolute;
+        inset: -8px -2px;
+    }
 
     &.has {
         color: #6da2c2;
@@ -2973,7 +2986,7 @@ watch(
     .handover-dot {
         position: absolute;
         top: 0;
-        right: -4px;
+        right: 0;
         width: 8px;
         height: 8px;
         border: 1.5px solid #fff;
