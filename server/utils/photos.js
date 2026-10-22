@@ -26,7 +26,7 @@ export async function withSignedUrls(rows) {
 }
 
 export const PHOTO_COLUMNS =
-    'id, shift_id, cat_id, tab, kind, note, path, thumb_path, width, height, size, uploaded_by, author_name, created_at'
+    'id, shift_id, cat_id, tab, kinds, note, path, thumb_path, width, height, size, uploaded_by, author_name, created_at'
 
 // 照片描述：去頭尾空白，空的存 null，最多 500 字
 export function cleanNote(note) {

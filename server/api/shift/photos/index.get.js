@@ -2,7 +2,7 @@ import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 import { PHOTO_COLUMNS, withSignedUrls } from '~/server/utils/photos'
 
-// 唯讀：這一班的 📷 照片牆（含大圖與縮圖的有時效網址），照上傳時間排。留言附的照片不算，在留言頻道裡
+// 唯讀：這一班的 🗂️ 照片牆（含大圖與縮圖的有時效網址），照上傳時間排。留言附的照片不算，在留言頻道裡
 export default defineEventHandler(async (event) => {
     await requireUser(event)
 

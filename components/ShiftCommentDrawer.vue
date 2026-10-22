@@ -32,10 +32,63 @@
                     照片
                 </button>
             </div>
+            <!-- 🔍 再按一次就收起搜尋，回到原本的留言或照片 -->
+            <button
+                type="button"
+                class="ch-search-btn"
+                :class="{ on: view === 'search' }"
+                :aria-pressed="view === 'search'"
+                aria-label="搜尋留言"
+                @click="toggleSearch"
+            >
+                🔍
+            </button>
             <button type="button" class="ch-close" aria-label="關閉" @click="emit('update:modelValue', false)">
                 ✕
             </button>
         </div>
+
+        <!-- ===== 搜尋：這個頻道所有的班都找，點結果跳回那則留言 ===== -->
+        <template v-if="view === 'search'">
+            <div class="ch-searchbar">
+                <el-input
+                    ref="searchInput"
+                    v-model="searchText"
+                    clearable
+                    placeholder="搜尋這隻貓的留言"
+                    @input="searchSoon"
+                />
+                <button type="button" class="ch-btn" @click="closeSearch">取消</button>
+            </div>
+            <div class="ch-list">
+                <div v-if="searchLoading" class="ch-hint">搜尋中…</div>
+                <div v-else-if="searchedText && !searchResults.length" class="ch-empty">
+                    找不到「{{ searchedText }}」
+                </div>
+                <div v-else-if="searchedText" class="ch-hint">找到 {{ searchResults.length }} 則{{ searchResults.length >= 50 ? '（只列最新 50 則）' : '' }}</div>
+                <!-- 一則一列；點右邊的按鈕才跳過去（整列點了不會跳，避免捲動時誤觸）。上次跳過的那則標藍底 -->
+                <div
+                    v-for="r in searchResults"
+                    :key="r.id"
+                    :data-result-id="r.id"
+                    class="ch-result"
+                    :class="{ important: r.for_next, last: r.id === lastJumpId, seen: seenIds.includes(r.id) }"
+                >
+                    <div class="ch-result-text">
+                        <span class="ch-result-meta">
+                            {{ shiftText(r) }} · {{ r.author_name || '未命名' }} {{ timeText(r) }}
+                            <b v-if="r.id === lastJumpId" class="ch-result-last">上次看的</b>
+                            <b v-else-if="seenIds.includes(r.id)" class="ch-result-seen">看過</b>
+                        </span>
+                        <!-- eslint-disable-next-line vue/no-v-html -- 已先跳脫 HTML，只加上 <mark> -->
+                        <span class="ch-result-body" v-html="highlight(r.body, searchedText)"></span>
+                    </div>
+                    <button type="button" class="ch-result-jump" aria-label="跳到這則留言" @click="jumpFromSearch(r.id)">
+                        ›
+                    </button>
+                </div>
+            </div>
+        </template>
 
         <!-- ===== 留言 ===== -->
         <div v-show="view === 'messages'" ref="listEl" class="ch-list" @scroll="onScroll">
@@ -446,6 +499,7 @@ async function loadWall() {
 }
 
 async function open() {
+    resetSearch();
     view.value = 'messages';
     messages.value = [];
     wall.value = [];
@@ -508,6 +562,132 @@ async function jumpTo(commentId) {
     setTimeout(() => {
         if (flashId.value === commentId) flashId.value = null;
     }, 1600);
+}
+
+// ---- 搜尋：這個頻道（一隻貓、一個分頁）所有的班 ----
+const searchText = ref('');
+const searchedText = ref('');
+const searchResults = ref([]);
+const searchLoading = ref(false);
+const searchInput = ref(null);
+let searchTimer = null;
+let searchSeq = 0;
+// 每個頻道上次搜的字（這頁開著的期間都記得）：跳到某則之後再按 🔍，或關掉面板再打開，都還在
+const lastSearch = new Map();
+const lastJump = new Map(); // 每個頻道上次從搜尋跳過去的是哪一則
+const seenJumps = new Map(); // 每個頻道這次搜尋跳過哪些（換關鍵字或按取消就清掉）
+const searchKey = () => `${props.cat?.cat_id}-${props.tab}`;
+const lastJumpId = ref(null);
+const seenIds = ref([]);
+
+let viewBeforeSearch = 'messages';
+
+function toggleSearch() {
+    if (view.value === 'search') leaveSearch();
+    else openSearch();
+}
+
+// 收起搜尋：回到打開搜尋前的那一頁（留言或照片），搜尋的字與看過的標記都留著
+function leaveSearch() {
+    clearTimeout(searchTimer);
+    view.value = viewBeforeSearch;
+}
+
+async function openSearch() {
+    viewBeforeSearch = view.value === 'photos' ? 'photos' : 'messages';
+    view.value = 'search';
+    lastJumpId.value = lastJump.get(searchKey()) ?? null;
+    seenIds.value = seenJumps.get(searchKey()) || [];
+    const remembered = lastSearch.get(searchKey());
+    if (remembered && remembered !== searchedText.value) {
+        searchText.value = remembered;
+        await runSearch();
+    }
+    await nextTick();
+    // 回來時捲到上次看的那則；沒有的話游標放進搜尋框
+    const last = lastJumpId.value && document.querySelector(`[data-result-id="${lastJumpId.value}"]`);
+    if (last) last.scrollIntoView({ block: 'center' });
+    else searchInput.value?.focus();
+}
+
+// 清掉畫面上的搜尋（換頻道時）；forget 才連記住的字一起忘掉（按「取消」）
+function resetSearch(forget = false) {
+    clearTimeout(searchTimer);
+    if (forget) {
+        lastSearch.delete(searchKey());
+        lastJump.delete(searchKey());
+        seenJumps.delete(searchKey());
+    }
+    lastJumpId.value = null;
+    seenIds.value = [];
+    searchText.value = '';
+    searchedText.value = '';
+    searchResults.value = [];
+}
+
+// 「取消」：連記住的字一起清掉，回到原本那一頁
+function closeSearch() {
+    resetSearch(true);
+    view.value = viewBeforeSearch;
+}
+
+// 打字停 0.3 秒才搜；比較慢回來的舊結果不蓋掉新的
+function searchSoon() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(runSearch, 300);
+}
+
+async function runSearch() {
+    const q = searchText.value.trim();
+    const seq = ++searchSeq;
+    if (!q) {
+        searchedText.value = '';
+        searchResults.value = [];
+        lastSearch.delete(searchKey());
+        return;
+    }
+    searchLoading.value = true;
+    try {
+        const results = await $fetch('/api/shift/comments/search', {
+            params: { ...channelParams(), q },
+            cache: 'no-store',
+        });
+        if (seq !== searchSeq) return;
+        // 換了關鍵字：看過的標記重來
+        if (lastSearch.get(searchKey()) !== q) {
+            lastJump.delete(searchKey());
+            seenJumps.delete(searchKey());
+            lastJumpId.value = null;
+            seenIds.value = [];
+        }
+        searchResults.value = results;
+        searchedText.value = q;
+        lastSearch.set(searchKey(), q);
+    } catch (e) {
+        console.error('search comments error:', e);
+        ElMessage.error('搜尋失敗，請再試一次');
+    } finally {
+        if (seq === searchSeq) searchLoading.value = false;
+    }
+}
+
+// 跳過去時搜尋結果留著，再按 🔍 會回到同一份結果，並標出這次跳的是哪一則
+function jumpFromSearch(id) {
+    lastJump.set(searchKey(), id);
+    lastJumpId.value = id;
+    seenIds.value = [...new Set([...seenIds.value, id])];
+    seenJumps.set(searchKey(), seenIds.value);
+    jumpTo(id);
+}
+
+// 搜尋結果：先跳脫 HTML，再把關鍵字包上 <mark>（不分大小寫）
+const escapeHtml = (text) =>
+    text.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+function highlight(body, q) {
+    const html = escapeHtml(body || '');
+    if (!q) return html;
+    const pattern = new RegExp(escapeHtml(q).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    return html.replace(pattern, (m) => `<mark>${m}</mark>`);
 }
 
 // ---- 輸入框附照片 ----
@@ -817,6 +997,114 @@ button {
         background: none;
         color: #999;
         font-size: 16px;
+    }
+}
+
+// 🔍：搜尋中是藍底圓圈（跟「留言／照片」選中的樣子同一個顏色）
+.ch-search-btn {
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: none;
+    font-size: 16px;
+    line-height: 30px;
+
+    &.on {
+        background: #6da2c2;
+    }
+}
+
+.ch-searchbar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-bottom: 1px solid #eee;
+
+    .el-input {
+        flex: 1;
+    }
+}
+
+// 搜尋結果：一則一列，右邊的按鈕才跳回頻道
+.ch-result {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 -8px;
+    padding: 10px 8px;
+    border-bottom: 1px solid #f2f0ee;
+    text-align: left;
+
+    // 上次跳過的那則
+    &.last {
+        background: #eef5fa;
+    }
+
+    .ch-result-text {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .ch-result-last,
+    .ch-result-seen {
+        margin-left: 4px;
+        font-weight: 500;
+        color: #3f7ea3;
+    }
+
+    // 這次搜尋跳過的：字淡一點、標「看過」
+    &.seen:not(.last) .ch-result-body {
+        color: #8e8783;
+    }
+
+    .ch-result-seen {
+        color: #8e8783;
+    }
+
+    .ch-result-jump {
+        flex-shrink: 0;
+        width: 34px;
+        height: 34px;
+        padding: 0 0 2px 2px;
+        border: 1px solid #d8d4d1;
+        border-radius: 50%;
+        background: #fff;
+        color: #3f7ea3;
+        font-size: 22px;
+        line-height: 1;
+    }
+
+    &.important .ch-result-body {
+        background: #fde9cc;
+        border-radius: 6px;
+        padding: 2px 6px;
+        margin-left: -6px;
+    }
+
+    .ch-result-meta {
+        display: block;
+        margin-bottom: 2px;
+        font-size: 12px;
+        color: #999;
+    }
+
+    .ch-result-body {
+        display: inline-block;
+        font-size: 15px;
+        line-height: 1.45;
+        color: #222;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+
+        :deep(mark) {
+            padding: 0 1px;
+            border-radius: 2px;
+            background: #fff1a8;
+            color: inherit;
+        }
     }
 }
 

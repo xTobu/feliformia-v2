@@ -81,7 +81,7 @@
                                 :aria-label="`${cat.name}的照片`"
                                 @click="openPhotos(cat, 'arrive')"
                             >
-                                📷<span v-if="photoCount(cat.cat_id, 'arrive')">{{
+                                🗂️<span v-if="photoCount(cat.cat_id, 'arrive')">{{
                                     photoCount(cat.cat_id, 'arrive')
                                 }}</span>
                             </button>
@@ -228,7 +228,7 @@
                                     :aria-label="`${entry.cat.name}的醫療照片`"
                                     @click="openPhotos(entry.cat, 'care')"
                                 >
-                                    📷<span v-if="photoCount(entry.cat.cat_id, 'care')">{{
+                                    🗂️<span v-if="photoCount(entry.cat.cat_id, 'care')">{{
                                         photoCount(entry.cat.cat_id, 'care')
                                     }}</span>
                                 </button>
@@ -685,6 +685,30 @@
                     </button>
                 </div>
 
+                <!-- 類型篩選（可多選）：只看有這些類型的照片（例如貓砂），往上滑也只找這些 -->
+                <div v-if="!drawerPending.length && photoKindList.length" class="pd-filter">
+                    <button
+                        type="button"
+                        class="pp-kind"
+                        :class="{ on: !photoKindFilter.length }"
+                        :aria-pressed="!photoKindFilter.length"
+                        @click="photoKindFilter = []"
+                    >
+                        全部
+                    </button>
+                    <button
+                        v-for="kind in photoKindList"
+                        :key="kind"
+                        type="button"
+                        class="pp-kind"
+                        :class="{ on: photoKindFilter.includes(kind) }"
+                        :aria-pressed="photoKindFilter.includes(kind)"
+                        @click="photoKindFilter = toggleKind(photoKindFilter, kind)"
+                    >
+                        {{ kind }}
+                    </button>
+                </div>
+
                 <!-- 上傳中的整體進度：固定在標題列下面，不用滑到每張照片才看得到 -->
                 <div v-if="isUploading" class="pu-progress">
                     <div class="pu-text">
@@ -748,6 +772,21 @@
                                 ✕
                             </button>
                         </div>
+                        <!-- 類型（選填、可多選）：點一下選、再點一下取消 -->
+                        <div class="pp-kinds">
+                            <button
+                                v-for="kind in PHOTO_KINDS[item.tab] || []"
+                                :key="kind"
+                                type="button"
+                                class="pp-kind"
+                                :class="{ on: item.kinds.includes(kind) }"
+                                :aria-pressed="item.kinds.includes(kind)"
+                                :disabled="item.status !== 'idle' && item.status !== 'error'"
+                                @click="item.kinds = toggleKind(item.kinds, kind)"
+                            >
+                                {{ kind }}
+                            </button>
+                        </div>
                         <el-input
                             v-model="item.note"
                             :disabled="item.status !== 'idle' && item.status !== 'error'"
@@ -806,18 +845,20 @@
                                     preview-teleported
                                     hide-on-click-modal
                                 />
+                                <!-- 類型：縮圖左上角的小標籤 -->
+                                <span v-if="photo.kinds?.length" class="pd-kind">{{ photo.kinds.join('・') }}</span>
                                 <div class="pd-meta">
                                     {{ photo.author_name || '未命名' }} {{ photoTime(photo, group) }}
                                 </div>
                                 <div v-if="photo.note" class="pd-note">{{ photo.note }}</div>
-                                <!-- 上傳的人或管理員可以補寫、修改描述 -->
+                                <!-- 上傳的人或管理員：編輯類型、描述，或刪除照片 -->
                                 <button
                                     v-if="canDeletePhoto(photo) && !selecting"
                                     type="button"
                                     class="pd-edit"
-                                    @click="editPhotoNote(photo)"
+                                    @click="editPhoto(photo)"
                                 >
-                                    {{ photo.note ? '✎ 修改描述' : '＋ 描述' }}
+                                    ✎ 編輯
                                 </button>
                                 <button
                                     v-if="canDeletePhoto(photo) && !selecting"
@@ -830,7 +871,9 @@
                                 </button>
                             </div>
                         </div>
-                        <div v-else class="cd-empty">這一班還沒有照片</div>
+                        <div v-else class="cd-empty">
+                            {{ photoKindFilter.length ? `這一班沒有${photoKindFilter.join('、')}照片` : '這一班還沒有照片' }}
+                        </div>
                     </template>
                 </div>
 
@@ -875,6 +918,52 @@
                     </button>
                 </div>
             </el-drawer>
+
+            <!-- 編輯照片：類型（跟上傳時一樣點標籤、可多選）與描述在同一個視窗，按儲存一起改；也可以刪除這張 -->
+            <el-dialog
+                :model-value="!!photoEditing"
+                title="編輯照片"
+                width="90%"
+                class="photo-edit-dialog"
+                align-center
+                append-to-body
+                @update:model-value="(v) => !v && (photoEditing = null)"
+            >
+                <div class="pe-label">類型</div>
+                <div class="pp-kinds">
+                    <button
+                        v-for="kind in PHOTO_KINDS[photoEditing?.tab] || []"
+                        :key="kind"
+                        type="button"
+                        class="pp-kind"
+                        :class="{ on: kindDraft.includes(kind) }"
+                        :aria-pressed="kindDraft.includes(kind)"
+                        @click="kindDraft = toggleKind(kindDraft, kind)"
+                    >
+                        {{ kind }}
+                    </button>
+                </div>
+                <div class="pe-label">描述</div>
+                <el-input
+                    v-model="noteDraft"
+                    type="textarea"
+                    :autosize="{ minRows: 3, maxRows: 6 }"
+                    maxlength="500"
+                    placeholder="描述（選填）"
+                    class="pe-note"
+                />
+                <button type="button" class="pe-delete" :disabled="savingPhotoEdit" @click="deleteEditingPhoto">
+                    刪除這張照片
+                </button>
+                <template #footer>
+                    <div class="pd-confirm">
+                        <button type="button" class="pd-cancel" @click="photoEditing = null">取消</button>
+                        <button type="button" class="pd-add" :disabled="savingPhotoEdit" @click="savePhotoEdit">
+                            {{ savingPhotoEdit ? '儲存中…' : '儲存' }}
+                        </button>
+                    </div>
+                </template>
+            </el-dialog>
 
             <!-- 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看，可以附照片（components/ShiftCommentDrawer.vue） -->
             <ShiftCommentDrawer
@@ -1233,8 +1322,24 @@ function openPhotos(cat, key) {
     photoCat.value = cat;
     photoTab.value = key;
     photoOpen.value = true;
-    openPhotoHistory();
+    // 上次有篩選就清掉，清掉時 watch 會重新載入；沒有就直接載入（不要載兩次）
+    if (photoKindFilter.value.length) photoKindFilter.value = [];
+    else openPhotoHistory();
 }
+
+// ---- 類型篩選（可多選）：空陣列 = 全部，有選就看有其中任一類的照片。換篩選就從這一班重新往前找 ----
+const photoKindFilter = ref([]);
+const photoKindList = computed(() => PHOTO_KINDS[photoTab.value] || []);
+const matchesKindFilter = (photo) =>
+    !photoKindFilter.value.length || (photo.kinds || []).some((k) => photoKindFilter.value.includes(k));
+// 多選標籤：點一下加、再點一下拿掉（照片類型、篩選共用）
+const toggleKind = (list, kind) => (list.includes(kind) ? list.filter((k) => k !== kind) : [...list, kind]);
+watch(photoKindFilter, () => {
+    if (!photoOpen.value) return;
+    selecting.value = false;
+    selectedIds.value = [];
+    openPhotoHistory();
+});
 
 // ---- 照片牆往前翻：這一班的在 photos（即時更新），前面的班在 photoHistory ----
 const photoHistory = ref([]);
@@ -1261,7 +1366,7 @@ const drawerGroups = computed(() => {
     const { date, shift } = channelCurrent.value;
     const groups = new Map();
     for (const photo of photoHistory.value) {
-        if (photo.cat_id !== photoCat.value.cat_id || photo.tab !== photoTab.value) continue;
+        if (photo.cat_id !== photoCat.value.cat_id || photo.tab !== photoTab.value || !matchesKindFilter(photo)) continue;
         const key = shiftKeyOf(photo.date, photo.shift);
         if (!groups.has(key)) {
             groups.set(key, { key, date: photo.date, shift: photo.shift, shiftId: photo.shift_id, isCurrent: false, photos: [] });
@@ -1271,7 +1376,14 @@ const drawerGroups = computed(() => {
     const sorted = [...groups.values()].sort((a, b) => a.key.localeCompare(b.key));
     return [
         ...sorted,
-        { key: shiftKeyOf(date, shift), date, shift, shiftId: formData.value.recordId, isCurrent: true, photos: drawerPhotos.value },
+        {
+            key: shiftKeyOf(date, shift),
+            date,
+            shift,
+            shiftId: formData.value.recordId,
+            isCurrent: true,
+            photos: drawerPhotos.value.filter(matchesKindFilter),
+        },
     ];
 });
 const drawerAllPhotos = computed(() => drawerGroups.value.flatMap((g) => g.photos));
@@ -1285,7 +1397,14 @@ async function scrollPhotosToBottom() {
 async function loadPhotoHistory(count) {
     const from = historyCursor.value || channelCurrent.value;
     const data = await $fetch('/api/shift/photos/history', {
-        params: { catId: photoCat.value.cat_id, tab: photoTab.value, date: from.date, shift: from.shift, count },
+        params: {
+            catId: photoCat.value.cat_id,
+            tab: photoTab.value,
+            date: from.date,
+            shift: from.shift,
+            count,
+            ...(photoKindFilter.value.length ? { kinds: photoKindFilter.value.join(',') } : {}),
+        },
         cache: 'no-store',
     });
     photoHistory.value.push(...data.photos.filter((p) => !photoHistory.value.some((h) => h.id === p.id)));
@@ -1376,6 +1495,7 @@ function onPickPhotos(event) {
             file,
             previewUrl: URL.createObjectURL(file),
             note: '',
+            kinds: [],
             catId: photoCat.value.cat_id,
             tab: photoTab.value,
             ...target,
@@ -1431,6 +1551,7 @@ async function uploadOne(item) {
                 catId: item.catId,
                 tab: item.tab,
                 note: item.note,
+                kinds: [...item.kinds],
                 path: slot.path,
                 thumbPath: slot.thumbPath,
                 width: full.width,
@@ -1471,28 +1592,35 @@ const uploadPending = () =>
     uploadItems(drawerPending.value.filter((p) => p.status === 'idle' || p.status === 'error'));
 const retryUpload = (item) => uploadItems([item]);
 
-async function editPhotoNote(photo) {
-    const { isConfirmed, value } = await Swal.fire({
-        title: '照片描述',
-        input: 'textarea',
-        inputValue: photo.note || '',
-        inputPlaceholder: '例如 左後腳傷口比昨天紅',
-        inputAttributes: { maxlength: 500 },
-        showCancelButton: true,
-        confirmButtonText: '儲存',
-        cancelButtonText: '取消',
-        confirmButtonColor: '#b33a39',
-    });
-    if (!isConfirmed) return;
+// 編輯照片（上傳的人或管理員）：類型與描述在同一個視窗。類型全部取消＝不分類，描述清空＝沒有描述
+const photoEditing = ref(null);
+const kindDraft = ref([]);
+const noteDraft = ref('');
+const savingPhotoEdit = ref(false);
+
+function editPhoto(photo) {
+    photoEditing.value = photo;
+    kindDraft.value = [...(photo.kinds || [])];
+    noteDraft.value = photo.note || '';
+}
+
+async function savePhotoEdit() {
+    const photo = photoEditing.value;
+    if (!photo) return;
+    savingPhotoEdit.value = true;
     try {
         const res = await $fetch('/api/shift/photos/update', {
             method: 'POST',
-            body: { id: photo.id, note: value },
+            body: { id: photo.id, kinds: [...kindDraft.value], note: noteDraft.value },
         });
+        photo.kinds = res.kinds;
         photo.note = res.note;
+        photoEditing.value = null;
     } catch (e) {
-        console.error('editPhotoNote error:', e);
-        ElMessage.error('描述儲存失敗，請再試一次');
+        console.error('savePhotoEdit error:', e);
+        ElMessage.error('儲存失敗，請再試一次');
+    } finally {
+        savingPhotoEdit.value = false;
     }
 }
 
@@ -1554,6 +1682,13 @@ async function deleteSelected() {
     }
 }
 
+// 編輯視窗裡的「刪除這張照片」：確認刪掉後關掉視窗
+async function deleteEditingPhoto() {
+    const photo = photoEditing.value;
+    if (photo && (await deletePhoto(photo))) photoEditing.value = null;
+}
+
+// 回傳有沒有真的刪掉（按取消或失敗是 false）
 async function deletePhoto(photo) {
     const { isConfirmed } = await Swal.fire({
         text: '確定要刪除這張照片嗎？',
@@ -1562,14 +1697,16 @@ async function deletePhoto(photo) {
         cancelButtonText: '取消',
         confirmButtonColor: '#b33a39',
     });
-    if (!isConfirmed) return;
+    if (!isConfirmed) return false;
     try {
         await $fetch('/api/shift/photos/delete', { method: 'POST', body: { id: photo.id } });
         photos.value = photos.value.filter((p) => p.id !== photo.id);
         photoHistory.value = photoHistory.value.filter((p) => p.id !== photo.id);
+        return true;
     } catch (e) {
         console.error('deletePhoto error:', e);
         ElMessage.error('刪除失敗，請再試一次');
+        return false;
     }
 }
 
@@ -1583,7 +1720,7 @@ function subscribeToPhotos(recordId) {
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'shift_photos', filter: `shift_id=eq.${recordId}` },
             (payload) => {
-                // 留言附的照片在留言頻道，不在 📷 照片牆
+                // 留言附的照片在留言頻道，不在 🗂️ 照片牆
                 if (payload.new && !payload.new.comment_id && !photos.value.some((p) => p.id === payload.new.id)) reloadPhotos();
             }
         )
@@ -3002,6 +3139,20 @@ watch(
 }
 
 // 全域 button 有 width: 100%、邊框、底色、padding，這裡蓋回來
+// 縮圖左上角的類型標籤（不擋點縮圖看大圖）
+.pd-kind {
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    padding: 0 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 11px;
+    line-height: 18px;
+    pointer-events: none;
+}
+
 .pd-edit {
     width: auto;
     height: auto;
@@ -3115,6 +3266,70 @@ watch(
     color: #b33a39;
     font-size: 14px;
     cursor: pointer;
+}
+
+// 上傳前選類型：一排膠囊，選中的實心
+.pp-kinds {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    margin: 8px 0;
+
+    // 手機寬度一排放得下六個
+    .pp-kind {
+        width: auto;
+        height: 28px;
+        margin: 0;
+        padding: 0 9px;
+        border: 1px solid #d8d4d1;
+        border-radius: 14px;
+        background: #fff;
+        color: #657181;
+        font-size: 13px;
+        cursor: pointer;
+
+        &.on {
+            border-color: #6da2c2;
+            background: #6da2c2;
+            color: #fff;
+        }
+
+        &:disabled {
+            cursor: default;
+            opacity: 0.6;
+        }
+    }
+}
+
+// 編輯照片視窗裡的「刪除這張照片」：紅字，放在描述下面
+.pe-delete {
+    width: auto;
+    height: auto;
+    margin: 12px 0 0;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #b33a39;
+    font-size: 14px;
+    cursor: pointer;
+
+    &:disabled {
+        opacity: 0.5;
+    }
+}
+
+// 編輯照片視窗裡的小標題（類型、描述）
+.pe-label {
+    margin: 4px 0 2px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #8e8783;
+    text-align: left;
+}
+
+// 全域把 textarea 設成至少 100px，這裡照 autosize
+.pe-note :deep(.el-textarea__inner) {
+    min-height: 0 !important;
 }
 
 .pp-note {
@@ -3249,6 +3464,35 @@ watch(
     }
 }
 
+// 照片牆上方的類型篩選（膠囊樣式跟上傳預覽的類型共用 .pp-kind）
+.pd-filter {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+    padding: 8px 16px;
+    border-bottom: 1px solid #eee;
+
+    .pp-kind {
+        flex-shrink: 0;
+        width: auto;
+        height: 28px;
+        margin: 0;
+        padding: 0 9px;
+        border: 1px solid #d8d4d1;
+        border-radius: 14px;
+        background: #fff;
+        color: #657181;
+        font-size: 13px;
+        cursor: pointer;
+
+        &.on {
+            border-color: #6da2c2;
+            background: #6da2c2;
+            color: #fff;
+        }
+    }
+}
+
 // 以前那班分隔線上的 📷：補傳照片到那一班
 .pd-divider-add {
     width: auto;
@@ -3296,6 +3540,19 @@ watch(
     // 全域把 textarea 設成至少 100px，這裡一行起跳
     :deep(.el-textarea__inner) {
         min-height: 40px !important;
+    }
+}
+</style>
+
+<style lang="scss">
+/* 編輯照片的視窗：el-dialog 會 teleport 到 body，scoped 選不到 dialog 本身，這塊不加 scoped */
+.photo-edit-dialog {
+    max-width: 400px;
+    border-radius: 12px;
+
+    .el-dialog__body {
+        padding-top: 4px;
+        padding-bottom: 4px;
     }
 }
 </style>

@@ -1,15 +1,17 @@
 import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 import { cleanNote } from '~/server/utils/photos'
+import { isPhotoKinds, sortPhotoKinds } from '~/composables/photoKinds'
 
-// 改照片描述：只有上傳的人或管理員可以。空字串＝清掉描述
+// 改照片描述或類型：只有上傳的人或管理員可以。有帶的欄位才改；描述空字串＝清掉，類型空陣列＝不分類
 export default defineEventHandler(async (event) => {
     const userId = await requireUser(event)
 
-    const { id, note } = await readBody(event)
+    const body = await readBody(event)
+    const { id } = body
     const { data: photo, error } = await supabase
         .from('shift_photos')
-        .select('id, uploaded_by')
+        .select('id, tab, note, kinds, uploaded_by')
         .eq('id', id)
         .maybeSingle()
     if (error) throw createError({ statusCode: 500, message: error.message })
@@ -26,11 +28,18 @@ export default defineEventHandler(async (event) => {
         }
     }
 
-    const { error: updateError } = await supabase
-        .from('shift_photos')
-        .update({ note: cleanNote(note) })
-        .eq('id', photo.id)
-    if (updateError) throw createError({ statusCode: 500, message: updateError.message })
+    const changes = {}
+    if ('note' in body) changes.note = cleanNote(body.note)
+    if ('kinds' in body) {
+        if (!isPhotoKinds(photo.tab, body.kinds)) {
+            throw createError({ statusCode: 400, message: '資料格式錯誤' })
+        }
+        changes.kinds = sortPhotoKinds(photo.tab, body.kinds)
+    }
+    if (Object.keys(changes).length) {
+        const { error: updateError } = await supabase.from('shift_photos').update(changes).eq('id', photo.id)
+        if (updateError) throw createError({ statusCode: 500, message: updateError.message })
+    }
 
-    return { note: cleanNote(note) }
+    return { note: changes.note ?? photo.note, kinds: changes.kinds ?? photo.kinds }
 })
