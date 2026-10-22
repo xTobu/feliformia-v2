@@ -11,8 +11,16 @@ export const COMMENT_COLUMNS =
     'id, shift_id, cat_id, tab, body, for_next, author_name, created_by, created_at, edited_at, shifts!inner(date, shift)'
 
 // 查詢結果 → 畫面用的樣子：把 shifts 攤平成 date、shift，再掛上這則留言的照片（含有時效網址）
+// 與作者的頭像路徑（author_avatar，公開 bucket，畫面自己組網址）
 export async function toMessages(rows) {
     if (!rows.length) return []
+    const authorIds = [...new Set(rows.map((r) => r.created_by).filter(Boolean))]
+    const { data: authors, error: authorError } = authorIds.length
+        ? await supabase.from('profiles').select('id, avatar_path').in('id', authorIds)
+        : { data: [], error: null }
+    if (authorError) throw createError({ statusCode: 500, message: authorError.message })
+    const avatarOf = new Map(authors.map((a) => [a.id, a.avatar_path]))
+
     const { data: photos, error } = await supabase
         .from('shift_photos')
         .select(`${PHOTO_COLUMNS}, comment_id`)
@@ -28,6 +36,7 @@ export async function toMessages(rows) {
         ...row,
         date: shifts?.date ?? null,
         shift: shifts?.shift ?? null,
+        author_avatar: avatarOf.get(row.created_by) || null,
         photos: signed.filter((p) => p.comment_id === row.id),
     }))
 }

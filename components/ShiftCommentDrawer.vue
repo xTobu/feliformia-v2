@@ -110,7 +110,10 @@
                     class="ch-msg"
                     :class="{ important: m.for_next, editing: editingId === m.id, flash: flashId === m.id }"
                 >
-                    <div class="ch-avatar" :style="avatarStyle(m)">{{ initial(m) }}</div>
+                    <div class="ch-avatar" :style="m.author_avatar ? null : avatarStyle(m)">
+                        <img v-if="m.author_avatar" :src="avatarUrl(m.author_avatar)" alt="" />
+                        <template v-else>{{ initial(m) }}</template>
+                    </div>
                     <div class="ch-main">
                         <div class="ch-meta">
                             <b>{{ m.author_name || '未命名' }}</b>
@@ -351,6 +354,7 @@ const emit = defineEmits(['update:modelValue', 'added', 'removed']);
 const { $dayjs } = useNuxtApp();
 const supabase = useSupabaseClient();
 const { uploadFile } = usePhotoUpload();
+const { avatarUrl } = useAvatar();
 
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
 const MAX_PHOTOS = 10;
@@ -427,7 +431,7 @@ const wallGroups = computed(() =>
 
 const isMine = (m) => !!props.me && m.created_by === props.me;
 
-// 頭像：沒有大頭照，用名字第一個字，顏色照名字固定
+// 頭像：有上傳就用照片，沒有就用名字第一個字，顏色照名字固定
 const AVATAR_COLORS = [
     ['#d9e6ee', '#3f7ea3'],
     ['#e8e2dc', '#6b625d'],
@@ -1198,8 +1202,15 @@ button {
     width: 34px;
     height: 34px;
     border-radius: 50%;
+    overflow: hidden;
     font-size: 14px;
     font-weight: 500;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
 }
 
 .ch-main {

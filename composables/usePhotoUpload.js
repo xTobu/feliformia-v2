@@ -1,4 +1,4 @@
-// 值班照片傳到 Storage（shift-photos bucket）。照片牆與留言頻道共用
+// 照片傳到 Storage：值班照片（shift-photos，照片牆與留言頻道）與頭像（avatars）共用
 export function usePhotoUpload() {
     const config = useRuntimeConfig();
     const supabase = useSupabaseClient();
@@ -7,7 +7,7 @@ export function usePhotoUpload() {
     // 跟 supabase-js 的 uploadToSignedUrl 送一樣的請求，只是改用 XMLHttpRequest 才拿得到上傳進度；
     // 萬一失敗就退回 supabase-js 再傳一次（只是沒有進度）
     const { url: SUPABASE_URL, key: SUPABASE_KEY } = config.public.supabase;
-    function putWithProgress(path, token, blob, onProgress) {
+    function putWithProgress(bucket, path, token, blob, onProgress) {
         return new Promise((resolve, reject) => {
             const form = new FormData();
             form.append('cacheControl', '3600');
@@ -15,7 +15,7 @@ export function usePhotoUpload() {
             const xhr = new XMLHttpRequest();
             xhr.open(
                 'PUT',
-                `${SUPABASE_URL}/storage/v1/object/upload/sign/shift-photos/${path}?token=${encodeURIComponent(token)}`
+                `${SUPABASE_URL}/storage/v1/object/upload/sign/${bucket}/${path}?token=${encodeURIComponent(token)}`
             );
             xhr.setRequestHeader('apikey', SUPABASE_KEY);
             xhr.setRequestHeader('x-upsert', 'false');
@@ -29,13 +29,13 @@ export function usePhotoUpload() {
         });
     }
 
-    async function uploadFile(path, token, blob, onProgress) {
+    async function uploadFile(path, token, blob, onProgress, bucket = 'shift-photos') {
         try {
-            await putWithProgress(path, token, blob, onProgress);
+            await putWithProgress(bucket, path, token, blob, onProgress);
         } catch (e) {
             console.warn('XHR upload failed, retry with supabase-js:', e);
             const { error } = await supabase.storage
-                .from('shift-photos')
+                .from(bucket)
                 .uploadToSignedUrl(path, token, blob, { contentType: 'image/jpeg' });
             if (error) throw error;
         }

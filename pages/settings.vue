@@ -5,6 +5,37 @@
         <!-- 名稱設定 -->
         <section class="settings-section">
             <h2>個人資料</h2>
+            <!-- 頭像：選照片 → 裁切（拖曳、縮放）→ 上傳。留言頻道會顯示 -->
+            <div class="avatar-row">
+                <div class="avatar">
+                    <img v-if="avatarPath" :src="avatarUrl(avatarPath)" alt="我的頭像" />
+                    <span v-else>{{ (nickname || '？').trim().charAt(0) }}</span>
+                </div>
+                <div class="avatar-actions">
+                    <button type="button" class="avatar-btn" :disabled="avatarSaving" @click="avatarInput?.click()">
+                        {{ avatarPath ? '更換頭像' : '上傳頭像' }}
+                    </button>
+                    <button
+                        v-if="avatarPath"
+                        type="button"
+                        class="avatar-link"
+                        :disabled="avatarSaving"
+                        @click="deleteAvatar"
+                    >
+                        移除
+                    </button>
+                </div>
+                <input ref="avatarInput" type="file" accept="image/*" hidden @change="pickAvatar" />
+            </div>
+            <ClientOnly>
+                <AvatarCropper
+                    :file="avatarFile"
+                    :busy="avatarSaving"
+                    @done="saveAvatar"
+                    @cancel="avatarFile = null"
+                />
+            </ClientOnly>
+            <p v-if="avatarError" class="error">{{ avatarError }}</p>
             <div class="form-group">
                 <label>名稱</label>
                 <input
@@ -120,6 +151,7 @@
 
 <script setup>
 import { CopyDocument, Check } from '@element-plus/icons-vue';
+import { ElMessage } from 'element-plus';
 
 definePageMeta({
     middleware: 'auth',
@@ -132,9 +164,52 @@ useHead({
 const supabase = useSupabaseClient();
 const {
     nickname: globalNickname,
+    avatarPath,
     loadProfile: reloadProfile,
     getUserId,
 } = useProfile();
+const { avatarUrl, uploadAvatar, removeAvatar } = useAvatar();
+
+// 頭像
+const avatarInput = ref(null);
+const avatarFile = ref(null); // 選好的照片，有值就打開裁切視窗
+const avatarSaving = ref(false);
+const avatarError = ref(null);
+
+function pickAvatar(event) {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (file) avatarFile.value = file;
+}
+
+async function saveAvatar(blob) {
+    avatarSaving.value = true;
+    avatarError.value = null;
+    try {
+        avatarPath.value = await uploadAvatar({ target: 'me', blob });
+        avatarFile.value = null;
+    } catch (e) {
+        console.error('saveAvatar error:', e);
+        // 裁切視窗還開著、蓋住下面的錯誤訊息，另外跳一個提示
+        ElMessage.error('頭像上傳失敗，請再試一次');
+    } finally {
+        avatarSaving.value = false;
+    }
+}
+
+async function deleteAvatar() {
+    avatarSaving.value = true;
+    avatarError.value = null;
+    try {
+        await removeAvatar({ target: 'me' });
+        avatarPath.value = null;
+    } catch (e) {
+        console.error('deleteAvatar error:', e);
+        avatarError.value = '移除失敗，請再試一次';
+    } finally {
+        avatarSaving.value = false;
+    }
+}
 
 // 名稱（本地編輯用）
 const nickname = ref('');
@@ -432,6 +507,64 @@ async function updatePassword() {
     max-width: 400px;
     margin: 0 auto;
     padding: 20px;
+}
+
+// 頭像：圓形，右邊是更換、移除
+.avatar-row {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 16px;
+
+    .avatar {
+        display: flex;
+        flex-shrink: 0;
+        align-items: center;
+        justify-content: center;
+        width: 72px;
+        height: 72px;
+        border-radius: 50%;
+        overflow: hidden;
+        background: #e8e2dc;
+        color: #6b625d;
+        font-size: 28px;
+        font-weight: 500;
+
+        img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+    }
+
+    .avatar-actions {
+        display: flex;
+        align-items: center;
+        gap: 14px;
+    }
+
+    .avatar-btn {
+        width: auto;
+        height: 36px;
+        padding: 0 16px;
+        border: 1px solid #ddd;
+        border-radius: 18px;
+        background: #fff;
+        color: #657181;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    .avatar-link {
+        width: auto;
+        height: auto;
+        padding: 0;
+        border: none;
+        background: none;
+        color: #b33a39;
+        font-size: 14px;
+        cursor: pointer;
+    }
 }
 
 .settings-section {
