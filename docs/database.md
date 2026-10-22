@@ -156,7 +156,7 @@ votes.data
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `shift_comments` | `/shift` | 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看（`/api/shift/comments/channel`，班與班之間有分隔線）。可以附照片、只附照片時 `body` 是空字串。作者本人可以編輯（`edited_at`，顯示「已編輯」）與刪除（附的照片連 Storage 檔一起刪）。`for_next` 是「重要」：整則橘底；下一班的 💬 旁有橘點（只維持一班） |
-| `shift_photos` | `/shift` | 每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kind` 留給之後的類型。`comment_id` 空的是 📷 照片牆（觀察、醫療），有值的是留言附的照片（只在留言頻道與它的「照片」頁） |
+| `shift_photos` | `/shift` | 每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kind` 留給之後的類型。`comment_id` 空的是 📷 照片牆（觀察、醫療，照班分組往上看：打開時這一班加前 4 班，往上再 5 班，`/api/shift/photos/history`），有值的是留言附的照片（只在留言頻道與它的「照片」頁） |
 
 **三張事項表的共同欄位**：`shift` 是 `morning` / `night` / `both`，`start_date` / `end_date` 空代表不限。
 三張都有對象：`cat_id` 有值 = 那隻貓；`location` 有值 = 那個位置；兩個都空 = 全員

@@ -29,7 +29,7 @@
                     :class="{ on: view === 'photos' }"
                     @click="view = 'photos'"
                 >
-                    照片<span v-if="wall.length"> {{ wall.length }}</span>
+                    照片
                 </button>
             </div>
             <button type="button" class="ch-close" aria-label="關閉" @click="emit('update:modelValue', false)">
@@ -164,7 +164,7 @@
         </div>
 
         <!-- ===== 照片：留言裡的所有照片，依班分組；點了看大圖、看那則留言、可以跳過去 ===== -->
-        <div v-show="view === 'photos'" class="ch-list">
+        <div v-show="view === 'photos'" ref="wallEl" class="ch-list">
             <div v-if="!wall.length" class="ch-empty">留言裡還沒有照片</div>
             <template v-for="group in wallGroups" :key="group.key">
                 <div class="ch-divider" :class="{ current: group.isCurrent }">
@@ -310,6 +310,7 @@ const loading = ref(false);
 const loadingMore = ref(false);
 const wall = ref([]);
 const listEl = ref(null);
+const wallEl = ref(null);
 const fileInput = ref(null);
 
 const draft = ref('');
@@ -359,12 +360,12 @@ const groups = computed(() =>
     )
 );
 
-// 照片牆：新的班在上，同一班裡照時間
+// 照片牆：跟留言一樣，舊的班在上、這一班在最下面；同一班裡照時間
 const wallGroups = computed(() =>
     groupByShift(
         [...wall.value].sort(
             (a, b) =>
-                shiftKey(b.date, b.shift).localeCompare(shiftKey(a.date, a.shift)) ||
+                shiftKey(a.date, a.shift).localeCompare(shiftKey(b.date, b.shift)) ||
                 a.created_at.localeCompare(b.created_at)
         ),
         'photos'
@@ -416,10 +417,15 @@ function removeLocal(id) {
     wall.value = wall.value.filter((p) => p.comment_id !== id);
 }
 
-async function scrollToBottom() {
+async function scrollToBottom(el = listEl) {
     await nextTick();
-    if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight;
+    if (el.value) el.value.scrollTop = el.value.scrollHeight;
 }
+
+// 切到照片頁：跟留言一樣從最下面（這一班）開始看
+watch(view, (v) => {
+    if (v === 'photos') scrollToBottom(wallEl);
+});
 
 async function loadPage() {
     const data = await $fetch('/api/shift/comments/channel', {

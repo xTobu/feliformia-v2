@@ -653,7 +653,7 @@
                 </button>
             </el-drawer>
 
-            <!-- 照片面板：從下方滑出，這一班、這隻貓、這個分頁（觀察或醫療）的照片。點縮圖全螢幕看，可左右滑 -->
+            <!-- 照片面板：從下方滑出，這隻貓、這個分頁（觀察或醫療）的照片，照班分組往上看。點縮圖全螢幕看，可左右滑 -->
             <el-drawer
                 v-model="photoOpen"
                 direction="btt"
@@ -699,7 +699,11 @@
                 <div v-if="drawerPending.length" class="cd-list">
                     <div v-if="!isUploading" class="cd-section">
                         <template v-if="failedCount">{{ failedCount }} 張上傳失敗</template>
-                        <template v-else>準備上傳 {{ drawerPending.length }} 張</template>
+                        <template v-else
+                            >準備上傳 {{ drawerPending.length }} 張<template v-if="pendingPastLabel"
+                                >到 {{ pendingPastLabel }}</template
+                            ></template
+                        >
                     </div>
                     <div v-for="(item, index) in drawerPending" :key="item.key" class="pp-item">
                         <div class="pp-stage">
@@ -756,59 +760,78 @@
                     </div>
                 </div>
 
-                <div v-else class="cd-list">
-                    <div v-if="drawerPhotos.length" class="pd-grid">
-                        <div v-for="(photo, index) in drawerPhotos" :key="photo.id" class="pd-item">
+                <!-- 照片牆：照班分組，跟留言頻道一樣跨班往上看（打開時是這一班加前面 4 班，捲到最上面再往前 5 班）。
+                     沒照片的班不顯示；這一班一定有分隔線（藍色），沒照片就寫一句 -->
+                <div v-else ref="photoListEl" class="cd-list" @scroll="onPhotoScroll">
+                    <div v-if="historyLoading" class="pd-hint">載入更早的照片…</div>
+                    <div v-else-if="historyHasMore" class="pd-hint">往上滑看更早的班</div>
+                    <template v-for="group in drawerGroups" :key="group.key">
+                        <div class="pd-divider" :class="{ current: group.isCurrent }">
+                            {{ shiftLabel(group) }}
+                            <!-- 以前的班也可以補傳照片（還能編輯的班才有） -->
                             <button
-                                v-if="selecting"
+                                v-if="!group.isCurrent && !selecting && !drawerPending.length && canUploadTo(group)"
                                 type="button"
-                                class="pd-thumb pd-selectable"
-                                :class="{
-                                    selected: selectedIds.includes(photo.id),
-                                    locked: !canDeletePhoto(photo),
-                                }"
-                                :disabled="!canDeletePhoto(photo)"
-                                :aria-pressed="selectedIds.includes(photo.id)"
-                                @click="toggleSelect(photo)"
+                                class="pd-divider-add"
+                                :aria-label="`補傳照片到${shiftLabel(group)}`"
+                                @click="pickPhotosFor(group)"
                             >
-                                <img :src="photo.thumb_url" alt="" />
-                                <span class="pd-check">✓</span>
-                            </button>
-                            <el-image
-                                v-else
-                                class="pd-thumb"
-                                :src="photo.thumb_url"
-                                fit="cover"
-                                :preview-src-list="drawerPhotos.map((p) => p.url)"
-                                :initial-index="index"
-                                preview-teleported
-                                hide-on-click-modal
-                            />
-                            <div class="pd-meta">
-                                {{ photo.author_name || '未命名' }} {{ $dayjs(photo.created_at).format('HH:mm') }}
-                            </div>
-                            <div v-if="photo.note" class="pd-note">{{ photo.note }}</div>
-                            <!-- 上傳的人或管理員可以補寫、修改描述 -->
-                            <button
-                                v-if="canDeletePhoto(photo) && !selecting"
-                                type="button"
-                                class="pd-edit"
-                                @click="editPhotoNote(photo)"
-                            >
-                                {{ photo.note ? '✎ 修改描述' : '＋ 描述' }}
-                            </button>
-                            <button
-                                v-if="canDeletePhoto(photo) && !selecting"
-                                type="button"
-                                class="pd-del"
-                                aria-label="刪除這張照片"
-                                @click="deletePhoto(photo)"
-                            >
-                                ✕
+                                📷
                             </button>
                         </div>
-                    </div>
-                    <div v-else class="cd-empty">這一班還沒有照片</div>
+                        <div v-if="group.photos.length" class="pd-grid">
+                            <div v-for="(photo, index) in group.photos" :key="photo.id" class="pd-item">
+                                <button
+                                    v-if="selecting"
+                                    type="button"
+                                    class="pd-thumb pd-selectable"
+                                    :class="{
+                                        selected: selectedIds.includes(photo.id),
+                                        locked: !canDeletePhoto(photo),
+                                    }"
+                                    :disabled="!canDeletePhoto(photo)"
+                                    :aria-pressed="selectedIds.includes(photo.id)"
+                                    @click="toggleSelect(photo)"
+                                >
+                                    <img :src="photo.thumb_url" alt="" />
+                                    <span class="pd-check">✓</span>
+                                </button>
+                                <el-image
+                                    v-else
+                                    class="pd-thumb"
+                                    :src="photo.thumb_url"
+                                    fit="cover"
+                                    :preview-src-list="group.photos.map((p) => p.url)"
+                                    :initial-index="index"
+                                    preview-teleported
+                                    hide-on-click-modal
+                                />
+                                <div class="pd-meta">
+                                    {{ photo.author_name || '未命名' }} {{ photoTime(photo, group) }}
+                                </div>
+                                <div v-if="photo.note" class="pd-note">{{ photo.note }}</div>
+                                <!-- 上傳的人或管理員可以補寫、修改描述 -->
+                                <button
+                                    v-if="canDeletePhoto(photo) && !selecting"
+                                    type="button"
+                                    class="pd-edit"
+                                    @click="editPhotoNote(photo)"
+                                >
+                                    {{ photo.note ? '✎ 修改描述' : '＋ 描述' }}
+                                </button>
+                                <button
+                                    v-if="canDeletePhoto(photo) && !selecting"
+                                    type="button"
+                                    class="pd-del"
+                                    aria-label="刪除這張照片"
+                                    @click="deletePhoto(photo)"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+                        </div>
+                        <div v-else class="cd-empty">這一班還沒有照片</div>
+                    </template>
                 </div>
 
                 <div class="cd-input">
@@ -846,7 +869,7 @@
                         type="button"
                         class="pd-add"
                         :disabled="isDisabled"
-                        @click="photoInput?.click()"
+                        @click="pickPhotosFor(null)"
                     >
                         📷 拍照或選照片
                     </button>
@@ -1210,6 +1233,97 @@ function openPhotos(cat, key) {
     photoCat.value = cat;
     photoTab.value = key;
     photoOpen.value = true;
+    openPhotoHistory();
+}
+
+// ---- 照片牆往前翻：這一班的在 photos（即時更新），前面的班在 photoHistory ----
+const photoHistory = ref([]);
+const historyCursor = ref(null); // 已載入最舊的那班 { date, shift }，下次從它往前
+const historyHasMore = ref(false);
+const historyLoading = ref(false);
+const photoListEl = ref(null);
+const FIRST_SHIFTS = 4; // 打開時：這一班加前面 4 班
+const MORE_SHIFTS = 5; // 之後每次往前 5 班
+
+const shiftKeyOf = (date, shift) => `${date}-${shift === 'night' ? 1 : 0}`;
+const shiftLabel = ({ date, shift }) => `${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift]}`;
+
+// 上傳時間：當天傳的只寫時間；之後才補傳的連日期一起寫（跨年再加年份）
+function photoTime(photo, group) {
+    const at = $dayjs(photo.created_at);
+    if (at.format('YYYY-MM-DD') === group.date) return at.format('HH:mm');
+    return at.format(at.year() === $dayjs(group.date).year() ? 'MM/DD HH:mm' : 'YYYY/MM/DD HH:mm');
+}
+
+// 面板裡的照片照班分組，舊的班在上。照片物件都是原本那一份（改描述才會留著）
+const drawerGroups = computed(() => {
+    if (!photoCat.value) return [];
+    const { date, shift } = channelCurrent.value;
+    const groups = new Map();
+    for (const photo of photoHistory.value) {
+        if (photo.cat_id !== photoCat.value.cat_id || photo.tab !== photoTab.value) continue;
+        const key = shiftKeyOf(photo.date, photo.shift);
+        if (!groups.has(key)) {
+            groups.set(key, { key, date: photo.date, shift: photo.shift, shiftId: photo.shift_id, isCurrent: false, photos: [] });
+        }
+        groups.get(key).photos.push(photo);
+    }
+    const sorted = [...groups.values()].sort((a, b) => a.key.localeCompare(b.key));
+    return [
+        ...sorted,
+        { key: shiftKeyOf(date, shift), date, shift, shiftId: formData.value.recordId, isCurrent: true, photos: drawerPhotos.value },
+    ];
+});
+const drawerAllPhotos = computed(() => drawerGroups.value.flatMap((g) => g.photos));
+
+async function scrollPhotosToBottom() {
+    await nextTick();
+    if (photoListEl.value) photoListEl.value.scrollTop = photoListEl.value.scrollHeight;
+}
+
+// 往前載入 count 班；那幾班剛好都沒照片就自動再往前，直到有照片或沒有更早的
+async function loadPhotoHistory(count) {
+    const from = historyCursor.value || channelCurrent.value;
+    const data = await $fetch('/api/shift/photos/history', {
+        params: { catId: photoCat.value.cat_id, tab: photoTab.value, date: from.date, shift: from.shift, count },
+        cache: 'no-store',
+    });
+    photoHistory.value.push(...data.photos.filter((p) => !photoHistory.value.some((h) => h.id === p.id)));
+    historyCursor.value = data.cursor;
+    historyHasMore.value = data.hasMore;
+    if (!data.photos.length && data.hasMore) await loadPhotoHistory(MORE_SHIFTS);
+}
+
+async function openPhotoHistory() {
+    photoHistory.value = [];
+    historyCursor.value = null;
+    historyHasMore.value = false;
+    historyLoading.value = true;
+    try {
+        await loadPhotoHistory(FIRST_SHIFTS);
+    } catch (e) {
+        console.error('load photo history error:', e);
+    } finally {
+        historyLoading.value = false;
+    }
+    scrollPhotosToBottom();
+}
+
+// 捲到最上面就再往前 5 班，載入後畫面停在原本看的地方
+async function onPhotoScroll() {
+    const el = photoListEl.value;
+    if (!el || el.scrollTop > 60 || historyLoading.value || !historyHasMore.value) return;
+    historyLoading.value = true;
+    const fromBottom = el.scrollHeight - el.scrollTop;
+    try {
+        await loadPhotoHistory(MORE_SHIFTS);
+        await nextTick();
+        el.scrollTop = el.scrollHeight - fromBottom;
+    } catch (e) {
+        console.error('load more photos error:', e);
+    } finally {
+        historyLoading.value = false;
+    }
 }
 
 async function loadPhotos(recordId) {
@@ -1228,10 +1342,34 @@ function addPhoto(row) {
 }
 
 // 選了照片：先放進預覽，讓人每張寫描述，按「上傳」才開始傳
+// 照片要傳到哪一班：null = 正在看的這一班；按以前某班分隔線上的 📷 就是那一班 { shiftId, date, shift }
+const photoTarget = ref(null);
+
+// 還能編輯的班才能補傳（跟頁面的 isDisabled 同一個規則）
+const canUploadTo = (group) =>
+    !!group.shiftId && $dayjs(group.date) >= $dayjs().subtract(config.public.disabledDays || 2, 'day');
+
+function pickPhotosFor(group) {
+    photoTarget.value = group ? { shiftId: group.shiftId, date: group.date, shift: group.shift } : null;
+    photoInput.value?.click();
+}
+
+// 預覽裡的照片都是要補傳到以前同一班時，標題寫出是哪一班
+const pendingPastLabel = computed(() => {
+    const past = drawerPending.value.filter((p) => p.shiftId !== formData.value.recordId);
+    return past.length && past.length === drawerPending.value.length ? shiftLabel(past[0]) : '';
+});
+
 function onPickPhotos(event) {
     const files = [...(event.target.files || [])];
     event.target.value = ''; // 同一張再選一次也會觸發
     if (!files.length || !photoCat.value) return;
+    const target = photoTarget.value || {
+        shiftId: formData.value.recordId,
+        date: channelCurrent.value.date,
+        shift: channelCurrent.value.shift,
+    };
+    photoTarget.value = null;
     pendingPhotos.value.push(
         ...files.map((file) => ({
             key: `${Date.now()}-${Math.random()}`,
@@ -1240,6 +1378,7 @@ function onPickPhotos(event) {
             note: '',
             catId: photoCat.value.cat_id,
             tab: photoTab.value,
+            ...target,
             status: 'idle',
             progress: 0,
         }))
@@ -1267,7 +1406,7 @@ const { uploadFile } = usePhotoUpload();
 // 一張：壓縮 → 拿一次性上傳網址 → 大圖、縮圖直接傳到 Storage → 記一筆（含描述）。
 // 進度：壓縮 0～10%、大圖 10～85%（照實際傳了多少）、縮圖 85～95%、記錄 95～100%
 async function uploadOne(item) {
-    const shiftId = formData.value.recordId;
+    const shiftId = item.shiftId ?? formData.value.recordId;
     const step = (from, to) => (ratio) => {
         item.progress = Math.round(from + (to - from) * Math.min(1, Math.max(0, ratio)));
     };
@@ -1299,7 +1438,9 @@ async function uploadOne(item) {
                 size: full.blob.size,
             },
         });
-        addPhoto(row);
+        // 補傳到以前的班：放進往前翻的那份，標上是哪一班
+        if (shiftId === formData.value.recordId) addPhoto(row);
+        else photoHistory.value.push({ ...row, date: item.date, shift: item.shift });
         item.progress = 100;
         item.status = 'done';
     } catch (e) {
@@ -1359,7 +1500,7 @@ async function editPhotoNote(photo) {
 const selecting = ref(false);
 const selectedIds = ref([]);
 const deleting = ref(false);
-const deletablePhotos = computed(() => drawerPhotos.value.filter(canDeletePhoto));
+const deletablePhotos = computed(() => drawerAllPhotos.value.filter(canDeletePhoto));
 const allSelected = computed(
     () => deletablePhotos.value.length > 0 && selectedIds.value.length === deletablePhotos.value.length
 );
@@ -1401,6 +1542,7 @@ async function deleteSelected() {
     try {
         await $fetch('/api/shift/photos/delete', { method: 'POST', body: { ids } });
         photos.value = photos.value.filter((p) => !ids.includes(p.id));
+        photoHistory.value = photoHistory.value.filter((p) => !ids.includes(p.id));
         ElMessage.success(`已刪除 ${ids.length} 張`);
         selecting.value = false;
         selectedIds.value = [];
@@ -1424,6 +1566,7 @@ async function deletePhoto(photo) {
     try {
         await $fetch('/api/shift/photos/delete', { method: 'POST', body: { id: photo.id } });
         photos.value = photos.value.filter((p) => p.id !== photo.id);
+        photoHistory.value = photoHistory.value.filter((p) => p.id !== photo.id);
     } catch (e) {
         console.error('deletePhoto error:', e);
         ElMessage.error('刪除失敗，請再試一次');
@@ -3083,6 +3226,47 @@ watch(
             transition: width 0.2s linear;
         }
     }
+}
+
+// 照片牆：班與班之間的分隔線（跟留言頻道同一個樣子），這一班是藍色
+.pd-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 16px 0 10px;
+    font-size: 12px;
+    color: #8e8783;
+
+    &::before,
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #e5e2df;
+    }
+
+    &.current {
+        color: #3f7ea3;
+    }
+}
+
+// 以前那班分隔線上的 📷：補傳照片到那一班
+.pd-divider-add {
+    width: auto;
+    height: auto;
+    margin: 0 0 0 -4px;
+    padding: 0 2px;
+    border: none;
+    background: none;
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+}
+
+.pd-hint {
+    padding: 8px 0 0;
+    font-size: 12px;
+    color: #aaa;
+    text-align: center;
 }
 
 .cd-list {
