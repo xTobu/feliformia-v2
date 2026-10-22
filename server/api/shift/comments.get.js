@@ -2,7 +2,7 @@ import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 import { isValidShiftQuery, previousShiftOf } from '~/server/utils/shift'
 
-// 唯讀：這一班的所有留言，加上前一班勾了「給下一班」的留言（交接用）
+// 唯讀：這一班的所有留言，加上前一班勾了「重要」（for_next）的留言（下一班 💬 旁的橘點）
 export default defineEventHandler(async (event) => {
     await requireUser(event)
 

@@ -2,7 +2,7 @@ import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 import { PHOTO_COLUMNS, withSignedUrls } from '~/server/utils/photos'
 
-// 唯讀：這一班的所有照片（含大圖與縮圖的有時效網址），照上傳時間排
+// 唯讀：這一班的 📷 照片牆（含大圖與縮圖的有時效網址），照上傳時間排。留言附的照片不算，在留言頻道裡
 export default defineEventHandler(async (event) => {
     await requireUser(event)
 
@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
         .from('shift_photos')
         .select(PHOTO_COLUMNS)
         .eq('shift_id', shiftId)
+        .is('comment_id', null)
         .order('created_at')
     if (error) throw createError({ statusCode: 500, message: error.message })
 

@@ -853,64 +853,18 @@
                 </div>
             </el-drawer>
 
-            <!-- 留言面板：從下方滑出，這個分頁、這隻貓的留言 -->
-            <el-drawer
+            <!-- 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看，可以附照片（components/ShiftCommentDrawer.vue） -->
+            <ShiftCommentDrawer
                 v-model="drawerOpen"
-                direction="btt"
-                size="72%"
-                :with-header="false"
-                class="comment-drawer"
-            >
-                <div class="cd-head">
-                    <span class="cd-title">{{ drawerCat?.name }}</span>
-                    <span class="cd-tab">{{ tabLabel }}留言</span>
-                    <button type="button" class="cd-close" aria-label="關閉" @click="drawerOpen = false">
-                        ✕
-                    </button>
-                </div>
-
-                <div class="cd-list">
-                    <template v-if="drawerHandover.length">
-                        <div class="cd-section">上一班交代</div>
-                        <div v-for="c in drawerHandover" :key="c.id" class="cd-item handover">
-                            <div class="cd-meta">{{ c.author_name || '未命名' }} · {{ formatTime(c.created_at) }}</div>
-                            <div class="cd-body">{{ c.body }}</div>
-                        </div>
-                        <div class="cd-section">這一班</div>
-                    </template>
-                    <div v-for="c in drawerComments" :key="c.id" class="cd-item">
-                        <div class="cd-meta">
-                            {{ c.author_name || '未命名' }} · {{ formatTime(c.created_at) }}
-                            <span v-if="c.for_next" class="cd-next">給下一班</span>
-                        </div>
-                        <div class="cd-body">{{ c.body }}</div>
-                    </div>
-                    <div v-if="!drawerComments.length" class="cd-empty">這一班還沒有留言</div>
-                </div>
-
-                <div class="cd-input">
-                    <el-input
-                        v-model="draft"
-                        type="textarea"
-                        :autosize="{ minRows: 1, maxRows: 4 }"
-                        :disabled="isDisabled"
-                        placeholder="寫下這隻貓的狀況…"
-                    />
-                    <div class="cd-actions">
-                        <el-checkbox v-model="draftForNext" :disabled="isDisabled" class="cd-for-next"
-                            >給下一班</el-checkbox
-                        >
-                        <button
-                            type="button"
-                            class="cd-send"
-                            :disabled="isDisabled || sending || !draft.trim()"
-                            @click="sendComment"
-                        >
-                            {{ sending ? '送出中' : '送出' }}
-                        </button>
-                    </div>
-                </div>
-            </el-drawer>
+                :cat="drawerCat"
+                :tab="tab"
+                :tab-label="tabLabel"
+                :current="channelCurrent"
+                :disabled="isDisabled"
+                :me="me"
+                @added="addComment"
+                @removed="removeComment"
+            />
         </div>
 
         <template #fallback>
@@ -1188,14 +1142,12 @@ const pickDone = ({ done, done_by, done_at }) => ({
     done_at: done_at ?? null,
 });
 
-// ---- 留言：每隻貓、每個分頁各自一串，跟著這一班。勾「給下一班」的會在下一班同一分頁出現 ----
+// ---- 留言：每隻貓、每個分頁一個頻道（跨班），面板在 ShiftCommentDrawer。
+// 這裡只留這一班的留言與上一班勾了「重要」的，給 💬 的數字與橘點用（橘點只維持一班） ----
 const comments = ref([]); // 這一班的留言
-const handovers = ref([]); // 上一班勾了「給下一班」的留言
+const handovers = ref([]); // 上一班勾了「重要」的留言
 const drawerOpen = ref(false);
 const drawerCat = ref(null);
-const draft = ref('');
-const draftForNext = ref(false);
-const sending = ref(false);
 
 const TABS = ['arrive', 'care', 'meal', 'required'];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
@@ -1206,16 +1158,6 @@ const inThisTab = (list, catId) =>
     list.filter((c) => c.cat_id === catId && c.tab === tab.value);
 const commentCount = (catId) => inThisTab(comments.value, catId).length;
 const hasHandover = (catId) => inThisTab(handovers.value, catId).length > 0;
-const drawerComments = computed(() =>
-    drawerCat.value ? inThisTab(comments.value, drawerCat.value.cat_id) : []
-);
-const drawerHandover = computed(() =>
-    drawerCat.value ? inThisTab(handovers.value, drawerCat.value.cat_id) : []
-);
-
-function formatTime(iso) {
-    return $dayjs(iso).format('MM/DD HH:mm');
-}
 
 // ---- 照片：這一班、這隻貓、這個分頁（觀察、醫療）的照片。檔案在 Storage，網址由 server 發 ----
 const photos = ref([]); // 這一班的照片（含 url、thumb_url）
@@ -1320,44 +1262,7 @@ watch(photoOpen, (open) => {
     if (!open && !isUploading.value) clearPending();
 });
 
-// 傳一個檔到一次性上傳網址，回報傳了多少（0～1）。
-// 跟 supabase-js 的 uploadToSignedUrl 送一樣的請求，只是改用 XMLHttpRequest 才拿得到上傳進度；
-// 萬一失敗就退回 supabase-js 再傳一次（只是沒有進度）
-const { url: SUPABASE_URL, key: SUPABASE_KEY } = config.public.supabase;
-function putWithProgress(path, token, blob, onProgress) {
-    return new Promise((resolve, reject) => {
-        const form = new FormData();
-        form.append('cacheControl', '3600');
-        form.append('', blob);
-        const xhr = new XMLHttpRequest();
-        xhr.open(
-            'PUT',
-            `${SUPABASE_URL}/storage/v1/object/upload/sign/shift-photos/${path}?token=${encodeURIComponent(token)}`
-        );
-        xhr.setRequestHeader('apikey', SUPABASE_KEY);
-        xhr.setRequestHeader('x-upsert', 'false');
-        xhr.upload.onprogress = (e) => e.lengthComputable && onProgress(e.loaded / e.total);
-        xhr.onload = () =>
-            xhr.status >= 200 && xhr.status < 300
-                ? resolve()
-                : reject(new Error(`upload ${xhr.status}: ${xhr.responseText}`));
-        xhr.onerror = () => reject(new Error('upload network error'));
-        xhr.send(form);
-    });
-}
-
-async function uploadFile(path, token, blob, onProgress) {
-    try {
-        await putWithProgress(path, token, blob, onProgress);
-    } catch (e) {
-        console.warn('XHR upload failed, retry with supabase-js:', e);
-        const { error } = await supabase.storage
-            .from('shift-photos')
-            .uploadToSignedUrl(path, token, blob, { contentType: 'image/jpeg' });
-        if (error) throw error;
-    }
-    onProgress(1);
-}
+const { uploadFile } = usePhotoUpload();
 
 // 一張：壓縮 → 拿一次性上傳網址 → 大圖、縮圖直接傳到 Storage → 記一筆（含描述）。
 // 進度：壓縮 0～10%、大圖 10～85%（照實際傳了多少）、縮圖 85～95%、記錄 95～100%
@@ -1535,47 +1440,34 @@ function subscribeToPhotos(recordId) {
             'postgres_changes',
             { event: 'INSERT', schema: 'public', table: 'shift_photos', filter: `shift_id=eq.${recordId}` },
             (payload) => {
-                if (payload.new && !photos.value.some((p) => p.id === payload.new.id)) reloadPhotos();
+                // 留言附的照片在留言頻道，不在 📷 照片牆
+                if (payload.new && !payload.new.comment_id && !photos.value.some((p) => p.id === payload.new.id)) reloadPhotos();
             }
         )
         .subscribe();
 }
 
+// 留言頻道要的「正在看的這一班」（formData.date 是 Date，API 要 YYYY-MM-DD）
+const channelCurrent = computed(() => ({
+    recordId: formData.value.recordId,
+    date: $dayjs(formData.value.date).format('YYYY-MM-DD'),
+    shift: formData.value.shift,
+}));
+
 function openComments(cat) {
     drawerCat.value = cat;
-    draft.value = '';
-    draftForNext.value = false;
     drawerOpen.value = true;
 }
 
+// 這一班的留言（算 💬 的數字）。頻道裡寫到別班的不算
 function addComment(row) {
+    if (row.shift_id !== formData.value.recordId) return;
     if (!comments.value.some((c) => c.id === row.id)) comments.value.push(row);
 }
 
-async function sendComment() {
-    const body = draft.value.trim();
-    if (!body || !drawerCat.value) return;
-    sending.value = true;
-    try {
-        const row = await $fetch('/api/shift/comments', {
-            method: 'POST',
-            body: {
-                shiftId: formData.value.recordId,
-                catId: drawerCat.value.cat_id,
-                tab: tab.value,
-                body,
-                forNext: draftForNext.value,
-            },
-        });
-        addComment(row);
-        draft.value = '';
-        draftForNext.value = false;
-    } catch (e) {
-        console.error('sendComment error:', e);
-        ElMessage.error('留言送出失敗，請再試一次');
-    } finally {
-        sending.value = false;
-    }
+function removeComment(id) {
+    comments.value = comments.value.filter((c) => c.id !== id);
+    handovers.value = handovers.value.filter((c) => c.id !== id);
 }
 
 async function loadComments(params) {
@@ -1602,6 +1494,12 @@ function subscribeToComments(recordId) {
                 filter: `shift_id=eq.${recordId}`,
             },
             (payload) => payload.new && addComment(payload.new)
+        )
+        // 刪除的通知只帶 id，不能用 shift_id 過濾
+        .on(
+            'postgres_changes',
+            { event: 'DELETE', schema: 'public', table: 'shift_comments' },
+            (payload) => payload.old?.id && removeComment(payload.old.id)
         )
         .subscribe();
 }
@@ -3201,39 +3099,6 @@ watch(
     color: #8e8783;
 }
 
-.cd-item {
-    padding: 8px 0;
-    border-bottom: 1px solid #f2f0ee;
-
-    &.handover {
-        margin: 4px 0;
-        padding: 8px 10px;
-        border: none;
-        border-radius: 6px;
-        background: #fdf6ec;
-    }
-}
-
-.cd-meta {
-    font-size: 12px;
-    color: #999;
-
-    .cd-next {
-        margin-left: 6px;
-        padding: 0 5px;
-        border-radius: 3px;
-        background: #fdf6ec;
-        color: #b36b00;
-    }
-}
-
-.cd-body {
-    font-size: 15px;
-    line-height: 1.5;
-    color: #222;
-    white-space: pre-line;
-}
-
 .cd-empty {
     padding: 14px 0;
     font-size: 14px;
@@ -3247,42 +3112,6 @@ watch(
     // 全域把 textarea 設成至少 100px，這裡一行起跳
     :deep(.el-textarea__inner) {
         min-height: 40px !important;
-    }
-
-    .cd-actions {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-top: 8px;
-    }
-
-    // 頁面把 el-checkbox 排成上下兩層，這裡改回左右並排
-    .cd-for-next {
-        flex-direction: row;
-        gap: 6px;
-        width: auto;
-
-        :deep(.el-checkbox__label) {
-            padding: 0;
-            font-size: 14px;
-        }
-    }
-
-    .cd-send {
-        width: auto;
-        height: 36px;
-        padding: 0 18px;
-        border: none;
-        border-radius: 8px;
-        background: #6da2c2;
-        color: #fff;
-        font-size: 14px;
-        cursor: pointer;
-
-        &:disabled {
-            cursor: default;
-            opacity: 0.4;
-        }
     }
 }
 </style>
