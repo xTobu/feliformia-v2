@@ -197,11 +197,19 @@ votes.data
 
 ## Realtime
 
-需啟用 Realtime 的表：
+即時同步一律改用 **Broadcast**（`composables/useBroadcast.js`），不再用 Postgres Changes：
+存檔成功的人在頻道上發訊息，其他開著同一頁的人直接套用；斷線重連、手機從背景回來超過 30 秒時重新抓一次資料補漏。
+頻道都是私人的，只有登入的人能收發（`realtime.messages` 上的 policy，見 `care_system` migration）。
+
+| 頻道 | 事件 | 誰在聽 |
+|---|---|---|
+| `shift:<shifts.id>` | `ops`（`/api/shift/update` 回傳處理過的 ops）、`comment`（upsert／delete／refresh）、`photo`（🗂️ 照片牆 upsert／delete） | `/shift` 開著那一班的人 |
+| `comments:<cat_id>:<tab>` | `message`（upsert／delete） | 開著那隻貓、那個分頁留言頻道的人 |
+
+舊頁面還在用 Postgres Changes、待改成 Broadcast 的表（改完就從 publication 拿掉）：
 - `votes` - 讓多用戶即時看到彼此的投票
 - `calendar_events` - 讓多用戶即時看到彼此的行事曆異動
 - `medicines`、`regulars` - 舊版餵藥與例行紀錄的即時同步
-- `shifts`、`shift_comments` - 新版值班記錄表的即時同步與留言
 
 （現在都由 `supabase/migrations/` 管理，下面的 SQL 只是參考）
 

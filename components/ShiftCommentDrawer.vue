@@ -342,10 +342,9 @@ const props = defineProps({
     // 登入者的 user id：自己的留言才能編輯、刪除
     me: { type: String, default: null },
 });
-const emit = defineEmits(['update:modelValue', 'added', 'removed']);
+const emit = defineEmits(['update:modelValue', 'added', 'updated', 'removed']);
 
 const { $dayjs } = useNuxtApp();
-const supabase = useSupabaseClient();
 const { uploadFile } = usePhotoUpload();
 const { avatarUrl } = useAvatar();
 
@@ -538,13 +537,19 @@ async function loadWall() {
 async function open() {
     resetSearch();
     view.value = 'messages';
+    editingId.value = null;
+    viewerIndex.value = null;
+    await reloadChannel();
+    subscribe();
+}
+
+// 從頭載入這個頻道（打開時、斷線重連或從背景回來時）
+async function reloadChannel() {
     messages.value = [];
     loadedShifts.value = [];
     wall.value = [];
     cursor.value = null;
     hasMore.value = false;
-    editingId.value = null;
-    viewerIndex.value = null;
     loading.value = true;
     try {
         await loadPage();
@@ -556,7 +561,6 @@ async function open() {
     }
     scrollToBottom();
     loadWall();
-    subscribe();
 }
 
 // 捲到最上面就載入更早的一頁，載入後畫面停在原本看的那則
@@ -817,6 +821,7 @@ async function send() {
             },
         });
         upsert(message);
+        broadcastMessage({ action: 'upsert', message });
         emit('added', message);
         draft.value = '';
         draftForNext.value = false;
@@ -882,6 +887,8 @@ async function saveEdit(m) {
             body: { id: m.id, body, forNext: editForNext.value, removePhotoIds: [...editRemovedIds.value], photos },
         });
         upsert(updated);
+        broadcastMessage({ action: 'upsert', message: updated });
+        emit('updated', updated);
         if (photos.length || editRemovedIds.value.length) loadWall();
         clearEditAttachments();
         editingId.value = null;
@@ -905,6 +912,7 @@ async function removeMessage(m) {
     try {
         await $fetch('/api/shift/comments/delete', { method: 'POST', body: { id: m.id } });
         removeLocal(m.id);
+        broadcastMessage({ action: 'delete', id: m.id });
         emit('removed', m.id);
     } catch (e) {
         console.error('delete comment error:', e);
@@ -912,25 +920,12 @@ async function removeMessage(m) {
     }
 }
 
-// ---- 即時：別人新增、編輯、刪除，開著的頻道跟著變 ----
-// 新增時照片紀錄晚一點才寫進去，等一下再用 item API 拿整則（含照片網址）
+// ---- 即時（Broadcast，見 composables/useBroadcast.js）：別人新增、編輯、刪除，開著的頻道跟著變 ----
+// 一個頻道（一隻貓、一個分頁）一個私人頻道 comments:<貓>:<分頁>，訊息 message：
+//   { action: 'upsert', message }（整則，含照片網址）或 { action: 'delete', id }
+const { join: joinBroadcast, send: sendBroadcast } = useBroadcast();
 let realtime = null;
-const refreshTimers = new Map();
-function refreshSoon(id) {
-    clearTimeout(refreshTimers.get(id));
-    refreshTimers.set(
-        id,
-        setTimeout(async () => {
-            refreshTimers.delete(id);
-            try {
-                upsert(await $fetch('/api/shift/comments/item', { params: { id }, cache: 'no-store' }));
-            } catch (e) {
-                if (e?.statusCode === 404) removeLocal(id);
-                else console.error('refresh comment error:', e);
-            }
-        }, 600)
-    );
-}
+const channelTopic = () => `comments:${props.cat.cat_id}:${props.tab}`;
 
 let wallTimer = null;
 function reloadWallSoon() {
@@ -938,34 +933,29 @@ function reloadWallSoon() {
     wallTimer = setTimeout(loadWall, 800);
 }
 
+function broadcastMessage(payload) {
+    sendBroadcast(channelTopic(), 'message', JSON.parse(JSON.stringify(payload)), realtime);
+}
+
 function subscribe() {
     unsubscribe();
-    const catFilter = `cat_id=eq.${props.cat.cat_id}`;
-    realtime = supabase
-        .channel(`comment-channel-${props.cat.cat_id}-${props.tab}`)
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'shift_comments', filter: catFilter }, ({ new: row }) => {
-            if (row?.tab === props.tab) refreshSoon(row.id);
-        })
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'shift_comments', filter: catFilter }, ({ new: row }) => {
-            if (row?.tab === props.tab) refreshSoon(row.id);
-        })
-        // 刪除的通知只帶 id（不能用 cat_id 過濾），不在這個頻道的就找不到，沒影響
-        .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'shift_comments' }, ({ old }) => {
-            if (old?.id) removeLocal(old.id);
-        })
-        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'shift_photos', filter: catFilter }, ({ new: row }) => {
-            if (!row?.comment_id || row.tab !== props.tab) return;
-            if (messages.value.some((m) => m.id === row.comment_id)) refreshSoon(row.comment_id);
-            reloadWallSoon();
-        })
-        .subscribe();
+    realtime = joinBroadcast(
+        channelTopic(),
+        {
+            message: ({ action, message, id }) => {
+                if (action === 'delete') removeLocal(id);
+                else upsert(message);
+                // 照片頁也可能變了（新增、拿掉照片）
+                reloadWallSoon();
+            },
+        },
+        { onResync: reloadChannel }
+    );
 }
 
 function unsubscribe() {
-    if (realtime) supabase.removeChannel(realtime);
+    realtime?.leave();
     realtime = null;
-    refreshTimers.forEach(clearTimeout);
-    refreshTimers.clear();
     clearTimeout(wallTimer);
 }
 

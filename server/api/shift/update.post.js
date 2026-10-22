@@ -71,5 +71,6 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 500, message: error.message })
     }
 
-    return { success: true }
+    // 回傳實際寫進去的 ops（回報補上了名字與時間、放風多了 released_set），畫面拿去廣播給其他人
+    return { success: true, ops }
 })

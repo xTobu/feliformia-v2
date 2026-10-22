@@ -211,10 +211,21 @@ create policy "Authenticated users can read shifts" on public.shifts for select 
 create policy "Authenticated users can read shift_comments" on public.shift_comments for select to authenticated using (true);
 create policy "Authenticated users can read shift_photos" on public.shift_photos for select to authenticated using (true);
 
--- ── Realtime ───────────────────────────────────────
-alter publication supabase_realtime add table public.shifts;
-alter publication supabase_realtime add table public.shift_comments;
-alter publication supabase_realtime add table public.shift_photos;
+-- ── Realtime：一律用 Broadcast ──────────────────────
+-- 不用 Postgres Changes（這幾張表不加進 supabase_realtime publication）。
+-- 存檔的人在私人頻道上廣播改了什麼（composables/useBroadcast.js）；私人頻道只有登入的人能收、能發。
+-- realtime.messages 是 Supabase Realtime 自己的表，本機的純 Postgres 沒有，所以先檢查
+do $$
+begin
+  if to_regclass('realtime.messages') is not null then
+    drop policy if exists "Authenticated users can receive broadcasts" on realtime.messages;
+    create policy "Authenticated users can receive broadcasts" on realtime.messages
+      for select to authenticated using (realtime.messages.extension = 'broadcast');
+    drop policy if exists "Authenticated users can send broadcasts" on realtime.messages;
+    create policy "Authenticated users can send broadcasts" on realtime.messages
+      for insert to authenticated with check (realtime.messages.extension = 'broadcast');
+  end if;
+end $$;
 
 -- ── 照片的 Storage bucket ───────────────────────────
 -- 私人：沒有任何 storage policy，前端拿不到檔案；上傳用 server 發的一次性上傳網址，

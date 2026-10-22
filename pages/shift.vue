@@ -1098,8 +1098,9 @@
                 :current="channelCurrent"
                 :disabled="isDisabled"
                 :me="me"
-                @added="addComment"
-                @removed="removeComment"
+                @added="onCommentAdded"
+                @updated="onCommentUpdated"
+                @removed="onCommentRemoved"
             />
         </div>
 
@@ -1139,8 +1140,6 @@ const loadingNotify = ref(false);
 const saveStatus = ref('success');
 const lastUpdatedAt = ref(null);
 const lastSavedAt = ref(null);
-const realtimeChannel = ref(null);
-const commentsChannel = ref(null);
 const tab = ref('arrive');
 const prev = ref({ date: null, shift: null, reports: {}, released: [], unfinished: {} });
 
@@ -1239,10 +1238,13 @@ async function flush() {
     entries.forEach(([key]) => inflight.add(key));
     try {
         saveStatus.value = 'saving';
-        await $fetch('/api/shift/update', {
+        const res = await $fetch('/api/shift/update', {
             method: 'POST',
             body: { recordId: formData.value.recordId, ops: entries.map(([, op]) => op) },
         });
+        // 存好了：記進自己這份原始資料，再廣播給其他開著這一班的人（他們照路徑套上）
+        applyOpsToRaw(res.ops || []);
+        broadcastShift('ops', { ops: res.ops || [] });
         saveStatus.value = 'success';
         lastSavedAt.value = new Date();
     } catch (e) {
@@ -1406,7 +1408,6 @@ const BUSY = ['queued', 'compressing', 'uploading', 'saving'];
 const photoOpen = ref(false);
 const photoCat = ref(null);
 const photoInput = ref(null);
-const photosChannel = ref(null);
 
 const photosOf = (catId, key) => photos.value.filter((p) => p.cat_id === catId && p.tab === key);
 const photoCount = (catId, key) => photosOf(catId, key).length;
@@ -1746,6 +1747,7 @@ async function uploadOne(item) {
         // 補傳到以前的班：放進往前翻的那份，標上是哪一班
         if (shiftId === formData.value.recordId) addPhoto(row);
         else photoHistory.value.push({ ...row, date: item.date, shift: item.shift });
+        broadcastPhotos(shiftId, 'upsert', [row]);
         item.progress = 100;
         item.status = 'done';
     } catch (e) {
@@ -1799,6 +1801,7 @@ async function savePhotoEdit() {
         });
         photo.kinds = res.kinds;
         photo.note = res.note;
+        broadcastPhotos(photo.shift_id, 'upsert', [photo]);
         photoEditing.value = null;
     } catch (e) {
         console.error('savePhotoEdit error:', e);
@@ -1853,8 +1856,12 @@ async function deleteSelected() {
     deleting.value = true;
     try {
         await $fetch('/api/shift/photos/delete', { method: 'POST', body: { ids } });
+        const removed = drawerAllPhotos.value.filter((p) => ids.includes(p.id));
         photos.value = photos.value.filter((p) => !ids.includes(p.id));
         photoHistory.value = photoHistory.value.filter((p) => !ids.includes(p.id));
+        for (const shiftId of new Set(removed.map((p) => p.shift_id))) {
+            broadcastPhotos(shiftId, 'delete', removed.filter((p) => p.shift_id === shiftId));
+        }
         ElMessage.success(`已刪除 ${ids.length} 張`);
         selecting.value = false;
         selectedIds.value = [];
@@ -1886,29 +1893,13 @@ async function deletePhoto(photo) {
         await $fetch('/api/shift/photos/delete', { method: 'POST', body: { id: photo.id } });
         photos.value = photos.value.filter((p) => p.id !== photo.id);
         photoHistory.value = photoHistory.value.filter((p) => p.id !== photo.id);
+        broadcastPhotos(photo.shift_id, 'delete', [photo]);
         return true;
     } catch (e) {
         console.error('deletePhoto error:', e);
         ElMessage.error('刪除失敗，請再試一次');
         return false;
     }
-}
-
-// 別人上傳的照片即時出現：收到新增就重新拿一次清單（網址要 server 發）
-const reloadPhotos = debounce(() => loadPhotos(formData.value.recordId), 500);
-function subscribeToPhotos(recordId) {
-    if (photosChannel.value) supabase.removeChannel(photosChannel.value);
-    photosChannel.value = supabase
-        .channel(`shift-photos-${recordId}`)
-        .on(
-            'postgres_changes',
-            { event: 'INSERT', schema: 'public', table: 'shift_photos', filter: `shift_id=eq.${recordId}` },
-            (payload) => {
-                // 留言附的照片在留言頻道，不在 🗂️ 照片牆
-                if (payload.new && !payload.new.comment_id && !photos.value.some((p) => p.id === payload.new.id)) reloadPhotos();
-            }
-        )
-        .subscribe();
 }
 
 // 留言頻道要的「正在看的這一班」（formData.date 是 Date，API 要 YYYY-MM-DD）
@@ -1942,30 +1933,6 @@ async function loadComments(params) {
     } catch (e) {
         console.error('loadComments error:', e);
     }
-}
-
-// 別人新增的留言即時出現（自己送出的已經 addComment 過，靠 id 去重）
-function subscribeToComments(recordId) {
-    if (commentsChannel.value) supabase.removeChannel(commentsChannel.value);
-    commentsChannel.value = supabase
-        .channel(`shift-comments-${recordId}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'INSERT',
-                schema: 'public',
-                table: 'shift_comments',
-                filter: `shift_id=eq.${recordId}`,
-            },
-            (payload) => payload.new && addComment(payload.new)
-        )
-        // 刪除的通知只帶 id，不能用 shift_id 過濾
-        .on(
-            'postgres_changes',
-            { event: 'DELETE', schema: 'public', table: 'shift_comments' },
-            (payload) => payload.old?.id && removeComment(payload.old.id)
-        )
-        .subscribe();
 }
 
 // ---- 分頁內容 ----
@@ -2262,38 +2229,151 @@ async function InitShift() {
         unfinished: prevData?.unfinished || {},
     };
 
-    subscribeToRealtime(data.recordId);
+    setRaw(data);
+    subscribeToShift(data.recordId);
 
     // 留言、照片要等這一班建立好才查得到，所以放在後面
     await Promise.all([loadComments(params), loadPhotos(data.recordId)]);
-    subscribeToComments(data.recordId);
-    subscribeToPhotos(data.recordId);
 }
 
-function subscribeToRealtime(recordId) {
-    if (realtimeChannel.value) {
-        supabase.removeChannel(realtimeChannel.value);
-    }
+// ---- 即時同步（Broadcast，見 composables/useBroadcast.js）----
+// 一班一個私人頻道 shift:<id>，三種訊息：
+//   ops：別人存好的格子（跟 /api/shift/update 一樣的 { column, path, value }），照路徑套上
+//   comment：這一班新增或刪除的留言（💬 的數字與橘點用；留言內容在 ShiftCommentDrawer 自己的頻道）
+//   photo：🗂️ 照片牆新增、修改、刪除的照片
+const { join: joinBroadcast, send: sendBroadcast } = useBroadcast();
+const shiftChannel = ref(null);
+const shiftTopic = (id) => `shift:${id}`;
 
-    realtimeChannel.value = supabase
-        .channel(`shift-${recordId}`)
-        .on(
-            'postgres_changes',
-            {
-                event: 'UPDATE',
-                schema: 'public',
-                table: 'shifts',
-                filter: `id=eq.${recordId}`,
-            },
-            (payload) => {
-                if (!payload.new) return;
-                // 是自己的更新就忽略
-                if (payload.new.updated_by === getUserId()) return;
-                mergeRemote(payload.new);
+// 這一班在資料庫裡的原始樣子（cats、tasks 以 id 為 key 的物件、reports）。
+// 收到別人的 ops 時先套在這份上，再只拿改到的那幾隻貓、那幾項去合併進畫面（mergeRemote）
+let remoteRaw = { cats: {}, tasks: {}, reports: {} };
+const cloneJson = (v) => JSON.parse(JSON.stringify(v ?? {}));
+
+function setRaw(data) {
+    remoteRaw = { cats: cloneJson(data.cats), tasks: cloneJson(data.tasks), reports: cloneJson(data.reports) };
+}
+
+// 跟資料庫的 shift_apply 一樣：照路徑設值，中間缺的層補成 {}；if_missing 的只在還沒有時才設
+function applyOpsToRaw(ops) {
+    for (const op of ops) {
+        let node = (remoteRaw[op.column] ||= {});
+        const path = op.path || [];
+        for (const key of path.slice(0, -1)) {
+            if (!node[key] || typeof node[key] !== 'object') node[key] = {};
+            node = node[key];
+        }
+        const last = path[path.length - 1];
+        if (op.if_missing && node[last] !== undefined) continue;
+        node[last] = cloneJson(op.value);
+    }
+}
+
+// 只合併 ops 改到的貓、事項、回報
+function mergeOps(ops) {
+    const row = { cats: {}, tasks: {}, reports: {} };
+    for (const op of ops) {
+        const [first, second] = op.path || [];
+        if (op.column === 'cats' && remoteRaw.cats[first]) row.cats[first] = remoteRaw.cats[first];
+        if (op.column === 'tasks' && remoteRaw.tasks[first]) row.tasks[first] = remoteRaw.tasks[first];
+        if (op.column === 'reports' && remoteRaw.reports[first]?.[second]) {
+            row.reports[first] = { ...(row.reports[first] || {}), [second]: remoteRaw.reports[first][second] };
+        }
+    }
+    mergeRemote(row);
+}
+
+const broadcastShift = (event, payload, shiftId = formData.value.recordId) =>
+    sendBroadcast(shiftTopic(shiftId), event, payload, shiftChannel.value);
+
+// 照片牆的照片（留言附的不算）：補傳到別班就發到那一班的頻道
+function broadcastPhotos(shiftId, action, list) {
+    const wall = list.filter((p) => !p.comment_id);
+    if (!shiftId || !wall.length) return;
+    const payload = action === 'delete' ? { action, ids: wall.map((p) => p.id) } : { action, photos: wall.map(cloneJson) };
+    broadcastShift('photo', payload, shiftId);
+}
+
+function applyRemotePhotos({ action, photos: list = [], ids = [] }) {
+    if (action === 'delete') {
+        photos.value = photos.value.filter((p) => !ids.includes(p.id));
+        photoHistory.value = photoHistory.value.filter((p) => !ids.includes(p.id));
+        return;
+    }
+    for (const photo of list) {
+        if (photo.shift_id === formData.value.recordId) {
+            const i = photos.value.findIndex((p) => p.id === photo.id);
+            if (i >= 0) photos.value.splice(i, 1, photo);
+            else photos.value.push(photo);
+            continue;
+        }
+        // 正在往前翻的那幾班裡的照片也一起更新
+        const shift = historyShifts.value.find((s) => s.id === photo.shift_id);
+        if (!shift) continue;
+        const withShift = { ...photo, date: shift.date, shift: shift.shift };
+        const i = photoHistory.value.findIndex((p) => p.id === photo.id);
+        if (i >= 0) photoHistory.value.splice(i, 1, withShift);
+        else photoHistory.value.push(withShift);
+    }
+}
+
+// 自己在留言頻道新增、刪除留言：更新數字，再告訴其他開著這一班的人
+function onCommentAdded(row) {
+    addComment(row);
+    if (row.shift_id) broadcastShift('comment', { action: 'upsert', comment: cloneJson(row) }, row.shift_id);
+}
+
+function onCommentRemoved(id) {
+    removeComment(id);
+    broadcastShift('comment', { action: 'delete', id });
+}
+
+// 編輯留言可能改了「重要」，影響下一班的橘點：自己重抓留言數，也叫開著這一班的人重抓
+function onCommentUpdated() {
+    reloadComments();
+    broadcastShift('comment', { action: 'refresh' });
+}
+
+function reloadComments() {
+    return loadComments({ date: channelCurrent.value.date, shift: channelCurrent.value.shift });
+}
+
+function onRemoteComment({ action, comment, id }) {
+    if (action === 'delete') removeComment(id);
+    else if (action === 'refresh') reloadComments();
+    else addComment(comment);
+}
+
+// 斷線重連、從背景回來：重新抓這一班（合併進畫面，不打斷正在編輯的格子）、留言數、照片
+async function resyncShift() {
+    const params = { date: channelCurrent.value.date, shift: channelCurrent.value.shift };
+    try {
+        const data = await $fetch('/api/shift', { params, cache: 'no-store' });
+        if (data.recordId !== formData.value.recordId) return;
+        setRaw(data);
+        mergeRemote(data);
+        lastUpdatedAt.value = new Date();
+    } catch (e) {
+        console.error('resync shift error:', e);
+    }
+    await Promise.all([reloadComments(), loadPhotos(formData.value.recordId)]);
+}
+
+function subscribeToShift(recordId) {
+    shiftChannel.value?.leave();
+    shiftChannel.value = joinBroadcast(
+        shiftTopic(recordId),
+        {
+            ops: ({ ops = [] }) => {
+                applyOpsToRaw(ops);
+                mergeOps(ops);
                 lastUpdatedAt.value = new Date();
-            }
-        )
-        .subscribe();
+            },
+            comment: onRemoteComment,
+            photo: applyRemotePhotos,
+        },
+        { onResync: resyncShift }
+    );
 }
 
 // 「LINE 發送至群組」：這一班、這個分頁的回報＋留言（照貓分組），可以勾選最多 4 張照片一起發。
@@ -2526,15 +2606,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
     window.removeEventListener('beforeunload', handleBeforeUnload);
-    if (realtimeChannel.value) {
-        supabase.removeChannel(realtimeChannel.value);
-    }
-    if (commentsChannel.value) {
-        supabase.removeChannel(commentsChannel.value);
-    }
-    if (photosChannel.value) {
-        supabase.removeChannel(photosChannel.value);
-    }
+    shiftChannel.value?.leave();
 });
 
 // 換日期或班別才重新載入；只換分頁不用。換班前先把還沒送出的存掉
