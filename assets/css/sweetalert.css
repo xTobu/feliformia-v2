@@ -23,6 +23,19 @@
     color: #4a4542;
 }
 
+/* 問句下面的提醒小字（例如刪除照片的「刪除後無法復原。」），一句一行 */
+.swal2-html-container .swal-hint {
+    display: block;
+    margin-top: 6px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: #8e8783;
+}
+
+.swal2-html-container .swal-hint:first-of-type {
+    margin-top: 10px;
+}
+
 .swal2-actions {
     flex-direction: row-reverse;
     flex-wrap: nowrap;

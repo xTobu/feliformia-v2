@@ -1,5 +1,6 @@
 import { supabase } from '~/server/utils/supabase'
 import { PHOTO_COLUMNS, photoPrefix, withSignedUrls } from '~/server/utils/photos'
+import { isPhotoKindChoice, sortPhotoKinds } from '~/composables/photoKinds'
 
 // 留言頻道（shift_comments）共用的東西。一隻貓、一個分頁是一個頻道，跨班一路往上看；
 // 每則留言帶著它是哪一班（shifts 的 date、shift），畫面用來畫班與班之間的分隔線
@@ -23,7 +24,7 @@ export async function toMessages(rows) {
 
     const { data: photos, error } = await supabase
         .from('shift_photos')
-        .select(`${PHOTO_COLUMNS}, comment_id`)
+        .select(PHOTO_COLUMNS)
         .in(
             'comment_id',
             rows.map((r) => r.id)
@@ -53,17 +54,21 @@ export async function loadMessage(id) {
     return message
 }
 
-// 留言附的照片：手機已經傳到 Storage 了，這裡檢查路徑是剛才發的那一組（班 id/貓 id/ 底下）
-export function cleanCommentPhotos(photos, shiftId, catId) {
+// 留言附的照片：手機已經傳到 Storage 了，這裡檢查路徑是剛才發的那一組（班 id/貓 id/ 底下）。
+// 每張可以帶類型（kinds，選填），規則跟照片庫一樣（composables/photoKinds.js）
+export function cleanCommentPhotos(photos, shiftId, catId, tab) {
     if (photos == null) return []
     if (!Array.isArray(photos) || photos.length > MAX_COMMENT_PHOTOS) return null
     const prefix = photoPrefix(shiftId, catId)
     const int = (v) => (Number.isInteger(v) && v > 0 ? v : null)
     const ok = (path) => typeof path === 'string' && path.startsWith(prefix) && !path.includes('..')
     if (!photos.every((p) => ok(p?.path) && ok(p?.thumbPath))) return null
+    const kindsOf = (p) => (p.kinds == null ? [] : p.kinds)
+    if (!photos.every((p) => isPhotoKindChoice(tab, kindsOf(p)))) return null
     return photos.map((p) => ({
         path: p.path,
         thumb_path: p.thumbPath,
+        kinds: sortPhotoKinds(tab, kindsOf(p)),
         width: int(p.width),
         height: int(p.height),
         size: int(p.size),

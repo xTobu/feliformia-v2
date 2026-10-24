@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
 
     const { shiftId, catId, tab, body, forNext, photos } = await readBody(event)
     const text = String(body ?? '').trim().slice(0, MAX_COMMENT_LENGTH)
-    const photoRows = cleanCommentPhotos(photos, shiftId, catId)
+    const photoRows = cleanCommentPhotos(photos, shiftId, catId, tab)
     if (!shiftId || !catId || !COMMENT_TABS.includes(tab) || !photoRows || (!text && !photoRows.length)) {
         throw createError({ statusCode: 400, message: '資料格式錯誤' })
     }

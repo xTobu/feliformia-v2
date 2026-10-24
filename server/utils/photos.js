@@ -26,7 +26,11 @@ export async function withSignedUrls(rows) {
 }
 
 export const PHOTO_COLUMNS =
-    'id, shift_id, cat_id, tab, kinds, note, path, thumb_path, width, height, size, uploaded_by, author_name, created_at'
+    'id, shift_id, cat_id, tab, comment_id, kinds, note, path, thumb_path, width, height, size, uploaded_by, author_name, upload_batch, created_at'
+
+// 照片庫（🗂️）：直接上傳的與留言附的都在一起。留言附的帶著那則留言（看大圖時顯示內容、可以跳過去）
+export const LIBRARY_COLUMNS = `${PHOTO_COLUMNS}, shift_comments(id, body, author_name, created_at, edited_at)`
+export const withComment = ({ shift_comments, ...photo }) => ({ ...photo, comment: shift_comments || null })
 
 // 照片描述：去頭尾空白，空的存 null，最多 500 字
 export function cleanNote(note) {

@@ -3,87 +3,20 @@
         <div id="admin-index">
             <h1>管理後台</h1>
 
-            <div class="menu-list">
-                <NuxtLink to="/admin/cats" class="menu-item">
-                    <div class="menu-icon">🐱</div>
-                    <div class="menu-content">
-                        <div class="menu-title">貓咪管理</div>
-                        <div class="menu-desc">新增、編輯、排序貓咪資料</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/notices" class="menu-item">
-                    <div class="menu-icon">📋</div>
-                    <div class="menu-content">
-                        <div class="menu-title">餵藥及特殊飲食管理</div>
-                        <div class="menu-desc">
-                            新增、編輯、排序特殊照護事項
+            <!-- 頁面清單在 composables/adminLinks.js（header「後台」選單也用同一份） -->
+            <template v-for="section in ADMIN_SECTIONS" :key="section.title">
+                <div v-if="section.title" class="section-label">{{ section.title }}</div>
+                <div class="menu-list">
+                    <NuxtLink v-for="link in section.links" :key="link.to" :to="link.to" class="menu-item">
+                        <div class="menu-icon">{{ link.icon }}</div>
+                        <div class="menu-content">
+                            <div class="menu-title">{{ link.title }}</div>
+                            <div class="menu-desc">{{ link.desc }}</div>
                         </div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/vote-options" class="menu-item">
-                    <div class="menu-icon">🗳️</div>
-                    <div class="menu-content">
-                        <div class="menu-title">投票選項管理</div>
-                        <div class="menu-desc">新增、編輯、排序投票選項</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/profiles" class="menu-item">
-                    <div class="menu-icon">👥</div>
-                    <div class="menu-content">
-                        <div class="menu-title">志工一覽</div>
-                        <div class="menu-desc">
-                            查看志工名單、編輯名稱與權限
-                        </div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-            </div>
-
-            <!-- 新版：跟上面的舊版並行，資料表各自獨立（cat_profiles、diet_items…），讓大家慢慢換過來 -->
-            <div class="section-label">新版值班記錄（試行中）</div>
-            <div class="menu-list">
-                <NuxtLink to="/admin/cat-profiles" class="menu-item">
-                    <div class="menu-icon">🐱</div>
-                    <div class="menu-content">
-                        <div class="menu-title">貓咪管理</div>
-                        <div class="menu-desc">新增、編輯、排序貓咪與位置</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/diet" class="menu-item">
-                    <div class="menu-icon">🍚</div>
-                    <div class="menu-content">
-                        <div class="menu-title">飲食管理</div>
-                        <div class="menu-desc">乾乾、罐罐、補充與其他飲食</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/medical" class="menu-item">
-                    <div class="menu-icon">💊</div>
-                    <div class="menu-content">
-                        <div class="menu-title">醫療管理</div>
-                        <div class="menu-desc">吃藥、醫療與其他照護事項</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/required" class="menu-item">
-                    <div class="menu-icon">✅</div>
-                    <div class="menu-content">
-                        <div class="menu-title">值班收尾管理</div>
-                        <div class="menu-desc">每一班離開前一定要勾完的事</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-            </div>
+                        <div class="menu-arrow">→</div>
+                    </NuxtLink>
+                </div>
+            </template>
 
             <NuxtLink to="/" class="back-link">← 返回首頁</NuxtLink>
         </div>

@@ -1,4 +1,5 @@
 import { supabase } from '~/server/utils/supabase'
+import { isObserveDone } from '~/composables/observeItems'
 
 // 新版值班記錄表（shifts）的快照。cats / tasks 存成「以 id 為 key 的物件」而不是陣列，
 // 前端只送改動的那一格（/api/shift/update → shift_apply），兩人同時改不同的貓或項目不會互蓋。
@@ -187,17 +188,18 @@ async function previousReleased(date, shift) {
     return row ? releasedCatIds(row) : new Set()
 }
 
-// 這一班的快照：未領養的貓（照貓咪管理的順序）＋這一班、在期間內的飲食、醫療、收尾
+// 這一班的快照：未領養的貓（照貓咪管理的順序）＋這一班、在期間內的飲食、醫療、收尾、觀察
 export async function buildSnapshot(date, shift) {
     const forShift = (table) =>
         supabase.from(table).select().or(`shift.eq.both,shift.eq.${shift}`).order('sort_order')
 
-    const [[cats, diet, medical, required], prevReleased] = await Promise.all([
+    const [[cats, diet, medical, required, observe], prevReleased] = await Promise.all([
         Promise.all([
             supabase.from('cat_profiles').select('id, name, location, adopted, sort_order'),
             forShift('diet_items'),
             forShift('medical_items'),
             forShift('required_items'),
+            forShift('observe_items'),
         ]).then((results) => results.map(check)),
         previousReleased(date, shift),
     ])
@@ -233,11 +235,20 @@ export async function buildSnapshot(date, shift) {
             sort: i.sort_order ?? MAX,
             ...(i.category === MEAL_MED ? { done: false, done_by: null, done_at: null } : {}),
         }),
+        // 觀察：沒有 done，有沒有拍是看這一班的照片（composables/observeItems.js）
+        observe: (i) => ({
+            id: i.id,
+            category: i.category,
+            content: i.content || '',
+            end_date: i.end_date || null,
+            sort: i.sort_order ?? MAX,
+        }),
     }
     const lists = {
         medical: medical.filter(inPeriod),
         required: required.filter(inPeriod),
         diet: diet.filter(inPeriod),
+        observe: observe.filter(inPeriod),
     }
     // 有「放風」飲食項目的貓（自己的、全員的、所在位置的），放風預設打開
     const releasedByDefault = releaseRule(lists.diet)
@@ -261,12 +272,13 @@ export async function buildSnapshot(date, shift) {
                 prev_released: prevReleased.has(c.id),
                 medical: ofCat('medical', c.id),
                 diet: ofCat('diet', c.id),
+                observe: ofCat('observe', c.id),
             })),
         (c) => String(c.cat_id)
     )
 
     const tasks = {}
-    for (const kind of ['medical', 'diet']) {
+    for (const kind of ['medical', 'diet', 'observe']) {
         for (const i of lists[kind].filter((i) => !i.cat_id)) {
             tasks[`${kind}:${i.id}`] = { kind, location: i.location || null, ...toItem[kind](i) }
         }
@@ -383,14 +395,15 @@ export async function persistReleased(stored, synced) {
 }
 
 // 一班裡還沒勾的項目，給下一班看（/api/shift/previous）。只看那一班的快照，跟後台現在的設定無關。
-// { care: [...], meal: [...], required: [...] }，每一項 { key, target, content, tag }：
+// { arrive: [...], care: [...], meal: [...], required: [...] }，每一項 { key, target, content, tag }：
 //   target 是對象（貓名、全員、貓屋或位置），畫面上當小標籤；tag 是類別（醫療分頁才有）
 // 順序：貓在前（照那一班的貓順序），全員 → 貓屋 → 位置在後
 const PLACE_ORDER = ['貓屋', '客廳', '房間', '倉庫', '隔離區']
 const placeRank = (location) => (!location ? 0 : 1 + PLACE_ORDER.indexOf(location))
 const bySort = (a, b) => (a.sort ?? MAX) - (b.sort ?? MAX)
 
-export function unfinishedOf(record) {
+// photos：那一班的觀察照片牆照片（cat_id、kinds），用來判斷觀察項目拍了沒
+export function unfinishedOf(record, photos = []) {
     const cats = Object.values(record?.cats || {}).sort(bySort)
     const tasks = Object.entries(record?.tasks || {}).map(([key, t]) => ({ key, ...t }))
     const catName = (id) => record?.cats?.[id]?.name || ''
@@ -419,7 +432,26 @@ export function unfinishedOf(record) {
     const requiredCats = (t) => t.cat_id
     const requiredRow = (t) => ({ content: t.content })
 
+    // 觀察：貓自己的，加上全員／位置的（併進適用的每一隻貓）；沒拍對應的照片就算沒完成
+    const observeTasks = tasks.filter((t) => t.kind === 'observe')
+    const arrive = cats.flatMap((cat) => {
+        const catPhotos = photos.filter((p) => p.cat_id === cat.cat_id)
+        return [
+            ...Object.values(cat.observe || {}).sort(bySort),
+            ...observeTasks.filter((t) => !t.location || t.location === cat.location).sort(bySort),
+        ]
+            .filter((i) => !isObserveDone(i.category, catPhotos))
+            // 有說明就寫說明、類別當小標籤；沒說明就直接寫類別（「拍貓砂」）
+            .map((i) => ({
+                key: `observe:${cat.cat_id}:${i.id}`,
+                target: cat.name,
+                content: i.content || i.category,
+                tag: i.content ? i.category : null,
+            }))
+    })
+
     return {
+        arrive,
         care: [...fromCats('medical', () => true, medicalRow), ...fromTasks('medical', () => true, medicalRow)],
         // 全員／位置的隨餐藥：那個位置當時沒有貓就不算（備餐分頁也不會顯示）
         meal: [

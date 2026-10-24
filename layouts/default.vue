@@ -4,7 +4,8 @@
             <NuxtLink to="/" class="site-name">Feliformia</NuxtLink>
             <div class="user-actions">
                 <span class="user-name">Hi, {{ displayName }}</span>
-                <NuxtLink v-if="isAdmin" to="/admin" class="admin-tag">後台</NuxtLink>
+                <!-- 後台：打開後台選單（components/AdminMenu.vue），從下方滑出 -->
+                <button v-if="isAdmin" type="button" class="admin-tag" @click="adminMenuOpen = !adminMenuOpen">後台</button>
                 <!-- 設定、登出都收在選單裡（components/SiteMenu.vue） -->
                 <button class="menu-btn" aria-label="選單" @click="menuOpen = !menuOpen">
                     <Icon icon="mdi:menu" width="18" />
@@ -20,6 +21,7 @@
              「今日活動提醒」的自動跳出也才涵蓋得到整站。
              未登入時不掛 —— 它裡面的 API 都需要身分。 -->
         <SiteMenu v-if="user" />
+        <AdminMenu v-if="user && isAdmin" />
     </div>
 </template>
 
@@ -31,6 +33,7 @@ import { Icon } from '@iconify/vue';
 const user = useSupabaseUser();
 const { displayName, isAdmin, loadProfile } = useProfile();
 const menuOpen = useState('site-menu-open', () => false);
+const adminMenuOpen = useState('admin-menu-open', () => false);
 
 onMounted(() => {
     if (user.value) {
@@ -79,9 +82,12 @@ $brown: #8e8783;
         color: $grey;
     }
 
-    // 管理員才看得到的後台入口，跟選單鈕同色系，不搶眼。全域 a 有底線與 margin-bottom，這裡蓋回來
+    // 管理員才看得到的後台入口，跟選單鈕同色系，不搶眼。全域 button 有 width: 100%、高度，這裡蓋回來
     .admin-tag {
-        margin-bottom: 0;
+        width: auto;
+        height: auto;
+        margin: 0;
+        cursor: pointer;
         padding: 3px 8px;
         border: 1px solid #ddd;
         border-radius: 6px;

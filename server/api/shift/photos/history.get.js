@@ -1,14 +1,14 @@
 import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 import { hasShiftBefore, isValidShiftQuery, shiftKey, shiftsBack, trimBeforeEarliest, withShiftIds } from '~/server/utils/shift'
-import { PHOTO_COLUMNS, PHOTO_TABS, withSignedUrls } from '~/server/utils/photos'
+import { LIBRARY_COLUMNS, PHOTO_TABS, withComment, withSignedUrls } from '~/server/utils/photos'
 import { isPhotoKinds } from '~/composables/photoKinds'
 
 const MAX_COUNT = 10
 
-// 唯讀：🗂️ 照片牆往前翻。給定一班（不含），回傳「前面 count 班」：
+// 唯讀：🗂️ 照片庫往前翻。給定一班（不含），回傳「前面 count 班」：
 //   shifts：這幾班（新的在前，帶 shifts 表的 id；沒照片的班也在，畫面才看得出滑到哪一天、也能補傳）
-//   photos：這隻貓、這個分頁在這幾班的照片（留言附的不算；帶 kinds 就只看有其中任一類的）
+//   photos：這隻貓、這個分頁在這幾班的照片（直接上傳的與留言附的都有；帶 kinds 就只看有其中任一類的）
 //   cursor：這一批最舊的那班，下次從它往前；hasMore：更早還有沒有班
 // 這一班自己的照片照舊由 GET /api/shift/photos 拿
 export default defineEventHandler(async (event) => {
@@ -37,10 +37,9 @@ export default defineEventHandler(async (event) => {
 
     let query = supabase
         .from('shift_photos')
-        .select(`${PHOTO_COLUMNS}, shifts!inner(date, shift)`)
+        .select(`${LIBRARY_COLUMNS}, shifts!inner(date, shift)`)
         .eq('cat_id', cat)
         .eq('tab', tab)
-        .is('comment_id', null)
         .gte('shifts.date', oldest.date)
         .lte('shifts.date', window[0].date)
         .order('created_at')
@@ -51,7 +50,7 @@ export default defineEventHandler(async (event) => {
     const [shifts, hasMore, signed] = await Promise.all([
         withShiftIds(window),
         hasShiftBefore(oldest),
-        withSignedUrls(data.filter((r) => inWindow.has(shiftKey(r.shifts)))),
+        withSignedUrls(data.filter((r) => inWindow.has(shiftKey(r.shifts))).map(withComment)),
     ])
     return {
         shifts: await trimBeforeEarliest(shifts, hasMore),

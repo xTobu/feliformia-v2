@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     const prev = previousShiftOf(date, shift)
     const { data, error } = await supabase
         .from('shifts')
-        .select('reports, cats, tasks')
+        .select('id, reports, cats, tasks')
         .eq('date', prev.date)
         .eq('shift', prev.shift)
         .maybeSingle()
@@ -26,13 +26,21 @@ export default defineEventHandler(async (event) => {
         return { ...prev, exists: false, reports: {}, released: [], unfinished: {} }
     }
 
+    // 觀察項目拍了沒，看那一班的觀察照片（直接上傳的與留言附的都算）
+    const { data: photos, error: photoError } = await supabase
+        .from('shift_photos')
+        .select('cat_id, kinds')
+        .eq('shift_id', data.id)
+        .eq('tab', 'arrive')
+    if (photoError) throw createError({ statusCode: 500, message: photoError.message })
+
     return {
         ...prev,
         exists: true,
         // { 分頁: { user_id: { name, text, at } } }
         reports: data.reports || {},
         released: [...(await releasedCatIds({ ...prev, cats: data.cats }))],
-        // { care, meal, required }：各分頁沒勾完的項目，見 unfinishedOf
-        unfinished: unfinishedOf(data),
+        // { arrive, care, meal, required }：各分頁沒勾完（觀察是沒拍）的項目，見 unfinishedOf
+        unfinished: unfinishedOf(data, photos),
     }
 })

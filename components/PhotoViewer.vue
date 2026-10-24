@@ -48,9 +48,17 @@
                     <span v-if="photos.length > 1" class="pv-count">{{ index + 1 }} / {{ photos.length }}</span>
                 </div>
                 <div v-if="photo.kinds?.length" class="pv-kinds">
-                    <span v-for="kind in photo.kinds" :key="kind">{{ kind }}</span>
+                    <span v-for="kind in photo.kinds" :key="kind" :class="{ observe: isObserveKind(kind) }">{{ kind }}</span>
                 </div>
-                <div v-if="photo.text" class="pv-text">{{ photo.text }}</div>
+                <!-- 描述（前面一條直線）或留言內容（對話氣泡），樣子就分得出是哪一種 -->
+                <div
+                    v-if="photo.text"
+                    class="pv-text"
+                    :class="photo.textKind === 'comment' ? 'is-comment' : 'is-note'"
+                    :aria-label="photo.textKind === 'comment' ? '留言' : '描述'"
+                >
+                    <div class="pv-text-body">{{ photo.text }}</div>
+                </div>
                 <div class="pv-actions">
                     <slot name="actions" :photo="photo" :index="index" />
                 </div>
@@ -60,7 +68,8 @@
 </template>
 
 <script setup>
-// photos：[{ url, label（哪一班，例如「10/21 晚班」，放上方左邊）, meta（一行小字：誰 幾點）, kinds?, text?（描述或留言內容）, ...其他欄位隨意 }]
+// photos：[{ url, label（哪一班，例如「10/21 晚班」，放上方左邊）, meta（一行小字：誰 幾點）, kinds?,
+//           text?（描述或留言內容）, textKind?（'note' 描述／'comment' 留言，預設描述）, ...其他欄位隨意 }]
 // v-model:index：目前看第幾張，null 就關閉
 const props = defineProps({
     photos: { type: Array, default: () => [] },
@@ -250,17 +259,59 @@ button {
         color: #e6f0f6;
         font-size: 12px;
         line-height: 20px;
+
+        // 剛到要拍的那組（剩食、貓砂）是暖橘
+        &.observe {
+            background: rgba(224, 138, 60, 0.45);
+            color: #fdebd9;
+        }
     }
 }
 
 .pv-text {
-    max-height: 18vh;
-    margin-top: 6px;
-    overflow-y: auto;
+    margin-top: 8px;
     font-size: 15px;
     line-height: 1.5;
-    white-space: pre-line;
-    overflow-wrap: anywhere;
+
+    // 太長就在裡面捲（捲動放在內層，外層的氣泡尾巴才不會被切掉）
+    .pv-text-body {
+        max-height: 18vh;
+        overflow-y: auto;
+        white-space: pre-line;
+        overflow-wrap: anywhere;
+    }
+
+    // 描述：前面一條藍色直線
+    &.is-note {
+        padding-left: 9px;
+        border-left: 3px solid #6da2c2;
+    }
+
+    // 留言：跟留言頻道一樣的氣泡，左上方往左上翹的小勾（形狀同 ShiftCommentDrawer 的 .ch-bubble）。
+    // 底色不透明，尾巴疊在氣泡上才不會一塊深一塊淺
+    &.is-comment {
+        --bubble-bg: #2e2e2e;
+        position: relative;
+        display: inline-block;
+        max-width: calc(100% - 8px);
+        margin-left: 8px;
+        padding: 6px 12px;
+        border-radius: 16px;
+        background: var(--bubble-bg);
+        box-sizing: border-box;
+
+        &::before {
+            content: '';
+            position: absolute;
+            top: 3px;
+            left: -8px;
+            width: 14px;
+            height: 16px;
+            background: var(--bubble-bg);
+            -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 16'%3E%3Cpath d='M0 0C2.5 3.2 7.5 4.8 14 4.8V16C6.5 16 1.8 9.5 0 0Z'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+            mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 16'%3E%3Cpath d='M0 0C2.5 3.2 7.5 4.8 14 4.8V16C6.5 16 1.8 9.5 0 0Z'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
+        }
+    }
 }
 
 .pv-actions {

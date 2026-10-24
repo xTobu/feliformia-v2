@@ -7,32 +7,13 @@
         size="72%"
         :with-header="false"
         class="channel-drawer"
+        :modal-class="instant ? 'drawer-instant' : ''"
         @update:model-value="emit('update:modelValue', $event)"
     >
         <div class="ch-head">
             <span class="ch-title">{{ cat?.name }}</span>
             <span class="ch-tab">{{ tabLabel }}留言</span>
-            <div class="ch-switch" role="tablist">
-                <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="view === 'messages'"
-                    :class="{ on: view === 'messages' }"
-                    @click="view = 'messages'"
-                >
-                    留言
-                </button>
-                <button
-                    type="button"
-                    role="tab"
-                    :aria-selected="view === 'photos'"
-                    :class="{ on: view === 'photos' }"
-                    @click="view = 'photos'"
-                >
-                    照片
-                </button>
-            </div>
-            <!-- 🔍 再按一次就收起搜尋，回到原本的留言或照片 -->
+            <!-- 🔍 再按一次就收起搜尋，回到留言 -->
             <button
                 type="button"
                 class="ch-search-btn"
@@ -43,6 +24,8 @@
             >
                 🔍
             </button>
+            <!-- 「照片」打開這隻貓、這個分頁的 🗂️ 照片庫（直接上傳的與留言附的都在那裡），由值班頁切換 -->
+            <ChannelSwitch current="messages" @switch="emit('open-photos')" />
             <button type="button" class="ch-close" aria-label="關閉" @click="emit('update:modelValue', false)">
                 ✕
             </button>
@@ -102,14 +85,45 @@
                 <div class="ch-divider" :class="{ current: group.isCurrent }">
                     {{ shiftText(group) }}
                 </div>
-                <div v-if="!group.messages.length" class="ch-none">
+                <div v-if="!group.items.length" class="ch-none">
                     {{ group.isCurrent ? '這一班還沒有留言' : '沒有留言' }}
+                </div>
+                <template v-for="m in group.items" :key="m.uploadKey || m.id">
+                <!-- 直接上傳到照片庫的照片：同一個人 10 分鐘內傳的併成一筆，像一則留言但帶系統訊息感
+                     （頭像位置是灰色 🗂️、一行灰字說誰上傳了幾張、照片放在淡灰框裡），點了看大圖 -->
+                <div v-if="m.uploadKey" class="ch-msg ch-upload">
+                    <div class="ch-avatar ch-avatar-system" aria-hidden="true">🗂️</div>
+                    <div class="ch-main">
+                        <div class="ch-meta">
+                            <span class="ch-upload-text">
+                                {{ m.author_name || '未命名' }} 上傳了 {{ m.photos.length }} 張照片到照片庫
+                            </span>
+                            <span class="ch-time">{{ timeText(m) }}</span>
+                        </div>
+                        <div class="ch-photos ch-upload-box">
+                            <button
+                                v-for="(photo, index) in m.photos"
+                                :key="photo.id"
+                                type="button"
+                                class="ch-photo"
+                                aria-label="看大圖"
+                                @click="openUploadPhotos(m, index)"
+                            >
+                                <img :src="photo.thumb_url" alt="" loading="lazy" />
+                                <span
+                                    v-for="kind in (photo.kinds || []).filter(isObserveKind)"
+                                    :key="kind"
+                                    class="ch-photo-kind"
+                                    >{{ kind }}</span
+                                >
+                            </button>
+                        </div>
+                    </div>
                 </div>
                 <!-- 每則留言都是一組：頭像、名字、時間，下面是氣泡（有指向頭像的尾巴）與照片。
                      所有人（含自己）都靠左；勾了「重要」的氣泡是橘色 -->
                 <div
-                    v-for="m in group.messages"
-                    :key="m.id"
+                    v-else
                     :data-id="m.id"
                     class="ch-msg"
                     :class="{ important: m.for_next, editing: editingId === m.id, flash: flashId === m.id }"
@@ -163,8 +177,23 @@
                                         ✕
                                     </button>
                                 </div>
-                                <div v-for="a in editAttachments" :key="a.key" class="ch-attachment">
-                                    <img :src="a.previewUrl" alt="" />
+                                <div
+                                    v-for="(a, index) in editAttachments"
+                                    :key="a.key"
+                                    class="ch-attachment"
+                                    :class="{ picking: pickingKey === a.key }"
+                                >
+                                    <!-- 點照片選這張的類型（下面出現一排類型），左下角顯示選了什麼 -->
+                                    <button
+                                        type="button"
+                                        class="ch-attachment-pick"
+                                        :disabled="savingEdit || !hasKinds"
+                                        :aria-label="`第 ${index + 1} 張的類型`"
+                                        @click="pickingKey = a.key"
+                                    >
+                                        <img :src="a.previewUrl" alt="" />
+                                        <span v-if="hasKinds" class="ch-attachment-kind" :class="kindTagClass(a)">{{ kindTag(a) }}</span>
+                                    </button>
                                     <button
                                         v-if="!savingEdit"
                                         type="button"
@@ -175,6 +204,11 @@
                                         ✕
                                     </button>
                                 </div>
+                            </div>
+                            <!-- 新加的照片：點了選類型（原本的照片在照片庫或看大圖按編輯改） -->
+                            <div v-if="pickedEdit && !savingEdit" class="ch-kind-row">
+                                <span class="ch-kind-label">新加的第 {{ editAttachments.indexOf(pickedEdit) + 1 }} 張</span>
+                                <PhotoKindPicker v-model="pickedEdit.kinds" :tab="tab" />
                             </div>
                             <div v-if="savingEdit && editAttachments.length" class="ch-progress">
                                 <div class="ch-progress-text">
@@ -216,10 +250,18 @@
                                 @click="openMessagePhotos(m, index)"
                             >
                                 <img :src="photo.thumb_url" alt="" loading="lazy" />
+                                <!-- 剛到要拍的那組（剩食、貓砂，擇一）：左上角暖橘標籤；其他類型不標 -->
+                                <span
+                                    v-for="kind in (photo.kinds || []).filter(isObserveKind)"
+                                    :key="kind"
+                                    class="ch-photo-kind"
+                                    >{{ kind }}</span
+                                >
                             </button>
                         </div>
                     </div>
                 </div>
+                </template>
             </template>
             <!-- 別人的新留言進來、自己正往上看舊的：浮在最下面提示，點了滑到最新 -->
             <div v-if="newCount" class="ch-new-wrap">
@@ -227,27 +269,6 @@
                     <el-icon class="ch-new-icon"><Bottom /></el-icon>{{ newCount }} 則新留言
                 </button>
             </div>
-        </div>
-
-        <!-- ===== 照片：留言裡的所有照片，依班分組；點了看大圖、看那則留言、可以跳過去 ===== -->
-        <div v-show="view === 'photos'" ref="wallEl" class="ch-list">
-            <div v-if="!wall.length" class="ch-empty">留言裡還沒有照片</div>
-            <template v-for="group in wallGroups" :key="group.key">
-                <div class="ch-divider" :class="{ current: group.isCurrent }">
-                    {{ shiftText(group) }}
-                </div>
-                <div class="ch-wall">
-                    <button
-                        v-for="photo in group.photos"
-                        :key="photo.id"
-                        type="button"
-                        class="ch-wall-item"
-                        @click="openWallPhoto(photo)"
-                    >
-                        <img :src="photo.thumb_url" alt="" loading="lazy" />
-                    </button>
-                </div>
-            </template>
         </div>
 
         <!-- ===== 輸入框：可以附照片 ===== -->
@@ -260,8 +281,23 @@
                 <div class="ch-progress-bar"><i :style="{ width: `${uploadPercent}%` }"></i></div>
             </div>
             <div v-if="attachments.length" class="ch-attachments">
-                <div v-for="a in attachments" :key="a.key" class="ch-attachment">
-                    <img :src="a.previewUrl" alt="" />
+                <div
+                    v-for="(a, index) in attachments"
+                    :key="a.key"
+                    class="ch-attachment"
+                    :class="{ picking: pickingKey === a.key }"
+                >
+                    <!-- 點照片選這張的類型（下面出現一排類型），左下角顯示選了什麼 -->
+                    <button
+                        type="button"
+                        class="ch-attachment-pick"
+                        :disabled="sending || !hasKinds"
+                        :aria-label="`第 ${index + 1} 張的類型`"
+                        @click="pickingKey = a.key"
+                    >
+                        <img :src="a.previewUrl" alt="" />
+                        <span v-if="hasKinds" class="ch-attachment-kind" :class="kindTagClass(a)">{{ kindTag(a) }}</span>
+                    </button>
                     <button
                         v-if="!sending"
                         type="button"
@@ -272,6 +308,11 @@
                         ✕
                     </button>
                 </div>
+            </div>
+            <!-- 點選中的那張照片：選它的類型（規則跟照片庫一樣，剩食、貓砂擇一） -->
+            <div v-if="pickedNew && !sending" class="ch-kind-row">
+                <span class="ch-kind-label">第 {{ attachments.indexOf(pickedNew) + 1 }} 張</span>
+                <PhotoKindPicker v-model="pickedNew.kinds" :tab="tab" />
             </div>
             <el-input
                 v-model="draft"
@@ -322,11 +363,12 @@
         </div>
     </el-drawer>
 
-    <!-- 看大圖（components/PhotoViewer.vue）：留言裡的照片、留言的照片牆都用這個；
-         從照片牆點開的，下面多一個「跳到這則留言」 -->
+    <!-- 看大圖（components/PhotoViewer.vue）：跟照片庫點開留言照片一樣，下面是誰、幾點、類型、說了什麼，
+         可以改類型（上傳的人或管理員，編輯視窗在值班頁）、跳到這則留言 -->
     <PhotoViewer v-model:index="viewerIndex" :photos="viewerPhotos" @close="viewerIndex = null">
         <template #actions="{ photo }">
-            <button v-if="photo.fromWall" type="button" @click="jumpTo(photo.commentId, photo)">跳到這則留言</button>
+            <button v-if="canEditPhoto(photo.raw)" type="button" @click="editPhotoKinds(photo.raw)">✎ 編輯</button>
+            <button v-if="photo.message" type="button" @click="jumpTo(photo.message.id, photo.message)">跳到這則留言</button>
         </template>
     </PhotoViewer>
 </template>
@@ -348,8 +390,17 @@ const props = defineProps({
     disabled: { type: Boolean, default: false },
     // 登入者的 user id：自己的留言才能編輯、刪除
     me: { type: String, default: null },
+    // 打開後要跳過去的那則 { commentId, date, shift }（從照片庫的留言照片「跳到這則留言」），跳完 emit jumped
+    jump: { type: Object, default: null },
+    // 管理員可以改所有照片的類型
+    admin: { type: Boolean, default: false },
+    // 跟照片庫互相切換時：不要滑動動畫，直接換過去
+    instant: { type: Boolean, default: false },
+    // 值班頁上這一班的照片（即時更新）：頻道裡這一班的上傳紀錄用這份，新增、刪除馬上看得到
+    currentPhotos: { type: Array, default: () => [] },
 });
-const emit = defineEmits(['update:modelValue', 'added', 'updated', 'removed']);
+// edit-photo（照片, 那則留言）：編輯留言照片，由值班頁開「編輯照片」視窗（跟照片庫同一個）
+const emit = defineEmits(['update:modelValue', 'added', 'updated', 'removed', 'open-photos', 'jumped', 'edit-photo']);
 
 const { $dayjs } = useNuxtApp();
 const { uploadFile } = usePhotoUpload();
@@ -363,23 +414,32 @@ const messages = ref([]);
 const hasMore = ref(false);
 const cursor = ref(null); // 已載入最舊的那班 { date, shift }，下次從它往前
 const loadedShifts = ref([]); // 已載入的班（含沒留言的）
+const uploads = ref([]); // 已載入的班裡，直接上傳到照片庫的照片（這一班的改用 currentPhotos）
 const loading = ref(false);
 const loadingMore = ref(false);
-const wall = ref([]);
 const listEl = ref(null);
-const wallEl = ref(null);
 const fileInput = ref(null);
 
 const draft = ref('');
 const draftForNext = ref(false);
-const attachments = ref([]); // { key, file, previewUrl, progress }
+const attachments = ref([]); // { key, file, previewUrl, progress, kinds }
 const sending = ref(false);
 
 const editingId = ref(null);
 const editDraft = ref('');
 const editForNext = ref(false);
 const editRemovedIds = ref([]); // 編輯時按 ✕ 拿掉的原本照片
-const editAttachments = ref([]); // 編輯時新加的照片 { key, file, previewUrl, progress }
+const editAttachments = ref([]); // 編輯時新加的照片 { key, file, previewUrl, progress, kinds }
+
+// 附照片的類型：點哪張就選哪張（pickingKey），這個分頁沒有類型（收尾）就不顯示
+const hasKinds = computed(() => !!PHOTO_KINDS[props.tab]);
+const pickingKey = ref(null);
+const pickedNew = computed(() => attachments.value.find((a) => a.key === pickingKey.value) || null);
+const pickedEdit = computed(() => editAttachments.value.find((a) => a.key === pickingKey.value) || null);
+// 縮圖左下角：選了的類型（兩個以上加 +N），還沒選寫「＋類型」
+const kindTag = (a) =>
+    a.kinds.length ? `${a.kinds[0]}${a.kinds.length > 1 ? ` +${a.kinds.length - 1}` : ''}` : '＋類型';
+const kindTagClass = (a) => ({ empty: !a.kinds.length, observe: a.kinds.length && isObserveKind(a.kinds[0]) });
 const editFileInput = ref(null);
 const savingEdit = ref(false);
 
@@ -387,52 +447,34 @@ const savingEdit = ref(false);
 const viewerPhotos = ref([]);
 const viewerIndex = ref(null);
 
-// 留言裡的照片：這則留言的幾張可以左右換，下面是誰、幾點、說了什麼
+// 留言裡的照片：這則留言的幾張可以左右換，下面跟照片庫點開留言照片一樣（誰、幾點、類型、說了什麼）
 function openMessagePhotos(m, index) {
     viewerPhotos.value = m.photos.map((p) => ({
         url: p.url,
         label: shiftText(m),
         meta: `${m.author_name || '未命名'} ${timeText(m)}${m.edited_at ? '（已編輯）' : ''}`,
+        kinds: p.kinds,
         text: m.body,
+        textKind: 'comment',
+        raw: p,
+        message: m,
     }));
     viewerIndex.value = index;
 }
 
-// 「照片」頁：只在同一班的照片之間左右換，下面是那則留言，可以跳過去
-function openWallPhoto(photo) {
-    const list = wallGroups.value.find((g) => g.photos.some((p) => p.id === photo.id))?.photos || [photo];
-    viewerPhotos.value = list.map((p) => ({
-        url: p.url,
-        label: shiftText(p),
-        meta: `${p.comment?.author_name || '未命名'} ${$dayjs(p.comment?.created_at).format('HH:mm')}${p.comment?.edited_at ? '（已編輯）' : ''}`,
-        text: p.comment?.body,
-        fromWall: true,
-        commentId: p.comment_id,
-        date: p.date,
-        shift: p.shift,
-    }));
-    viewerIndex.value = list.findIndex((p) => p.id === photo.id);
+const canEditPhoto = (photo) => props.admin || (!!props.me && photo.uploaded_by === props.me);
+
+function editPhotoKinds(photo) {
+    viewerIndex.value = null;
+    emit('edit-photo', photo, photo.comment_id && messages.value.find((m) => m.id === photo.comment_id));
 }
+
 const flashId = ref(null); // 跳過去的那則，閃一下
 
 // 班的先後：日期，同一天早班在前
 const shiftKey = (date, shift) => `${date}-${shift === 'night' ? 1 : 0}`;
 const currentKey = computed(() => shiftKey(props.current.date, props.current.shift));
 const shiftText = ({ date, shift }) => `${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift] || ''}`;
-
-function groupByShift(list, field) {
-    const groups = [];
-    for (const item of list) {
-        const key = shiftKey(item.date, item.shift);
-        let group = groups[groups.length - 1];
-        if (!group || group.key !== key) {
-            group = { key, date: item.date, shift: item.shift, isCurrent: key === currentKey.value, [field]: [] };
-            groups.push(group);
-        }
-        group[field].push(item);
-    }
-    return groups;
-}
 
 // 留言：已載入的每一班一組（沒留言的班也在），舊的在上；同一班裡照時間
 const groups = computed(() => {
@@ -444,20 +486,63 @@ const groups = computed(() => {
     };
     loadedShifts.value.forEach(add);
     [...messages.value].sort((a, b) => a.created_at.localeCompare(b.created_at)).forEach((m) => add(m).messages.push(m));
-    return [...map.values()].sort((a, b) => a.key.localeCompare(b.key));
+    // 每一班的時間軸：留言＋上傳紀錄，照時間排
+    const batches = uploadBatches.value;
+    return [...map.values()]
+        .map((g) => ({
+            ...g,
+            items: [...g.messages, ...batches.filter((b) => b.date === g.date && b.shift === g.shift)].sort((a, b) =>
+                a.created_at.localeCompare(b.created_at)
+            ),
+        }))
+        .sort((a, b) => a.key.localeCompare(b.key));
 });
 
-// 照片牆：跟留言一樣，舊的班在上、這一班在最下面；同一班裡照時間
-const wallGroups = computed(() =>
-    groupByShift(
-        [...wall.value].sort(
-            (a, b) =>
-                shiftKey(a.date, a.shift).localeCompare(shiftKey(b.date, b.shift)) ||
-                a.created_at.localeCompare(b.created_at)
-        ),
-        'photos'
-    )
-);
+// 上傳紀錄：以前的班用 API 帶回來的，這一班用值班頁即時的那份（只要這隻貓、這個分頁、直接上傳的）。
+// 同一次上傳（upload_batch 一樣）併成一筆；沒有 upload_batch 的舊照片一張一筆
+const uploadBatches = computed(() => {
+    const { recordId, date, shift } = props.current;
+    const current = props.currentPhotos
+        .filter((p) => !p.comment_id && p.cat_id === props.cat?.cat_id && p.tab === props.tab)
+        .map((p) => ({ ...p, date, shift }));
+    const list = [...uploads.value.filter((p) => p.shift_id !== recordId), ...current].sort((a, b) =>
+        a.created_at.localeCompare(b.created_at)
+    );
+    const batches = [];
+    for (const photo of list) {
+        const same = photo.upload_batch && batches.find((b) => b.batch === photo.upload_batch);
+        if (same) {
+            same.photos.push(photo);
+        } else {
+            batches.push({
+                uploadKey: `upload-${photo.id}`,
+                batch: photo.upload_batch || null,
+                uploaded_by: photo.uploaded_by,
+                author_name: photo.author_name,
+                shift_id: photo.shift_id,
+                date: photo.date,
+                shift: photo.shift,
+                created_at: photo.created_at,
+                photos: [photo],
+            });
+        }
+    }
+    return batches;
+});
+
+// 上傳紀錄的照片看大圖：這一筆的幾張左右換，下面是描述（沒有「跳到這則留言」）
+function openUploadPhotos(batch, index) {
+    viewerPhotos.value = batch.photos.map((p) => ({
+        url: p.url,
+        label: shiftText(batch),
+        meta: `${p.author_name || '未命名'} ${timeText(p)}`,
+        kinds: p.kinds,
+        text: p.note,
+        textKind: 'note',
+        raw: p,
+    }));
+    viewerIndex.value = index;
+}
 
 const isMine = (m) => !!props.me && m.created_by === props.me;
 
@@ -501,7 +586,6 @@ function upsert(message) {
 
 function removeLocal(id) {
     messages.value = messages.value.filter((m) => m.id !== id);
-    wall.value = wall.value.filter((p) => p.comment_id !== id);
 }
 
 async function scrollToBottom(el = listEl) {
@@ -527,11 +611,6 @@ async function receiveMessage(message) {
     else newCount.value++;
 }
 
-// 切到照片頁：跟留言一樣從最下面（這一班）開始看
-watch(view, (v) => {
-    if (v === 'photos') scrollToBottom(wallEl);
-});
-
 // 一批班：第一次是這一班加前面 4 班，之後從已載入最舊的那班再往前 5 班；
 // until（{ date, shift }）是要跳到很早的某則留言時，一次載到那一班
 async function loadPage(until = null) {
@@ -547,25 +626,31 @@ async function loadPage(until = null) {
         ...data.shifts.filter((s) => !loadedShifts.value.some((l) => l.date === s.date && l.shift === s.shift))
     );
     data.messages.forEach(upsert);
+    uploads.value.push(...(data.uploads || []).filter((p) => !uploads.value.some((u) => u.id === p.id)));
     hasMore.value = data.hasMore;
     cursor.value = data.cursor;
 }
 
-async function loadWall() {
-    try {
-        wall.value = await $fetch('/api/shift/comments/photos', { params: channelParams(), cache: 'no-store' });
-    } catch (e) {
-        console.error('loadWall error:', e);
-    }
-}
+// 已經載入的頻道（貓、分頁、正在看的班）。關掉面板時資料與即時同步都留著（一直在收別人的留言），
+// 同一個頻道再打開（例如從照片庫切回來）直接顯示、停在原本的位置；換了頻道才從頭載入
+let loadedKey = null;
+const channelKey = () => `${props.cat?.cat_id}-${props.tab}-${props.current.recordId}`;
 
 async function open() {
-    resetSearch();
-    view.value = 'messages';
-    editingId.value = null;
     viewerIndex.value = null;
-    await reloadChannel();
-    subscribe();
+    if (loadedKey !== channelKey()) {
+        loadedKey = channelKey();
+        resetSearch();
+        view.value = 'messages';
+        editingId.value = null;
+        await reloadChannel();
+        subscribe();
+    }
+    if (props.jump) {
+        const { commentId, date, shift } = props.jump;
+        emit('jumped');
+        await jumpTo(commentId, { date, shift });
+    }
 }
 
 // 從頭載入這個頻道（打開時、斷線重連或從背景回來時）
@@ -573,7 +658,7 @@ async function reloadChannel() {
     messages.value = [];
     newCount.value = 0;
     loadedShifts.value = [];
-    wall.value = [];
+    uploads.value = [];
     cursor.value = null;
     hasMore.value = false;
     loading.value = true;
@@ -586,7 +671,6 @@ async function reloadChannel() {
         loading.value = false;
     }
     scrollToBottom();
-    loadWall();
 }
 
 // 捲到最上面就載入更早的一頁，載入後畫面停在原本看的那則
@@ -611,7 +695,7 @@ function onScroll() {
     if (newCount.value && nearBottom()) newCount.value = 0;
 }
 
-// 照片牆、搜尋結果 → 那則留言：切回留言，還沒載入到就一次往前載到那則的班（target 是 { date, shift }），
+// 照片庫的留言照片、搜尋結果 → 那則留言：切回留言，還沒載入到就一次往前載到那則的班（target 是 { date, shift }），
 // 捲過去閃一下
 async function jumpTo(commentId, target = null) {
     viewerIndex.value = null;
@@ -652,21 +736,18 @@ const searchKey = () => `${props.cat?.cat_id}-${props.tab}`;
 const lastJumpId = ref(null);
 const seenIds = ref([]);
 
-let viewBeforeSearch = 'messages';
-
 function toggleSearch() {
     if (view.value === 'search') leaveSearch();
     else openSearch();
 }
 
-// 收起搜尋：回到打開搜尋前的那一頁（留言或照片），搜尋的字與看過的標記都留著
+// 收起搜尋：回到留言，搜尋的字與看過的標記都留著
 function leaveSearch() {
     clearTimeout(searchTimer);
-    view.value = viewBeforeSearch;
+    view.value = 'messages';
 }
 
 async function openSearch() {
-    viewBeforeSearch = view.value === 'photos' ? 'photos' : 'messages';
     view.value = 'search';
     lastJumpId.value = lastJump.get(searchKey()) ?? null;
     seenIds.value = seenJumps.get(searchKey()) || [];
@@ -697,10 +778,10 @@ function resetSearch(forget = false) {
     searchResults.value = [];
 }
 
-// 「取消」：連記住的字一起清掉，回到原本那一頁
+// 「取消」：連記住的字一起清掉，回到留言
 function closeSearch() {
     resetSearch(true);
-    view.value = viewBeforeSearch;
+    view.value = 'messages';
 }
 
 // 打字停 0.3 秒才搜；比較慢回來的舊結果不蓋掉新的
@@ -769,13 +850,17 @@ function addFiles(event, list, room) {
     const files = [...(event.target.files || [])].filter((f) => f.type.startsWith('image/'));
     event.target.value = '';
     if (files.length > room) ElMessage.warning(`一則留言最多 ${MAX_PHOTOS} 張照片`);
-    for (const file of files.slice(0, Math.max(0, room))) {
-        list.value.push({
-            key: `${Date.now()}-${Math.random()}`,
-            file,
-            previewUrl: URL.createObjectURL(file),
-            progress: 0,
-        });
+    const added = files.slice(0, Math.max(0, room)).map((file) => ({
+        key: `${Date.now()}-${Math.random()}`,
+        file,
+        previewUrl: URL.createObjectURL(file),
+        progress: 0,
+        kinds: [],
+    }));
+    list.value.push(...added);
+    // 剛加的第一張先選起來，下面直接出現類型可以點
+    if (added.length && hasKinds.value && !list.value.some((a) => a.key === pickingKey.value)) {
+        pickingKey.value = added[0].key;
     }
 }
 
@@ -809,6 +894,7 @@ async function uploadAttachment(a, slot) {
     return {
         path: slot.path,
         thumbPath: slot.thumbPath,
+        kinds: [...a.kinds],
         width: full.width,
         height: full.height,
         size: full.blob.size,
@@ -854,7 +940,6 @@ async function send() {
         draftForNext.value = false;
         clearAttachments();
         scrollToBottom();
-        if (photos.length) loadWall();
     } catch (e) {
         console.error('send comment error:', e);
         ElMessage.error('留言送出失敗，請再按一次送出');
@@ -916,7 +1001,6 @@ async function saveEdit(m) {
         upsert(updated);
         broadcastMessage({ action: 'upsert', message: updated });
         emit('updated', updated);
-        if (photos.length || editRemovedIds.value.length) loadWall();
         clearEditAttachments();
         editingId.value = null;
     } catch (e) {
@@ -954,43 +1038,32 @@ const { join: joinBroadcast, send: sendBroadcast } = useBroadcast();
 let realtime = null;
 const channelTopic = () => `comments:${props.cat.cat_id}:${props.tab}`;
 
-let wallTimer = null;
-function reloadWallSoon() {
-    clearTimeout(wallTimer);
-    wallTimer = setTimeout(loadWall, 800);
-}
-
 function broadcastMessage(payload) {
     sendBroadcast(channelTopic(), 'message', JSON.parse(JSON.stringify(payload)), realtime);
 }
 
+// 收到一則留言的變更（別人廣播來的，或值班頁在照片庫刪了留言照片時直接呼叫）
+function applyMessage({ action, message, id }) {
+    if (action === 'delete') removeLocal(id);
+    else receiveMessage(message);
+}
+defineExpose({ applyMessage });
+
 function subscribe() {
     unsubscribe();
-    realtime = joinBroadcast(
-        channelTopic(),
-        {
-            message: ({ action, message, id }) => {
-                if (action === 'delete') removeLocal(id);
-                else receiveMessage(message);
-                // 照片頁也可能變了（新增、拿掉照片）
-                reloadWallSoon();
-            },
-        },
-        { onResync: reloadChannel }
-    );
+    realtime = joinBroadcast(channelTopic(), { message: applyMessage }, { onResync: reloadChannel });
 }
 
 function unsubscribe() {
     realtime?.leave();
     realtime = null;
-    clearTimeout(wallTimer);
 }
 
+// 打開就載入（同一個頻道不重載）。關掉不停即時同步，換頻道時 subscribe 會先離開舊的、離開頁面時才全部停
 watch(
     () => [props.modelValue, props.cat?.cat_id, props.tab, props.current.recordId],
     ([isOpen, catId]) => {
         if (isOpen && catId) open();
-        else unsubscribe();
     }
 );
 
@@ -1060,7 +1133,9 @@ button {
 }
 
 // 🔍：搜尋中是藍底圓圈（跟「留言／照片」選中的樣子同一個顏色）
+// 標題列右邊依序：🔍、留言／照片、✕；🔍 靠右推過去
 .ch-search-btn {
+    margin-left: auto;
     width: 30px;
     height: 30px;
     padding: 0;
@@ -1168,30 +1243,6 @@ button {
 }
 
 // 留言／照片切換
-.ch-switch {
-    display: flex;
-    gap: 2px;
-    margin-left: auto;
-    padding: 2px;
-    border-radius: 14px;
-    background: #f2f0ee;
-
-    button {
-        padding: 2px 10px;
-        border: none;
-        border-radius: 12px;
-        background: none;
-        color: #657181;
-        font-size: 12px;
-        line-height: 20px;
-
-        &.on {
-            background: #6da2c2;
-            color: #fff;
-        }
-    }
-}
-
 .ch-list {
     flex: 1;
     overflow-y: auto;
@@ -1310,6 +1361,24 @@ button {
     }
 }
 
+// 上傳紀錄：頭像位置是灰色 🗂️，一行灰字，照片放在淡灰框裡（看得出是系統訊息，不是有人留言）
+.ch-avatar-system {
+    background: #f0eeec;
+    font-size: 16px;
+}
+
+.ch-upload {
+    .ch-upload-text {
+        color: #8e8783;
+    }
+
+    .ch-upload-box {
+        padding: 6px;
+        border-radius: 12px;
+        background: #f7f6f5;
+    }
+}
+
 .ch-main {
     display: flex;
     flex-direction: column;
@@ -1420,6 +1489,7 @@ button {
 
     // 點了看大圖的縮圖（button）：全域 button 樣式要蓋回來
     .ch-photo {
+        position: relative;
         width: 88px;
         height: 88px;
         padding: 0;
@@ -1433,6 +1503,19 @@ button {
             width: 100%;
             height: 100%;
             object-fit: cover;
+        }
+
+        // 剩食、貓砂：左上角暖橘膠囊（跟照片庫一樣）
+        .ch-photo-kind {
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            padding: 0 7px;
+            border-radius: 10px;
+            background: #e08a3c;
+            color: #fff;
+            font-size: 11px;
+            line-height: 20px;
         }
     }
 }
@@ -1483,29 +1566,6 @@ button {
     &:disabled {
         cursor: default;
         opacity: 0.5;
-    }
-}
-
-// 照片牆：一排三張的正方形縮圖
-.ch-wall {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 4px;
-
-    .ch-wall-item {
-        aspect-ratio: 1;
-        padding: 0;
-        border: none;
-        border-radius: 4px;
-        background: #f2f0ee;
-        overflow: hidden;
-
-        img {
-            display: block;
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
     }
 }
 
@@ -1589,6 +1649,56 @@ button {
         }
     }
 
+    // 選中要選類型的那張：藍框
+    .ch-attachment.picking .ch-attachment-pick {
+        outline: 2px solid #6da2c2;
+        outline-offset: -2px;
+    }
+
+    // 整張縮圖是按鈕（點了選類型）。全域 button 樣式要蓋回來
+    .ch-attachment-pick {
+        position: relative;
+        display: block;
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        border: none;
+        border-radius: 6px;
+        background: none;
+        overflow: hidden;
+        cursor: pointer;
+
+        &:disabled {
+            cursor: default;
+        }
+    }
+
+    // 左下角：選了的類型（剛到要拍的那組暖橘、其他藍），沒選是灰色「＋類型」
+    .ch-attachment-kind {
+        position: absolute;
+        bottom: 3px;
+        left: 3px;
+        max-width: calc(100% - 6px);
+        padding: 0 5px;
+        overflow: hidden;
+        border-radius: 8px;
+        background: #6da2c2;
+        color: #fff;
+        font-size: 10px;
+        line-height: 16px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &.observe {
+            background: #e08a3c;
+        }
+
+        &.empty {
+            background: rgba(0, 0, 0, 0.5);
+        }
+    }
+
     .ch-attachment-remove {
         position: absolute;
         top: 2px;
@@ -1602,6 +1712,20 @@ button {
         color: #fff;
         font-size: 11px;
         line-height: 20px;
+    }
+}
+
+// 附照片時，選中那張的類型：一排膠囊（components/PhotoKindPicker.vue），前面寫第幾張
+.ch-kind-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    margin-bottom: 8px;
+
+    .ch-kind-label {
+        font-size: 12px;
+        color: #8e8783;
     }
 }
 

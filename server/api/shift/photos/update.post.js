@@ -1,9 +1,10 @@
 import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 import { cleanNote } from '~/server/utils/photos'
-import { isPhotoKinds, sortPhotoKinds } from '~/composables/photoKinds'
+import { isPhotoKindChoice, sortPhotoKinds } from '~/composables/photoKinds'
 
-// 改照片描述或類型：只有上傳的人或管理員可以。有帶的欄位才改；描述空字串＝清掉，類型空陣列＝不分類
+// 改照片描述或類型：只有上傳的人或管理員可以。有帶的欄位才改；描述空字串＝清掉，類型空陣列＝不分類。
+// 留言附的照片只能改類型（描述就是那則留言）
 export default defineEventHandler(async (event) => {
     const userId = await requireUser(event)
 
@@ -11,7 +12,7 @@ export default defineEventHandler(async (event) => {
     const { id } = body
     const { data: photo, error } = await supabase
         .from('shift_photos')
-        .select('id, tab, note, kinds, uploaded_by')
+        .select('id, tab, comment_id, note, kinds, uploaded_by')
         .eq('id', id)
         .maybeSingle()
     if (error) throw createError({ statusCode: 500, message: error.message })
@@ -28,10 +29,14 @@ export default defineEventHandler(async (event) => {
         }
     }
 
+    if (photo.comment_id && 'note' in body) {
+        throw createError({ statusCode: 400, message: '留言的照片只能改類型' })
+    }
+
     const changes = {}
     if ('note' in body) changes.note = cleanNote(body.note)
     if ('kinds' in body) {
-        if (!isPhotoKinds(photo.tab, body.kinds)) {
+        if (!isPhotoKindChoice(photo.tab, body.kinds)) {
             throw createError({ statusCode: 400, message: '資料格式錯誤' })
         }
         changes.kinds = sortPhotoKinds(photo.tab, body.kinds)

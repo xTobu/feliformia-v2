@@ -96,6 +96,12 @@ form {
   transform: translateY(1px);
 }
 
+/* 抽屜之間直接切換（值班記錄表的留言頻道 ↔ 照片庫）：那一下不要滑下滑上的動畫。
+   el-drawer 的滑動、遮罩淡入淡出都用 --el-transition-duration，設成 0 就是瞬間 */
+.drawer-instant {
+  --el-transition-duration: 0s;
+}
+
 .el-select__wrapper {
   height: 45px;
 }

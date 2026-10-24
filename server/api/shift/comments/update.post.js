@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
         throw createError({ statusCode: 400, message: '資料格式錯誤' })
     }
     const comment = await requireOwnComment(commentId, userId)
-    const newPhotos = cleanCommentPhotos(photos, comment.shift_id, comment.cat_id)
+    const newPhotos = cleanCommentPhotos(photos, comment.shift_id, comment.cat_id, comment.tab)
     if (!newPhotos) throw createError({ statusCode: 400, message: '資料格式錯誤' })
 
     const { data: current, error: photoError } = await supabase
