@@ -154,11 +154,11 @@ votes.data
 | `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／隨餐藥／補充品／放風／其他，`content`。只有隨餐藥（拌進飯裡、放碗就可以走）要在備餐分頁打勾。放風＝長期固定放風，內容選填：期間內的班，沒人按過放風的貓 `released` 照它打開（見下方「shifts 的快照與局部更新」） |
 | `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用，`treatment`、`reason`；都在醫療分頁打勾 |
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
-| `observe_items` | `/admin/observe` | 觀察：剛到班時要拍的照片（`category` 拍剩食／拍貓砂／其他，`content` 是說明，「其他」必填）。**不用打勾**：這一班、這隻貓的觀察照片（照片庫裡的，含留言附的）有對應類型（拍剩食→剩食、拍貓砂→貓砂、其他→任何一張）就算拍了，規則在 `composables/observeItems.js`，前端與 server 共用 |
+| `observe_items` | `/admin/observe` | 觀察管理：值班時要拍的照片，分兩組——剛到（拍剩食／拍貓砂，觀察分頁提醒）、離開（拍留餐，備餐分頁提醒）。`content` 是說明（選填）。**不用打勾**：這一班、這隻貓、那個分頁的照片（照片庫裡的，含留言附的）有對應類型（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）就算拍了，規則在 `composables/observeItems.js`，前端與 server 共用 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `profiles.avatar_path` | `/settings` | 志工頭像（`avatars` bucket，公開）。上傳走 `/api/avatar/upload-url` → 直傳 Storage → `/api/avatar/save`（換頭像會刪舊檔）；留言頻道會顯示 |
 | `shift_comments` | `/shift` | 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看（`/api/shift/comments/channel`，班與班之間有分隔線）。可以附照片、只附照片時 `body` 是空字串。作者本人可以編輯（`edited_at`，顯示「已編輯」）與刪除（附的照片連 Storage 檔一起刪）。可以搜尋（`/api/shift/comments/search`，這個頻道所有的班）。`for_next` 是「重要」：整則橘底；下一班的 💬 旁有橘點（只維持一班） |
-| `shift_photos` | `/shift` | 每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kinds` 是類型（選填、可多選，照片庫上方可以篩選；觀察 剩食／貓砂｜嘔吐／血跡／毛髮皮膚／其他（剩食、貓砂是「剛到要拍」那兩種，畫面上自成一組），醫療 傷口／皮膚／眼耳口鼻／治療／用藥／其他，備餐 乾乾／罐罐／加藥／其他，清單在 `composables/photoKinds.js`）。🗂️ 照片庫 = 這隻貓、這個分頁的所有照片：`comment_id` 空的是直接上傳的，有值的是留言附的（縮圖標 💬，看大圖顯示那則留言、可以跳過去；只能改類型，描述與刪除跟著留言）。照班分組往上看：打開時這一班加前 4 班，往上再 5 班（`/api/shift/photos/history`）。留言頻道標題列的「留言／照片」切換到照片庫。`upload_batch` 是同一次上傳共用的 id：留言頻道裡把直接上傳的照片顯示成「誰上傳了幾張照片到照片庫」，一次上傳一筆（沒有 id 的舊照片一張一筆） |
+| `shift_photos` | `/shift` | 每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kinds` 是類型（選填、可多選，照片庫上方可以篩選；觀察 剩食／貓砂｜嘔吐／血跡／毛髮皮膚／其他（剩食、貓砂是「剛到要拍」那兩種，畫面上自成一組），醫療 傷口／皮膚／眼耳口鼻／治療／用藥／其他，備餐 留餐｜乾乾／罐罐／加藥／其他（留餐是「離開要拍」的那種），清單在 `composables/photoKinds.js`）。🗂️ 照片庫 = 這隻貓、這個分頁的所有照片：`comment_id` 空的是直接上傳的，有值的是留言附的（縮圖標 💬，看大圖顯示那則留言、可以跳過去；只能改類型，描述與刪除跟著留言）。照班分組往上看：打開時這一班加前 4 班，往上再 5 班（`/api/shift/photos/history`）。留言頻道標題列的「留言／照片」切換到照片庫。`upload_batch` 是同一次上傳共用的 id：留言頻道裡把直接上傳的照片顯示成「誰上傳了幾張照片到照片庫」，一次上傳一筆（沒有 id 的舊照片一張一筆） |
 
 **三張事項表的共同欄位**：`shift` 是 `morning` / `night` / `both`，`start_date` / `end_date` 空代表不限。
 三張都有對象：`cat_id` 有值 = 那隻貓；`location` 有值 = 那個位置；兩個都空 = 全員

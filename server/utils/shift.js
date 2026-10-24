@@ -1,5 +1,5 @@
 import { supabase } from '~/server/utils/supabase'
-import { isObserveDone } from '~/composables/observeItems'
+import { isObserveDone, observeTabOf } from '~/composables/observeItems'
 
 // 新版值班記錄表（shifts）的快照。cats / tasks 存成「以 id 為 key 的物件」而不是陣列，
 // 前端只送改動的那一格（/api/shift/update → shift_apply），兩人同時改不同的貓或項目不會互蓋。
@@ -402,7 +402,7 @@ const PLACE_ORDER = ['貓屋', '客廳', '房間', '倉庫', '隔離區']
 const placeRank = (location) => (!location ? 0 : 1 + PLACE_ORDER.indexOf(location))
 const bySort = (a, b) => (a.sort ?? MAX) - (b.sort ?? MAX)
 
-// photos：那一班的觀察照片牆照片（cat_id、kinds），用來判斷觀察項目拍了沒
+// photos：那一班觀察、備餐分頁的照片（cat_id、tab、kinds），用來判斷觀察管理的項目拍了沒
 export function unfinishedOf(record, photos = []) {
     const cats = Object.values(record?.cats || {}).sort(bySort)
     const tasks = Object.entries(record?.tasks || {}).map(([key, t]) => ({ key, ...t }))
@@ -432,15 +432,16 @@ export function unfinishedOf(record, photos = []) {
     const requiredCats = (t) => t.cat_id
     const requiredRow = (t) => ({ content: t.content })
 
-    // 觀察：貓自己的，加上全員／位置的（併進適用的每一隻貓）；沒拍對應的照片就算沒完成
+    // 觀察管理：貓自己的，加上全員／位置的（併進適用的每一隻貓）；那個分頁沒拍對應的照片就算沒完成。
+    // 剛到的列在觀察分頁，離開的（拍留餐）列在備餐分頁
     const observeTasks = tasks.filter((t) => t.kind === 'observe')
-    const arrive = cats.flatMap((cat) => {
-        const catPhotos = photos.filter((p) => p.cat_id === cat.cat_id)
+    const observeUndone = (tab) => cats.flatMap((cat) => {
+        const catPhotos = photos.filter((p) => p.cat_id === cat.cat_id && (p.tab ?? 'arrive') === tab)
         return [
             ...Object.values(cat.observe || {}).sort(bySort),
             ...observeTasks.filter((t) => !t.location || t.location === cat.location).sort(bySort),
         ]
-            .filter((i) => !isObserveDone(i.category, catPhotos))
+            .filter((i) => observeTabOf(i.category) === tab && !isObserveDone(i.category, catPhotos))
             // 有說明就寫說明、類別當小標籤；沒說明就直接寫類別（「拍貓砂」）
             .map((i) => ({
                 key: `observe:${cat.cat_id}:${i.id}`,
@@ -451,12 +452,13 @@ export function unfinishedOf(record, photos = []) {
     })
 
     return {
-        arrive,
+        arrive: observeUndone('arrive'),
         care: [...fromCats('medical', () => true, medicalRow), ...fromTasks('medical', () => true, medicalRow)],
         // 全員／位置的隨餐藥：那個位置當時沒有貓就不算（備餐分頁也不會顯示）
         meal: [
             ...fromCats('diet', isMealMed, dietRow),
             ...fromTasks('diet', (t) => isMealMed(t) && cats.some((c) => !t.location || t.location === c.location), dietRow),
+            ...observeUndone('meal'),
         ],
         // 收尾：指定貓的跟著貓的順序排在前面，其他照全員 → 貓屋 → 位置
         required: [

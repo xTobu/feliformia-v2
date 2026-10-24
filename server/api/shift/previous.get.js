@@ -26,12 +26,12 @@ export default defineEventHandler(async (event) => {
         return { ...prev, exists: false, reports: {}, released: [], unfinished: {} }
     }
 
-    // 觀察項目拍了沒，看那一班的觀察照片（直接上傳的與留言附的都算）
+    // 觀察管理的項目拍了沒，看那一班觀察、備餐分頁的照片（直接上傳的與留言附的都算）
     const { data: photos, error: photoError } = await supabase
         .from('shift_photos')
-        .select('cat_id, kinds')
+        .select('cat_id, tab, kinds')
         .eq('shift_id', data.id)
-        .eq('tab', 'arrive')
+        .in('tab', ['arrive', 'meal'])
     if (photoError) throw createError({ statusCode: 500, message: photoError.message })
 
     return {

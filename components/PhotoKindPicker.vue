@@ -1,7 +1,7 @@
 <template>
     <!-- 照片類型膠囊（可多選，點一下選、再點一下取消）。分頁的類型分小組時（composables/photoKinds.js），
          組與組之間一條直線；擇一的那組（觀察的剩食、貓砂）點另一個就換過去。放在 flex 換行的容器裡（.pp-kinds、.pd-filter）。
-         allLabel 有給就在最前面多一顆「全部」（篩選用：什麼都沒選＝全部，篩選不受擇一限制） -->
+         allLabel 有給就在最前面多一顆「全部」（篩選用：什麼都沒選＝全部，篩選不受擇一限制），後面也一條直線 -->
     <button
         v-if="allLabel"
         type="button"
@@ -13,6 +13,8 @@
     >
         {{ allLabel }}
     </button>
+    <!-- 「全部」跟類型之間也隔一條線 -->
+    <span v-if="allLabel && groups.length" class="kind-sep" aria-hidden="true"></span>
     <template v-for="(group, index) in groups" :key="index">
         <span v-if="index > 0" class="kind-sep" aria-hidden="true"></span>
         <button

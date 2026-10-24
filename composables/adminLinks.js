@@ -15,7 +15,7 @@ export const ADMIN_SECTIONS = [
         title: '新版值班記錄（試行中）',
         links: [
             { to: '/admin/cat-profiles', icon: '🐱', title: '貓咪管理', desc: '新增、編輯、排序貓咪與位置' },
-            { to: '/admin/observe', icon: '📷', title: '觀察管理', desc: '剛到班時要拍的剩食、貓砂' },
+            { to: '/admin/observe', icon: '📷', title: '觀察管理', desc: '剛到要拍的剩食、貓砂，離開要拍的留餐' },
             { to: '/admin/medical', icon: '💊', title: '醫療管理', desc: '吃藥、醫療與其他照護事項' },
             { to: '/admin/diet', icon: '🍚', title: '飲食管理', desc: '乾乾、罐罐、補充與其他飲食' },
             { to: '/admin/required', icon: '✅', title: '值班收尾管理', desc: '每一班離開前一定要勾完的事' },

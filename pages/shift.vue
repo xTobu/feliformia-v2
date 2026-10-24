@@ -95,6 +95,20 @@
                                     photoCount(cat.cat_id, 'arrive')
                                 }}</span>
                             </button>
+                            <!-- 觀察管理：剛到班要拍的照片，接在 🗂️ 後面（上一班放風的卡片右上角已經有標籤，膠囊改放下一行）。
+                                 拍了對應類型就變藍 ✓。沒拍的點了直接跳出拍照／相簿選單，選完進預覽、類型已經選好；拍好的點了打開照片牆 -->
+                            <template v-if="!cat.prev_released">
+                            <button
+                                v-for="row in observeRowsOf(cat)"
+                                :key="row.key"
+                                type="button"
+                                class="observe-chip"
+                                :class="{ done: row.done }"
+                                @click="openObservePhotos(cat, row)"
+                            >
+                                <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                            </button>
+                            </template>
                         </div>
                         <!-- 上一班放風：貓沒關籠，吃多少、排泄看不出來，預設不登記，卡片只剩一行；
                              有看到的話按「仍要登記」展開。已經填過的會自動展開 -->
@@ -115,20 +129,23 @@
                                 }}
                             </button>
                         </div>
-                        <!-- 觀察管理：剛到班要拍的照片。拍了對應類型就變藍 ✓。
-                             沒拍的點了直接跳出拍照／相簿選單，選完進預覽、類型已經選好；拍好的點了打開照片牆 -->
-                        <div v-if="observeRowsOf(cat).length" class="observe-row">
-                            <span class="observe-label">📷 剛到要拍</span>
-                            <button
-                                v-for="row in observeRowsOf(cat)"
-                                :key="row.key"
-                                type="button"
-                                class="observe-chip"
-                                :class="{ done: row.done }"
-                                @click="openObservePhotos(cat, row)"
-                            >
-                                {{ row.done ? `✓ ${row.label}` : `${row.label} ›` }}
-                            </button>
+                        <!-- 名字那列下面：上一班放風的卡片放剛到要拍的膠囊；有寫說明的一行小字 -->
+                        <div
+                            v-if="(cat.prev_released && observeRowsOf(cat).length) || observeRowsOf(cat).some((r) => r.note)"
+                            class="observe-row"
+                        >
+                            <div v-if="cat.prev_released" class="observe-chips">
+                                <button
+                                    v-for="row in observeRowsOf(cat)"
+                                    :key="row.key"
+                                    type="button"
+                                    class="observe-chip"
+                                    :class="{ done: row.done }"
+                                    @click="openObservePhotos(cat, row)"
+                                >
+                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                                </button>
+                            </div>
                             <div v-for="row in observeRowsOf(cat).filter((r) => r.note)" :key="`${row.key}-note`" class="observe-note">
                                 {{ row.label }}：{{ row.note }}
                             </div>
@@ -276,19 +293,17 @@
                                             <font v-if="item.end_date" class="f_grey"
                                                 >療程至 {{ $dayjs(item.end_date).format('MM/DD') }}</font
                                             >
-                                            <font v-if="item.done && item.done_by" class="done-by"
-                                                >✓ {{ doneLabel(item) }}</font
-                                            >
                                         </div>
                                         <div class="done">
                                             <el-checkbox
+                                                class="task-check"
                                                 v-model="item.done"
                                                 :disabled="isDisabled"
                                                 @change="
                                                     stampDone(item);
                                                     saveCatItem(entry.cat, 'medical', item);
                                                 "
-                                                >完成</el-checkbox
+                                                ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
                                             >
                                         </div>
                                     </div>
@@ -319,19 +334,17 @@
                                         <div class="txt">
                                             <font class="treatment">{{ item.treatment }}</font>
                                             <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
-                                            <font v-if="item.done && item.done_by" class="done-by"
-                                                >✓ {{ doneLabel(item) }}</font
-                                            >
                                         </div>
                                         <div class="done">
                                             <el-checkbox
+                                                class="task-check"
                                                 v-model="item.done"
                                                 :disabled="isDisabled"
                                                 @change="
                                                     stampDone(item);
                                                     saveTask(item);
                                                 "
-                                                >完成</el-checkbox
+                                                ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
                                             >
                                         </div>
                                     </div>
@@ -381,6 +394,19 @@
                                     photoCount(entry.cat.cat_id, 'meal')
                                 }}</span>
                             </button>
+                            <!-- 觀察管理的「離開要拍」（拍留餐…）：只有一個就接在 🗂️ 後面；兩個以上放下一行（右邊有放風鈕） -->
+                            <template v-if="observeRowsOf(entry.cat, 'meal').length === 1">
+                                <button
+                                    v-for="row in observeRowsOf(entry.cat, 'meal')"
+                                    :key="row.key"
+                                    type="button"
+                                    class="observe-chip"
+                                    :class="{ done: row.done }"
+                                    @click="openObservePhotos(entry.cat, row)"
+                                >
+                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                                </button>
+                            </template>
                         </div>
                         <!-- 放風：離開時沒有關籠，下一班在觀察分頁會看到。貓名同一列最右邊的膠囊按鈕 -->
                         <button
@@ -393,6 +419,34 @@
                         >
                             {{ entry.cat.released ? '✓ 放風' : '放風' }}
                         </button>
+                        <!-- 名字那列下面：離開要拍兩個以上的膠囊；有寫說明的一行小字 -->
+                        <div
+                            v-if="
+                                observeRowsOf(entry.cat, 'meal').length > 1 ||
+                                observeRowsOf(entry.cat, 'meal').some((r) => r.note)
+                            "
+                            class="observe-row"
+                        >
+                            <div v-if="observeRowsOf(entry.cat, 'meal').length > 1" class="observe-chips">
+                                <button
+                                    v-for="row in observeRowsOf(entry.cat, 'meal')"
+                                    :key="row.key"
+                                    type="button"
+                                    class="observe-chip"
+                                    :class="{ done: row.done }"
+                                    @click="openObservePhotos(entry.cat, row)"
+                                >
+                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                                </button>
+                            </div>
+                            <div
+                                v-for="row in observeRowsOf(entry.cat, 'meal').filter((r) => r.note)"
+                                :key="`${row.key}-note`"
+                                class="observe-note"
+                            >
+                                {{ row.label }}：{{ row.note }}
+                            </div>
+                        </div>
                         <div class="detail">
                             <!-- 乾乾、罐罐、補充品、放風、其他：只看不打勾；隨餐藥（拌進飯裡）要打勾。
                                  同類別併成一列，全員／位置的標出來源 -->
@@ -417,17 +471,14 @@
                                                 <el-checkbox
                                                     v-if="isMealMed(it.item)"
                                                     v-model="it.item.done"
-                                                    class="diet-done"
+                                                    class="task-check diet-done"
                                                     :disabled="isDisabled"
                                                     @change="
                                                         stampDone(it.item);
                                                         saveDietItem(entry.cat, it);
                                                     "
-                                                    >完成</el-checkbox
+                                                    ><span v-if="it.item.done && it.item.done_by" class="done-by">{{ doneLabel(it.item) }}</span></el-checkbox
                                                 >
-                                            </div>
-                                            <div v-if="it.item.done && it.item.done_by" class="diet-note done-by">
-                                                ✓ {{ doneLabel(it.item) }}
                                             </div>
                                             <div v-if="it.item.end_date" class="diet-note">
                                                 至 {{ $dayjs(it.item.end_date).format('MM/DD') }}
@@ -488,19 +539,17 @@
                                 <div class="d_flex">
                                     <div class="txt">
                                         <font class="treatment">{{ item.content }}</font>
-                                        <font v-if="item.done && item.done_by" class="done-by"
-                                            >✓ {{ doneLabel(item) }}</font
-                                        >
                                     </div>
                                     <div class="done">
                                         <el-checkbox
+                                            class="task-check"
                                             v-model="item.done"
                                             :disabled="isDisabled"
                                             @change="
                                                 stampDone(item);
                                                 saveTask(item);
                                             "
-                                            >完成</el-checkbox
+                                            ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
                                         >
                                     </div>
                                 </div>
@@ -528,19 +577,17 @@
                                 <div class="d_flex">
                                     <div class="txt">
                                         <font class="treatment">{{ item.content }}</font>
-                                        <font v-if="item.done && item.done_by" class="done-by"
-                                            >✓ {{ doneLabel(item) }}</font
-                                        >
                                     </div>
                                     <div class="done">
                                         <el-checkbox
+                                            class="task-check"
                                             v-model="item.done"
                                             :disabled="isDisabled"
                                             @change="
                                                 stampDone(item);
                                                 saveTask(item);
                                             "
-                                            >完成</el-checkbox
+                                            ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
                                         >
                                     </div>
                                 </div>
@@ -2208,37 +2255,42 @@ function groupByCategory(list) {
 
 const appliesTo = (task, cat) => !task.location || task.location === cat.location;
 
-// 觀察：剛到要拍的照片（觀察管理）。貓自己的＋全員／位置的；這一班的觀察照片有對應類型就算拍了
+// 觀察管理：值班時要拍的照片。剛到的（拍剩食、拍貓砂）在觀察分頁，離開的（拍留餐）在備餐分頁。
+// 貓自己的＋全員／位置的；這一班、那個分頁的照片有對應類型就算拍了
 // label 是膠囊上的字（拍剩食→剩食；其他→說明），note 是另外寫在下面的說明
 const observeRows = computed(() => {
     const tasks = formData.value.tasks.filter((t) => t.kind === 'observe');
     const map = new Map();
     for (const cat of formData.value.cats) {
-        const catPhotos = photosOf(cat.cat_id, 'arrive');
         const items = [
             ...cat.observe.map((i) => ({ key: `observe-${i.id}`, item: i })),
             ...tasks.filter((t) => appliesTo(t, cat)).map((t) => ({ key: t.key, item: t })),
         ];
         map.set(
             cat.cat_id,
-            items.map(({ key, item }) => ({
-                key,
-                category: item.category,
-                label: item.category === '其他' ? item.content || '其他' : item.category.replace(/^拍/, ''),
-                note: item.category === '其他' ? '' : item.content,
-                done: isObserveDone(item.category, catPhotos),
-            }))
+            items.map(({ key, item }) => {
+                const tab = observeTabOf(item.category);
+                const other = isObserveOther(item.category);
+                return {
+                    key,
+                    tab,
+                    category: item.category,
+                    label: other ? item.content || '其他' : item.category.replace(/^拍/, ''),
+                    note: other ? '' : item.content,
+                    done: isObserveDone(item.category, photosOf(cat.cat_id, tab)),
+                };
+            })
         );
     }
     return map;
 });
-const observeRowsOf = (cat) => observeRows.value.get(cat.cat_id) || [];
+const observeRowsOf = (cat, tab = 'arrive') => (observeRows.value.get(cat.cat_id) || []).filter((r) => r.tab === tab);
 
-// 點膠囊：打開這隻貓的觀察照片牆。還沒拍的直接跳出拍照／相簿選單（要在點擊當下觸發），
-// 選好的照片類型預先選好（拍剩食→剩食、拍貓砂→貓砂）
+// 點膠囊：打開這隻貓那個分頁（觀察或備餐）的照片庫。還沒拍的直接跳出拍照／相簿選單（要在點擊當下觸發），
+// 選好的照片類型預先選好（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）
 const observeInput = ref(null);
 function openObservePhotos(cat, row) {
-    openPhotos(cat, 'arrive');
+    openPhotos(cat, row.tab);
     const kind = OBSERVE_PHOTO_KIND[row.category];
     photoPresetKinds.value = kind ? [kind] : [];
     photoTarget.value = null; // 傳到這一班
@@ -2316,8 +2368,9 @@ const tabList = computed(() => {
         {
             value: 'meal',
             label: '備餐',
-            // 只有隨餐藥要打勾；全員／位置的整班一份，只算一次
+            // 隨餐藥要打勾（全員／位置的整班一份，只算一次）＋離開要拍、還沒拍的照片
             remaining:
+                formData.value.cats.reduce((sum, c) => sum + undone(observeRowsOf(c, 'meal')), 0) +
                 formData.value.cats.reduce((sum, c) => sum + undone(c.diet.filter(isMealMed)), 0) +
                 undone(
                     formData.value.tasks.filter(
@@ -3261,17 +3314,17 @@ watch(
         border-top-color: #d8d4d1;
     }
 
-    // 貓名 14px，行高經實測補償，見 pages/medicine.vue
-    padding-top: 35px;
+    // 標題列：貓名是貼頂的分頁標籤（高 34px），💬、🗂️、拍照膠囊、右邊的放風都跟它垂直置中；下面留 10px 再接內容
+    padding-top: 44px;
 
-    // 不用 overflow: hidden 裁圓角：觀察分頁的滑桿標籤（吃光）會超出右邊被切掉。
-    // 改成標籤自己配合卡片的圓角（6px 減掉 1px 邊框）
+    // 貓名 14px，行高經實測補償，見 pages/medicine.vue。
+    // 不用 overflow: hidden 裁圓角（觀察分頁的滑桿標籤會超出右邊被切掉），改成標籤自己配合卡片的圓角（6px 減掉 1px 邊框）
     .name {
-        height: 26px;
+        height: 34px;
         font-size: 14px;
-        line-height: 25px;
+        line-height: 33px;
         border-top-left-radius: 5px;
-        border-bottom-right-radius: 6px;
+        border-bottom-right-radius: 8px;
     }
 
     // 觀察分頁滑桿最右邊的「吃光」會超出滑桿半個字寬，右邊留跟 /regular 一樣的 25px
@@ -3280,11 +3333,29 @@ watch(
     }
 
 
-    // 誰、幾點勾的
-    .detail .txt font.done-by {
-        padding-top: 0;
-        font-size: 12px;
-        color: #6da2c2;
+    // 打勾的事項（醫療、隨餐藥、收尾）：沒勾的框淡紅色（還沒做）；勾了框下面淺灰小字寫誰、幾點（補充資訊，不加 ✓）
+    // 框在卡片最右邊，字比框寬：跟框靠右對齊，才不會超出卡片
+    .task-check {
+        display: inline-flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 4px;
+        height: auto;
+
+        // 全域與打勾欄的樣式會把字放大、加粗，這裡蓋回補充資訊的小字
+        :deep(.el-checkbox__label) {
+            padding-left: 0 !important;
+            font-size: 11px !important;
+            font-weight: 400 !important;
+            line-height: 1.2;
+            color: #a8a29e !important;
+            white-space: nowrap;
+        }
+
+        &:not(.is-checked) :deep(.el-checkbox__inner) {
+            border-color: #e9a3a3;
+            background: #fdf0f0;
+        }
     }
 
     // 收尾清單沒有左邊的類別欄，文字從頭開始
@@ -3292,10 +3363,11 @@ watch(
         width: 100%;
     }
 
-    // 上一班放風：標籤與「仍要登記」在卡片右上角，跟貓名同一列
+    // 上一班放風：標籤與「仍要登記」在卡片右上角，跟貓名標籤垂直置中（34px 高的標籤裡，26px 往下 4px）
     .released-row {
         position: absolute;
         top: 4px;
+        height: 26px;
         right: 8px;
         display: flex;
         align-items: center;
@@ -3315,7 +3387,7 @@ watch(
         cursor: pointer;
     }
 
-    // 收起時只剩標題列那一行
+    // 收起時只剩標題列那一行（貓名標籤的高度）
     &.compact {
         min-height: 34px;
         padding-top: 0;
@@ -3373,11 +3445,6 @@ watch(
         margin-left: 4px;
     }
 
-    .diet-note.done-by {
-        font-size: 12px;
-        color: #6da2c2;
-    }
-
     .diet-note {
         padding: 0 5px 2px;
         font-size: 14px;
@@ -3400,9 +3467,10 @@ watch(
 
     // 放風：膠囊按鈕，沒勾是外框、勾了變實心。離上緣、右緣留白，不擠著卡片邊框。
     // 全域有 button { width: 100%; border; padding } 的樣式，這裡每一項都要蓋回來
+    // 跟貓名標籤（34px）垂直置中
     .release-pill {
         position: absolute;
-        top: 7px;
+        top: 4px;
         right: 10px;
         width: auto;
         height: 26px;
@@ -3437,14 +3505,16 @@ watch(
             align-items: baseline;
 
             > div {
+                // 打勾欄：勾了之後下面寫誰、幾點，寬度跟著字（至少 40px）
                 .done {
-                    width: 40px;
+                    flex-shrink: 0;
+                    min-width: 40px;
                     > label {
                         display: flex;
                         flex-direction: column;
                         justify-content: center;
-                        align-items: center;
-                        gap: 6px;
+                        align-items: flex-end;
+                        gap: 4px;
                         :deep(.el-checkbox__label) {
                             padding-left: 0 !important;
                             font-size: 12px;
@@ -3648,47 +3718,55 @@ watch(
 
 // ---- 留言 ----
 // 貓名標籤原本是 absolute 定位在卡片左上角；包一層讓 💬 能接在名字後面
-// 觀察分頁「📷 剛到要拍」：名字下面一列膠囊。沒拍的橘色、拍了藍色 ✓；有說明的另起一行小字
-.observe-row {
-    display: flex;
-    flex-wrap: wrap;
+// 觀察管理的膠囊（剛到要拍、離開要拍）：前面一個圖示（沒拍是相機、拍了是勾），
+// 沒拍的淡紅色（還沒做，跟沒勾的框同一個顏色）、拍了藍色。
+// 在貓名那列 🗂️ 後面時跟貓名標籤、💬、🗂️ 垂直置中（標題列 align-items: center）
+.observe-chip {
+    display: inline-flex;
+    flex-shrink: 0;
     align-items: center;
-    gap: 6px;
+    gap: 3px;
+    width: auto;
+    height: 22px;
+    margin: 0 0 0 2px;
+    padding: 0 9px 0 7px;
+    border: 1px solid #e9a3a3;
+    border-radius: 11px;
+    background: #fdf0f0;
+    box-sizing: border-box;
+    color: #c0504d;
+    font-size: 12px;
+    line-height: 20px;
+
+
+    white-space: nowrap;
+    cursor: pointer;
+
+    &.done {
+        border-color: #9cc3d9;
+        background: #eef5f9;
+        color: #4a85a8;
+    }
+}
+
+// 有寫說明的：名字那列下面一行一個（拍剩食：看罐罐剩多少）
+.observe-row {
     width: 100%;
-    margin: 2px 0 10px 10px;
+    margin: 0 0 8px 10px;
 
     // 收起的卡片（上一班放風）沒有上方留白，自己避開貓名那一列
     .compact > & {
-        margin-top: 34px;
+        margin-top: 40px;
     }
 
-    .observe-label {
-        font-size: 13px;
-        color: #8e8783;
-    }
-
-    .observe-chip {
-        width: auto;
-        height: 26px;
-        margin: 0;
-        padding: 0 10px;
-        border: 1px solid #e8a15c;
-        border-radius: 13px;
-        background: #fdf1e6;
-        color: #b5602a;
-        font-size: 13px;
-        line-height: 24px;
-        cursor: pointer;
-
-        &.done {
-            border-color: #9cc3d9;
-            background: #eef5f9;
-            color: #4a85a8;
-        }
+    .observe-chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        margin-bottom: 4px;
     }
 
     .observe-note {
-        width: 100%;
         font-size: 12px;
         color: #8e8783;
         line-height: 1.4;
@@ -3696,12 +3774,13 @@ watch(
     }
 }
 
+// 標題列：貓名標籤貼左上角，💬、🗂️、拍照膠囊跟它垂直置中
 .record_item .name-wrap {
     position: absolute;
     top: 0;
     left: 0;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: 4px;
 
     .name {

@@ -24,11 +24,11 @@
                 </div>
                 <div
                     class="cat-group"
-                    :class="{ bare: group.items.length === 0 && !emptyGroupText }"
+                    :class="{ bare: groupCount(group) === 0 && !emptyGroupText }"
                 >
                     <div class="cat-group-header">
                         <span class="cat-name">{{ group.name }}</span>
-                        <span class="cat-count">{{ group.items.length }} 項</span>
+                        <span class="cat-count">{{ groupCount(group) }} 項</span>
                         <el-button
                             class="add-btn"
                             @click="openDialog(null, group.target)"
@@ -38,96 +38,67 @@
                     </div>
 
                     <div
-                        v-if="group.items.length === 0 && emptyGroupText"
+                        v-if="groupCount(group) === 0 && emptyGroupText"
                         class="cat-empty"
                     >
                         {{ emptyGroupText }}
                     </div>
 
-                    <!-- 沒設 group，sortable 不會讓項目跨卡片拖；要換對象請在編輯視窗改 -->
-                    <draggable
-                        v-model="group.items"
-                        item-key="id"
-                        handle=".item-handle"
-                        ghost-class="ghost"
-                        @end="onDragEnd"
-                    >
-                        <template #item="{ element: item }">
-                            <div
-                                class="cat-item"
-                                :class="{
-                                    ended: periodStatus(item) === 'ended',
-                                }"
-                            >
-                                <span class="drag-handle item-handle">⋮⋮</span>
-                                <div class="cat-item-body">
-                                    <div class="tags">
-                                        <el-tag
-                                            v-if="categories.length > 1"
-                                            type="info"
-                                            effect="plain"
-                                            size="small"
+                    <!-- 照班別分區（早班、晚班、早晚班），一區一個小標題（班別是有顏色的小色塊）；觀察管理多一層：
+                         「剛到」「離開」大標只出現一次，下面再分班別。各區自己拖，不會跨區、跨卡片
+                         （沒設 group，sortable 不會讓項目跨清單拖；要換班別、類別請在編輯視窗改） -->
+                    <template v-for="(section, sectionIndex) in group.sections" :key="section.key">
+                        <div
+                            v-if="section.prefix && section.prefix !== group.sections[sectionIndex - 1]?.prefix"
+                            class="item-block"
+                        >
+                            {{ section.prefix }}
+                        </div>
+                        <div class="item-section" :class="{ nested: section.prefix }">
+                            <span class="shift-tag" :class="section.shift">{{ section.shiftLabel }}</span>
+                        </div>
+                        <draggable
+                            v-model="section.items"
+                            item-key="id"
+                            handle=".item-handle"
+                            ghost-class="ghost"
+                            @end="onDragEnd"
+                        >
+                            <!-- 一項一列：標題、下面一行小字（類別、說明、期間），右邊編輯／刪除小圖示（班別看所在的分區）。
+                                 （vuedraggable 的 #item 只能有一個根元素，註解放在外面） -->
+                            <template #item="{ element: item }">
+                                <div class="cat-item" :class="{ ended: periodStatus(item) === 'ended' }">
+                                    <span class="drag-handle item-handle">⋮⋮</span>
+                                    <div class="cat-item-body">
+                                        <div class="item-main">{{ itemTitle(item) }}</div>
+                                        <div
+                                            v-if="itemMeta(item) || ['ended', 'upcoming'].includes(periodStatus(item))"
+                                            class="item-meta"
                                         >
-                                            {{ item.category }}
-                                        </el-tag>
-                                        <el-tag
-                                            :type="shiftTagType(item.shift)"
-                                            size="small"
-                                        >
-                                            {{ shiftLabel(item.shift) }}
-                                        </el-tag>
-                                        <el-tag
-                                            v-if="item.start_date || item.end_date"
-                                            type="info"
-                                            size="small"
-                                        >
-                                            {{ periodLabel(item) }}
-                                        </el-tag>
-                                        <el-tag
-                                            v-if="periodStatus(item) === 'ended'"
-                                            type="info"
-                                            effect="dark"
-                                            size="small"
-                                        >
-                                            已結束
-                                        </el-tag>
-                                        <el-tag
-                                            v-else-if="
-                                                periodStatus(item) === 'upcoming'
-                                            "
-                                            type="success"
-                                            effect="plain"
-                                            size="small"
-                                        >
-                                            未開始
-                                        </el-tag>
-                                    </div>
-                                    <!-- 不用圖示，靠字級與深淺分出內容與原因（內容不加粗，免得跟貓名搶） -->
-                                    <div v-if="item[mainField.key]" class="item-main">
-                                        {{ item[mainField.key] }}
-                                    </div>
-                                    <div
-                                        v-if="reasonField && item[reasonField.key]"
-                                        class="item-reason"
-                                    >
-                                        {{ item[reasonField.key] }}
+                                            <span v-if="periodStatus(item) === 'ended'" class="status ended">已結束</span>
+                                            <span v-else-if="periodStatus(item) === 'upcoming'" class="status upcoming"
+                                                >未開始</span
+                                            >
+                                            {{ itemMeta(item) }}
+                                        </div>
                                     </div>
                                     <div class="item-actions">
-                                        <el-button @click="openDialog(item)">
-                                            編輯
-                                        </el-button>
-                                        <el-button
-                                            type="danger"
-                                            plain
+                                        <button type="button" class="icon-btn" aria-label="編輯" @click="openDialog(item)">
+                                            <Icon icon="mdi:pencil-outline" width="16" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            class="icon-btn danger"
+                                            aria-label="刪除"
                                             @click="confirmDelete(item, group.name)"
                                         >
-                                            刪除
-                                        </el-button>
+                                            <Icon icon="mdi:trash-can-outline" width="16" />
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
-                        </template>
-                    </draggable>
+                            </template>
+                        </draggable>
+                    </template>
                 </div>
             </template>
         </div>
@@ -173,12 +144,20 @@
                 </el-form-item>
                 <el-form-item v-if="categories.length" label="類別">
                     <el-select v-model="form.category">
-                        <el-option
-                            v-for="c in categories"
-                            :key="c"
-                            :label="c"
-                            :value="c"
-                        />
+                        <!-- 有分組（觀察管理的剛到／離開）就分組列出 -->
+                        <template v-if="categoryGroups.length">
+                            <el-option-group v-for="g in categoryGroups" :key="g.label" :label="g.label">
+                                <el-option v-for="c in g.categories" :key="c" :label="c" :value="c" />
+                            </el-option-group>
+                        </template>
+                        <template v-else>
+                            <el-option
+                                v-for="c in categories"
+                                :key="c"
+                                :label="c"
+                                :value="c"
+                            />
+                        </template>
                     </el-select>
                 </el-form-item>
                 <el-form-item :label="mainOptional ? `${mainField.label}（選填）` : mainField.label">
@@ -242,6 +221,7 @@
 // 共同欄位：cat_id / location（兩個都空 = 全員）、shift、start_date / end_date、sort_order。
 // 收尾的 location 多一個「貓屋」（withHouse）
 import draggable from 'vuedraggable';
+import { Icon } from '@iconify/vue';
 import Swal from 'sweetalert2';
 
 const props = defineProps({
@@ -249,6 +229,10 @@ const props = defineProps({
     table: { type: String, required: true },
     // 類別清單（資料庫 check 擋的那幾個），第一個是新增時的預設值；空陣列 = 這張表沒有類別
     categories: { type: Array, default: () => [] },
+    // 類別分組（選填）：[{ label, categories }]，下拉選單與清單都分組顯示（觀察管理：剛到／離開）
+    categoryGroups: { type: Array, default: () => [] },
+    // 清單每一項的標題用類別（觀察管理：拍剩食），說明放到下面那行小字；預設標題是主要內容
+    titleIsCategory: { type: Boolean, default: false },
     // 主要內容欄位：{ key, label, placeholder[, optionalFor, optionalPlaceholder] }
     //   optionalFor：這些類別可以不填內容（存空字串），例如飲食的「放風」
     mainField: { type: Object, required: true },
@@ -301,25 +285,6 @@ function parseTarget(target) {
     if (target.startsWith('cat:')) return { cat_id: Number(target.slice(4)), location: null };
     if (target.startsWith('loc:')) return { cat_id: null, location: target.slice(4) };
     return { cat_id: null, location: null };
-}
-
-// 班別標籤
-function shiftLabel(shift) {
-    const labels = {
-        both: '早晚班',
-        morning: '早班',
-        night: '晚班',
-    };
-    return labels[shift] || shift;
-}
-
-function shiftTagType(shift) {
-    const types = {
-        both: 'warning',
-        morning: 'success',
-        night: 'primary',
-    };
-    return types[shift] || '';
 }
 
 // 期間：NULL 代表該端不限
@@ -407,14 +372,58 @@ function buildGroups(list) {
     const others = [...otherGroups.values()].sort(
         (a, b) => placeRank(a.location) - placeRank(b.location)
     );
-    return [...catGroups.entries()].map(([key, g]) => ({ key, ...g })).concat(
-        others.map((g) => ({ key: g.target, ...g }))
-    );
+    return [...catGroups.entries()]
+        .map(([key, g]) => ({ key, ...g }))
+        .concat(others.map((g) => ({ key: g.target, ...g })))
+        .map(({ items: groupItems, ...g }) => ({ ...g, sections: sectionsOf(groupItems) }));
+}
+
+// 一張卡片裡的項目分區：早班、晚班、早晚班各一區（有類別分組的再分，小標題是「剛到 [早班]」），
+// 空的區不顯示；每一區自己拖，拖曳只會在同一區
+const SHIFTS = [
+    { value: 'morning', label: '早班' },
+    { value: 'night', label: '晚班' },
+    { value: 'both', label: '早晚班' },
+];
+function sectionsOf(list) {
+    const categoryGroups = props.categoryGroups.length ? props.categoryGroups : [{ label: '', categories: null }];
+    return categoryGroups
+        .flatMap((g) =>
+            SHIFTS.map((shift) => ({
+                key: `${g.label}-${shift.value}`,
+                prefix: g.label,
+                shift: shift.value,
+                shiftLabel: shift.label,
+                items: list.filter(
+                    (i) => i.shift === shift.value && (!g.categories || g.categories.includes(i.category))
+                ),
+            }))
+        )
+        .filter((section) => section.items.length);
+}
+
+
+const groupCount = (group) => group.sections.reduce((sum, section) => sum + section.items.length, 0);
+
+// 每一項的標題與下面那行小字
+function itemTitle(item) {
+    if (props.titleIsCategory) return item.category;
+    return item[props.mainField.key] || item.category || '';
+}
+
+function itemMeta(item) {
+    const parts = [
+        !props.titleIsCategory && props.categories.length > 1 ? item.category : '',
+        props.titleIsCategory ? item[props.mainField.key] : '',
+        props.reasonField ? item[props.reasonField.key] : '',
+        item.start_date || item.end_date ? periodLabel(item) : '',
+    ];
+    return parts.filter(Boolean).join(' · ');
 }
 
 // 拖拉結束後，照畫面順序（貓 → 項目）重編 sort_order，只更新有變的
 async function onDragEnd() {
-    const flat = groups.value.flatMap((group) => group.items);
+    const flat = groups.value.flatMap((group) => group.sections.flatMap((section) => section.items));
     const updates = flat
         .map((item, index) => ({ item, sort_order: index + 1 }))
         .filter(({ item, sort_order }) => item.sort_order !== sort_order)
@@ -655,8 +664,10 @@ onMounted(loadAll);
     }
 }
 
+// 一項一列：⋮⋮、標題＋一行小字、右邊編輯／刪除
 .cat-item {
     display: flex;
+    align-items: center;
     gap: 6px;
     padding: 10px 8px;
     background: #fff;
@@ -669,9 +680,57 @@ onMounted(loadAll);
     &.ended {
         background: #fafafa;
 
-        .item-main,
-        .item-reason {
+        .item-main {
             color: #aaa;
+        }
+    }
+}
+
+// 觀察管理的「剛到」「離開」大標：比班別小標深一點、字大一點
+.item-block {
+    padding: 6px 12px;
+    border-top: 1px solid #e3e0dd;
+    background: #f2f0ee;
+    color: #4a4542;
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+}
+
+// 分區小標題：淡灰底，班別是有顏色的小色塊（早班綠、晚班藍、早晚班橘）；在「剛到／離開」底下的往右縮一點
+.item-section {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-top: 1px solid #eee;
+    background: #fafafa;
+    color: #8e8783;
+    font-size: 12px;
+    text-align: left;
+
+    &.nested {
+        padding-left: 24px;
+    }
+
+    .shift-tag {
+        padding: 0 6px;
+        border-radius: 4px;
+        line-height: 18px;
+
+        &.morning {
+            background: #e3f1dc;
+            color: #4f7243;
+        }
+
+        &.night {
+            background: #e1ecf4;
+            color: #3f7ea3;
+        }
+
+        &.both {
+            background: #fdf1e6;
+            color: #b5602a;
         }
     }
 }
@@ -702,15 +761,9 @@ onMounted(loadAll);
 .cat-item-body {
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: 2px;
     flex: 1;
     min-width: 0;
-
-    .tags {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-    }
 
     .item-main {
         font-size: 15px;
@@ -719,21 +772,48 @@ onMounted(loadAll);
         white-space: pre-line;
     }
 
-    // #767676 在白底剛好 4.5:1（WCAG AA），#aaa 只有 2.3:1，手機上看不清
-    .item-reason {
-        font-size: 14px;
+    // 補充：類別、說明或原因、班別、期間（#767676 在白底剛好 4.5:1，手機上看得清）
+    .item-meta {
+        font-size: 12px;
         color: #767676;
         line-height: 1.4;
+
+        .status {
+            margin-right: 4px;
+
+            &.ended {
+                color: #aaa;
+            }
+
+            &.upcoming {
+                color: #67c23a;
+            }
+        }
     }
+}
 
-    .item-actions {
+// 右邊的編輯／刪除：小方塊圖示。全域 button 樣式要蓋回來
+.item-actions {
+    display: flex;
+    flex-shrink: 0;
+    gap: 6px;
+
+    .icon-btn {
         display: flex;
-        justify-content: flex-end;
-        gap: 6px;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        margin: 0;
+        padding: 0;
+        border: 1px solid #e3e3e3;
+        border-radius: 8px;
+        background: #fff;
+        color: #657181;
+        cursor: pointer;
 
-        // 拿掉 Element 相鄰按鈕的 12px margin-left，間距只看 gap
-        :deep(.el-button + .el-button) {
-            margin-left: 0;
+        &.danger {
+            color: #d66;
         }
     }
 }
