@@ -169,6 +169,16 @@ votes.data
 **權限**：全部登入可讀。`cat_profiles` 與三張事項表只有管理員能寫（`is_admin()`，前端後台直接寫）；
 `shifts`、`shift_comments` 沒有寫入 policy，一律走 `server/api/shift/*`（service key）。
 
+### 貓咪檔案
+
+`/cats` 是貓咪清單（照位置分區，已領養的另一區），`/cats/[id]` 是一隻貓的檔案；值班記錄表卡片上的貓名也連過去。志工都能看，管理員的「編輯」開 `/admin/cat-profiles?edit=<id>`。
+頁首是頭像、名字、位置，`notes` 一行一點。兩個分頁：
+
+- **時間軸**（`/api/cats/timeline`）：一班一段、新的在前，一次往前 7 天，可以篩日期與「觀察／留言／照片」。
+  觀察（飲食如廁）取那一班快照裡這隻貓的 `intake`（還是到班時的樣子就是「沒有登記」，上一班放風的是「前班放風」），文字在 `composables/intake.js`；
+  留言是四個分頁的（標是哪個分頁），照片是照片庫的（直接上傳的與留言附的）。這隻貓不在快照裡、也沒留言照片的班不顯示。
+- **小檔案**：入住日、估計年齡（`composables/catTraits.js`）、性別毛長花色、結紮。驅蟲、預防針、就醫紀錄還沒有資料表，先顯示「尚無紀錄」。
+
 ### shifts 的快照與局部更新
 
 `cats`、`tasks` 是這一班的快照，存成**以 id 為 key 的物件**（不是陣列），結構見 `server/utils/shift.js` 開頭。

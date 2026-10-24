@@ -69,7 +69,7 @@
                         :class="{ compact: !showIntake(cat) }"
                     >
                         <div class="name-wrap">
-                            <div class="name">{{ cat.name }}</div>
+                            <NuxtLink :to="`/cats/${cat.cat_id}`" class="name">{{ cat.name }}</NuxtLink>
                             <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
                             <button
                                 type="button"
@@ -251,7 +251,7 @@
                             class="d_flex record_item"
                         >
                             <div class="name-wrap">
-                                <div class="name">{{ entry.cat.name }}</div>
+                                <NuxtLink :to="`/cats/${entry.cat.cat_id}`" class="name">{{ entry.cat.name }}</NuxtLink>
                                 <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
                                 <button
                                     type="button"
@@ -368,7 +368,7 @@
                         class="d_flex record_item"
                     >
                         <div class="name-wrap">
-                            <div class="name">{{ entry.cat.name }}</div>
+                            <NuxtLink :to="`/cats/${entry.cat.cat_id}`" class="name">{{ entry.cat.name }}</NuxtLink>
                             <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
                             <button
                                 type="button"
@@ -514,7 +514,7 @@
                         class="d_flex record_item required-card"
                     >
                         <div class="name-wrap">
-                            <div class="name">{{ entry.cat.name }}</div>
+                            <NuxtLink :to="`/cats/${entry.cat.cat_id}`" class="name">{{ entry.cat.name }}</NuxtLink>
                             <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
                             <button
                                 type="button"
@@ -1289,13 +1289,7 @@ const lastSavedAt = ref(null);
 const tab = ref('arrive');
 const prev = ref({ date: null, shift: null, reports: {}, released: [], unfinished: {} });
 
-const marks = {
-    0: '沒吃',
-    25: '吃1/3',
-    50: '吃1/2',
-    75: '吃2/3',
-    100: '吃光',
-};
+const marks = INTAKE_MARKS; // composables/intake.js（貓咪檔案的時間軸也用）
 
 const formData = ref({
     recordId: '',
@@ -3319,10 +3313,14 @@ watch(
 
     // 貓名 14px，行高經實測補償，見 pages/medicine.vue。
     // 不用 overflow: hidden 裁圓角（觀察分頁的滑桿標籤會超出右邊被切掉），改成標籤自己配合卡片的圓角（6px 減掉 1px 邊框）
+    // 點貓名到貓咪檔案（/cats/[id]）：蓋掉全域 a 的底線、紅字、下邊距
     .name {
         height: 34px;
+        margin-bottom: 0;
+        color: #fff;
         font-size: 14px;
         line-height: 33px;
+        text-decoration: none;
         border-top-left-radius: 5px;
         border-bottom-right-radius: 8px;
     }

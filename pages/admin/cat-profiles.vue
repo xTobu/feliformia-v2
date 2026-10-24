@@ -181,7 +181,7 @@
 <script setup>
 // 新版貓咪管理（cat_profiles）。跟舊的 /admin/cats（cats 表）並行，兩邊資料不互通
 import draggable from 'vuedraggable';
-import { CAT_SEXES, COAT_COLORS, COAT_LENGTHS } from '~/composables/catTraits';
+import { CAT_SEXES, COAT_COLORS, COAT_LENGTHS, catAgeText } from '~/composables/catTraits';
 import Swal from 'sweetalert2';
 
 definePageMeta({
@@ -194,7 +194,6 @@ useHead({
 });
 
 const supabase = useSupabaseClient();
-const { $dayjs } = useNuxtApp();
 const { avatarUrl, uploadAvatar, removeAvatar } = useAvatar();
 
 // 狀態
@@ -236,14 +235,7 @@ function toggleCoat(coat) {
 }
 
 // 預估生日 → 大約幾歲（滿 1 歲顯示幾歲幾個月，不滿 1 歲顯示幾個月）
-const ageText = computed(() => {
-    if (!form.value.birth_month) return '';
-    const months = $dayjs().diff($dayjs(form.value.birth_month), 'month');
-    if (months < 0) return '';
-    const years = Math.floor(months / 12);
-    const rest = months % 12;
-    return years ? `約 ${years} 歲${rest ? ` ${rest} 個月` : ''}` : `約 ${rest} 個月`;
-});
+const ageText = computed(() => catAgeText(form.value.birth_month));
 
 // ---- 頭像：在視窗裡先選好、裁好，按儲存才上傳 ----
 const avatarInput = ref(null);
@@ -458,8 +450,12 @@ async function confirmDelete(cat) {
 }
 
 // 初始化
-onMounted(() => {
-    loadCats();
+// 從貓咪檔案的「編輯」過來（?edit=<id>）：載完直接打開那隻貓
+const route = useRoute();
+onMounted(async () => {
+    await loadCats();
+    const cat = cats.value.find((c) => String(c.id) === String(route.query.edit));
+    if (cat) openDialog(cat);
 });
 </script>
 
