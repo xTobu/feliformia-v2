@@ -162,12 +162,15 @@
                             <div v-if="entry.showDuty" class="tl-sec">
                                 <div class="tl-sec-title">
                                     <Icon icon="mdi:clipboard-check-outline" width="15" />值班
-                                    <span v-if="entry.showReleased" class="tl-flag">放風</span>
+                                    <!-- 前班放風：剛到時貓已經在外面（上一班離開時放的）；本班放風：這班走的時候放出來。
+                                         開著「值班」就兩個都顯示：有放綠底、沒放灰色虛線框 -->
+                                    <template v-if="entry.showIntake">
+                                        <span class="tl-flag" :class="{ off: !entry.prev_released }">前班放風</span>
+                                        <span class="tl-flag" :class="{ off: !entry.released }">本班放風</span>
+                                    </template>
                                 </div>
                                 <template v-if="entry.showIntake">
-                                    <div v-if="entry.prev_released" class="tl-intake">
-                                        <span class="tl-flag">前班放風</span><span class="tl-muted">不用登記</span>
-                                    </div>
+                                    <div v-if="entry.prev_released" class="tl-intake tl-muted">不用登記</div>
                                     <div v-else-if="!isIntakeTouched(entry.intake)" class="tl-intake tl-muted">沒有登記</div>
                                     <!-- 飲食如廁四格：乾乾、罐罐、尿、便，位置固定 -->
                                     <div v-else class="tl-cells">
@@ -349,13 +352,22 @@
             </template>
 
             <PhotoViewer v-model:index="viewerIndex" :photos="viewerPhotos" @close="viewerIndex = null" />
+
+            <!-- 管理員編輯（同後台貓咪管理的視窗）：留在這頁，存好重抓頁首與小檔案；刪掉回清單 -->
+            <CatProfileDialog
+                v-if="isAdmin && cat"
+                v-model="editing"
+                :cat="cat"
+                @saved="loadCat"
+                @deleted="onDeleted"
+            />
         </div>
     </ClientOnly>
 </template>
 
 <script setup>
 // 新版貓咪檔案（cat_profiles）：頁首＋日常（每一班分三區：值班〔飲食如廁、放風、未完成〕、四個分頁的留言、照片）＋小檔案。
-// 志工都能看；管理員的「編輯」到 /admin/cat-profiles 打開這隻貓
+// 志工都能看；管理員的「編輯」在這頁打開編輯視窗（components/CatProfileDialog.vue）
 import { Icon } from '@iconify/vue';
 import { catAgeText, stayText } from '~/composables/catTraits';
 import { intakeCells, isIntakeTouched } from '~/composables/intake';
@@ -419,8 +431,19 @@ const timeOf = (at, date) => {
     return t.format(t.format('YYYY-MM-DD') === date ? 'HH:mm' : 'MM/DD HH:mm');
 };
 
+const editing = ref(false);
 function editCat() {
-    navigateTo(`/admin/cat-profiles?edit=${cat.value.id}`);
+    editing.value = true;
+}
+
+// 刪掉了：回貓咪清單（這頁已經沒東西了，不留在上一頁紀錄裡）
+function onDeleted() {
+    navigateTo('/cats', { replace: true });
+}
+
+async function loadCat() {
+    const { data } = await supabase.from('cat_profiles').select('*').eq('id', catId.value).maybeSingle();
+    cat.value = data;
 }
 
 // ---- 日常 ----
@@ -514,7 +537,6 @@ const visibleEntries = computed(() =>
             return {
                 ...e,
                 showIntake: duty,
-                showReleased: duty && e.released,
                 unfinished,
                 showDuty: duty || unfinished.length > 0,
                 comments: show.comments ? e.comments.filter((m) => tabShown(m.tab)) : [],
@@ -615,10 +637,9 @@ function openCommentPhotos(entry, message, index) {
 }
 
 onMounted(async () => {
-    const { data } = await supabase.from('cat_profiles').select('*').eq('id', catId.value).maybeSingle();
-    cat.value = data;
+    await loadCat();
     loadingCat.value = false;
-    if (data) loadMore();
+    if (cat.value) loadMore();
 });
 </script>
 
@@ -1103,14 +1124,22 @@ onMounted(async () => {
     color: #a8a29e;
 }
 
-// 前班放風、放風
+// 前班放風、本班放風（放在「值班」小標後面）
 .tl-flag {
     padding: 0 8px;
+    border: 1px solid #e9f3ec;
     border-radius: 999px;
     background: #e9f3ec;
     color: #4f8a5e;
     font-size: 12px;
-    line-height: 20px;
+    line-height: 18px;
+
+    // 沒放風：灰色虛線框
+    &.off {
+        border: 1px dashed #e4e0dd;
+        background: #fff;
+        color: #c9c3be;
+    }
 }
 
 // 未完成：淡橘底（提醒，跟沒便等異常的紅色分開），一項一行，前面標是哪個分頁

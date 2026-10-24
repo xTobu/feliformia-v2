@@ -32,6 +32,14 @@ export function previousShiftOf(date, shift) {
     return { date: d.toISOString().slice(0, 10), shift: 'night' }
 }
 
+// 早班的下一班是同一天晚班；晚班的下一班是隔天早班
+export function nextShiftOf(date, shift) {
+    if (shift === 'morning') return { date, shift: 'night' }
+    const d = new Date(`${date}T00:00:00Z`)
+    d.setUTCDate(d.getUTCDate() + 1)
+    return { date: d.toISOString().slice(0, 10), shift: 'morning' }
+}
+
 // 班的 key（date-shift），比大小用 shiftOrder
 export const shiftKey = ({ date, shift }) => `${date}-${shift}`
 // 可以排序的版本：同一天早班在前
