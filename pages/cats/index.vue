@@ -1,7 +1,7 @@
 <template>
     <ClientOnly>
         <div id="cats-index">
-            <h1>貓咪檔案</h1>
+            <h1>貓咪列表</h1>
 
             <el-input v-model="keyword" placeholder="搜尋名字或暱稱" clearable class="search" />
 
@@ -36,7 +36,7 @@ definePageMeta({
 });
 
 useHead({
-    title: '貓咪檔案',
+    title: '貓咪列表',
 });
 
 const supabase = useSupabaseClient();

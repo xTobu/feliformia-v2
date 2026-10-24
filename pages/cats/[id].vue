@@ -1,7 +1,7 @@
 <template>
     <ClientOnly>
         <div id="cat-profile">
-            <NuxtLink to="/cats" class="back-link">← 貓咪檔案</NuxtLink>
+            <NuxtLink to="/cats" class="back-link">← 貓咪列表</NuxtLink>
 
             <div v-if="!cat" class="state">{{ loadingCat ? '載入中...' : '找不到這隻貓' }}</div>
             <template v-else>
@@ -50,6 +50,10 @@
 
                 <!-- ========== 日常：一班一段，新的在前，往下滑載入更早的 ========== -->
                 <div v-show="view === 'timeline'">
+                    <!-- 別人新留言進來、但那一班不在畫面上：頂端提示，點了捲過去 -->
+                    <button v-if="newComments.length" type="button" class="tl-new-pill" @click="goToNewComment">
+                        <Icon icon="mdi:arrow-up" width="15" />{{ newComments.length }} 則新留言
+                    </button>
                     <!-- 篩選：左邊日期鈕（點開有快選與自訂日期），右邊篩選鈕（點開列出內容，與留言、照片要看哪些分頁，可複選） -->
                     <div class="tl-filters">
                         <div class="tl-filter-row">
@@ -214,7 +218,8 @@
                                             v-for="message in group.items"
                                             :key="message.id"
                                             class="tl-comment"
-                                            :class="{ important: message.for_next }"
+                                            :class="{ important: message.for_next, flash: flashIds.includes(message.id) }"
+                                            :data-comment-id="message.id"
                                         >
                                             <span
                                                 class="tl-author-avatar"
@@ -584,6 +589,43 @@ function fillViewport() {
     if (el.getBoundingClientRect().top < window.innerHeight + 200) loadMore();
 }
 
+// ---- 篩選與日期記在這台裝置（localStorage），每隻貓共用 ----
+// 快選（近 N 天）記成天數，下次打開照當天重算；自訂的起訖記原本的日期
+const storage = useLocalStorage();
+const FILTER_KEY = 'cat_profile_filters';
+
+function restoreFilters() {
+    const saved = storage.get(FILTER_KEY);
+    if (!saved || typeof saved !== 'object') return;
+    if (saved.quick && QUICK_RANGES.some((q) => q.days === saved.quick)) range.from = quickFrom(saved.quick);
+    else {
+        const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+        if (isDay(saved.from)) range.from = saved.from;
+        if (isDay(saved.to) && (!range.from || saved.to >= range.from)) range.to = saved.to;
+    }
+    // 開關：至少留一個開著（存壞了就用預設全開）
+    const restore = (target, values) => {
+        const keys = Object.keys(target);
+        if (!values || !keys.some((k) => values[k] !== false)) return;
+        for (const k of keys) target[k] = values[k] !== false;
+    };
+    restore(show, saved.show);
+    restore(tabsOn, saved.tabs);
+}
+
+function saveFilters() {
+    const quick = QUICK_RANGES.find((q) => q.days && quickActive(q.days))?.days;
+    storage.set(FILTER_KEY, {
+        ...(quick ? { quick } : { from: range.from, to: range.to }),
+        show: { ...show },
+        tabs: { ...tabsOn },
+    });
+}
+
+// 要在下面的 watch 之前還原，才不會多重載一次
+restoreFilters();
+watch([() => range.from, () => range.to, show, tabsOn], saveFilters, { deep: true });
+
 function resetTimeline() {
     generation += 1;
     entries.value = [];
@@ -607,6 +649,128 @@ watch(sentinel, (el) => {
     observer.observe(el);
 });
 onBeforeUnmount(() => observer?.disconnect());
+
+// ---- 即時（Broadcast，見 composables/useBroadcast.js）----
+// 留言：這隻貓四個分頁的留言頻道 comments:<貓>:<分頁>（留言板新增、編輯、刪除都會發）。
+// 值班與照片：進行中的班（今天的，最多兩班）的頻道 shift:<id>（打勾、登記、放風、照片庫）。
+// 收到就把那一天重抓（只抓一天，留言、照片、未完成一起對上）；斷線重連、從背景回來超過 30 秒就從頭重載
+const { join: joinBroadcast } = useBroadcast();
+const commentChannels = [];
+const shiftChannels = new Map(); // shift_id → 頻道
+
+const entryOrder = (e) => `${e.date}-${e.shift === 'night' ? 1 : 0}`;
+
+// 重抓某一天：換掉畫面上那天的班。比已載入最舊那天還早的不用管（往下滑到時自然會載）
+async function refreshDate(date) {
+    if ((range.from && date < range.from) || (range.to && date > range.to)) return;
+    const oldest = entries.value.at(-1)?.date;
+    if (hasMore.value && oldest && date < oldest) return;
+    const run = generation;
+    try {
+        const res = await $fetch('/api/cats/timeline', { query: { catId: catId.value, from: date, to: date } });
+        if (run !== generation) return;
+        entries.value = [...entries.value.filter((e) => e.date !== date), ...res.entries].sort((a, b) =>
+            entryOrder(b).localeCompare(entryOrder(a))
+        );
+    } catch (e) {
+        console.error('refresh cat timeline error:', e);
+    }
+}
+
+const dateOfShift = (shiftId) => entries.value.find((e) => e.shift_id === shiftId)?.date;
+const hasComment = (id) => entries.value.some((e) => e.comments.some((m) => m.id === id));
+
+async function onRemoteMessage({ action, message, id }) {
+    if (action === 'delete') {
+        const entry = entries.value.find((e) => e.comments.some((m) => m.id === id));
+        if (entry) await refreshDate(entry.date);
+        newComments.value = newComments.value.filter((x) => x !== id);
+        return;
+    }
+    if (!message?.date) return;
+    const isNew = !hasComment(message.id);
+    await refreshDate(message.date);
+    if (isNew && hasComment(message.id)) announceComment(message.id);
+}
+
+function joinCommentChannels() {
+    for (const tab of Object.keys(TAB_LABELS)) {
+        commentChannels.push(
+            joinBroadcast(`comments:${catId.value}:${tab}`, { message: onRemoteMessage }, { onResync: resetTimeline })
+        );
+    }
+}
+
+// 進行中的班一變（例如晚班開了），頻道跟著換
+const ongoingIds = computed(() => entries.value.filter((e) => e.ongoing).map((e) => e.shift_id));
+watch(ongoingIds, (ids) => {
+    for (const [id, channel] of shiftChannels) {
+        if (!ids.includes(id)) {
+            channel.leave();
+            shiftChannels.delete(id);
+        }
+    }
+    for (const id of ids) {
+        if (shiftChannels.has(id)) continue;
+        const refresh = () => {
+            const date = dateOfShift(id);
+            if (date) refreshDate(date);
+        };
+        shiftChannels.set(id, joinBroadcast(`shift:${id}`, { ops: refresh, comment: refresh, photo: refresh }));
+    }
+});
+
+onBeforeUnmount(() => {
+    commentChannels.forEach((c) => c.leave());
+    shiftChannels.forEach((c) => c.leave());
+});
+
+// ---- 新留言提示：看得到就閃一下；不在畫面上就累積到頂端的「↑ N 則新留言」 ----
+const flashIds = ref([]);
+const newComments = ref([]); // 還沒看到的新留言 id，新的在前
+
+const commentEl = (id) => document.querySelector(`[data-comment-id="${id}"]`);
+function inView(el) {
+    const rect = el.getBoundingClientRect();
+    return rect.top >= 0 && rect.bottom <= window.innerHeight;
+}
+
+function flash(id) {
+    flashIds.value = [...flashIds.value, id];
+    setTimeout(() => (flashIds.value = flashIds.value.filter((x) => x !== id)), 2000);
+}
+
+async function announceComment(id) {
+    await nextTick();
+    const el = commentEl(id);
+    if (!el) return; // 被篩選藏起來了
+    if (view.value === 'timeline' && inView(el)) flash(id);
+    else newComments.value = [id, ...newComments.value.filter((x) => x !== id)];
+}
+
+function goToNewComment() {
+    const id = newComments.value[0];
+    newComments.value = [];
+    const el = id && commentEl(id);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    // 等捲得差不多再閃，到的時候才看得到
+    setTimeout(() => flash(id), 400);
+}
+
+// 自己捲到了：從提示裡拿掉、閃一下
+function checkSeen() {
+    if (!newComments.value.length) return;
+    const seen = newComments.value.filter((id) => {
+        const el = commentEl(id);
+        return !el || inView(el);
+    });
+    if (!seen.length) return;
+    newComments.value = newComments.value.filter((id) => !seen.includes(id));
+    seen.forEach((id) => commentEl(id) && flash(id));
+}
+onMounted(() => window.addEventListener('scroll', checkSeen, { passive: true }));
+onBeforeUnmount(() => window.removeEventListener('scroll', checkSeen));
 
 // ---- 看大圖：照片區的照片，或一則留言附的照片，左右換 ----
 // viewer：{ entry, photos, comment（從留言打開的才有：那則留言；照片區的留言照片帶在 photo.comment） }
@@ -639,7 +803,9 @@ function openCommentPhotos(entry, message, index) {
 onMounted(async () => {
     await loadCat();
     loadingCat.value = false;
-    if (cat.value) loadMore();
+    if (!cat.value) return;
+    loadMore();
+    joinCommentChannels();
 });
 </script>
 
@@ -1205,6 +1371,35 @@ onMounted(async () => {
     display: flex;
     align-items: flex-start;
     gap: 8px;
+    margin: 0 -6px;
+    padding: 2px 6px;
+    border-radius: 8px;
+    transition: background-color 0.4s;
+
+    // 別人剛留的：底色閃一下（同留言頻道跳到留言）
+    &.flash {
+        background: #e6f0f6;
+    }
+}
+
+// 頂端的「↑ N 則新留言」：固定在畫面上方中間（header 不是固定的，捲下去就不在了，所以貼著畫面頂）
+.tl-new-pill {
+    position: fixed;
+    top: 12px;
+    left: 50%;
+    z-index: 20;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    width: auto;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 999px;
+    background: #657181;
+    color: #fff;
+    font-size: 13px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transform: translateX(-50%);
 }
 
 .tl-author-avatar {
