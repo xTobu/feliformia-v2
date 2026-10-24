@@ -1,4 +1,4 @@
-// 觀察分頁的飲食如廁（shifts.cats.<id>.intake）。值班表的滑桿與貓咪檔案的時間軸共用
+// 觀察分頁的飲食如廁（shifts.cats.<id>.intake）。值班表的滑桿與貓咪檔案的日常共用
 export const INTAKE_MARKS = {
     0: '沒吃',
     25: '吃1/3',
@@ -22,20 +22,16 @@ const DEFAULT_INTAKE = {
 export const isIntakeTouched = (intake) =>
     !!intake && Object.keys(DEFAULT_INTAKE).some((key) => (intake[key] ?? null) !== DEFAULT_INTAKE[key]);
 
-// 一句話的片段：[{ text, warn }]，warn 是要標紅的（沒便、軟便、拉稀）
-export function intakeParts(intake) {
-    const parts = [];
-    const eaten = (label, value) => {
-        const text = INTAKE_MARKS[value] ?? `${value}%`;
-        parts.push({ text: `${label}${text}`, warn: false });
-    };
-    if (intake.feed) eaten('乾乾', intake.feed_detail);
-    if (intake.can) eaten('罐罐', intake.can_detail);
-    parts.push({ text: intake.urine ? '有尿' : '沒尿', warn: false });
-    if (!intake.feces) parts.push({ text: '沒便', warn: true });
-    else {
-        const warning = intake.feces_warning;
-        parts.push({ text: warning && warning !== '正常' ? warning : '便正常', warn: !!warning && warning !== '正常' });
-    }
-    return parts;
+// 貓咪檔案的四格：乾乾、罐罐、尿、便，位置固定（班與班上下對得齊）。
+// value 是 null＝沒放（乾乾、罐罐沒勾），畫面顯示「—」；warn 是要標紅的（沒便、軟便、拉稀）
+const EATEN = { 0: '沒吃', 25: '1/3', 50: '1/2', 75: '2/3', 100: '吃光' };
+export function intakeCells(intake) {
+    const eaten = (given, value) => (given ? (EATEN[value] ?? `${value}%`) : null);
+    const warning = intake.feces ? intake.feces_warning || '正常' : '沒有';
+    return [
+        { label: '乾乾', value: eaten(intake.feed, intake.feed_detail), warn: false },
+        { label: '罐罐', value: eaten(intake.can, intake.can_detail), warn: false },
+        { label: '尿', value: intake.urine ? '有' : '沒有', warn: false },
+        { label: '便', value: warning, warn: warning !== '正常' },
+    ];
 }

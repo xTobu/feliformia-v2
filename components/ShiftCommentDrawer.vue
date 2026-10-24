@@ -546,22 +546,9 @@ function openUploadPhotos(batch, index) {
 
 const isMine = (m) => !!props.me && m.created_by === props.me;
 
-// 頭像：有上傳就用照片，沒有就用名字第一個字，顏色照名字固定
-const AVATAR_COLORS = [
-    ['#d9e6ee', '#3f7ea3'],
-    ['#e8e2dc', '#6b625d'],
-    ['#e3ecdf', '#4f7243'],
-    ['#efe0e6', '#8a4a63'],
-    ['#e6e2f0', '#5b5190'],
-    ['#f3e6d6', '#8a5a1f'],
-];
-const initial = (m) => (m.author_name || '？').trim().charAt(0);
-function avatarStyle(m) {
-    const name = m.author_name || '';
-    const sum = [...name].reduce((total, ch) => total + ch.codePointAt(0), 0);
-    const [background, color] = AVATAR_COLORS[sum % AVATAR_COLORS.length];
-    return { background, color };
-}
+// 頭像：有上傳就用照片，沒有就用名字第一個字，顏色照名字固定（composables/authorAvatar.js）
+const initial = (m) => authorInitial(m.author_name);
+const avatarStyle = (m) => authorAvatarStyle(m.author_name);
 
 // 平常只顯示時間；補寫到別天的班時連日期一起顯示
 function timeText(m) {

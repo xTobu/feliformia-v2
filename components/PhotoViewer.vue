@@ -1,6 +1,6 @@
 <template>
     <!-- 看大圖：照片置中，上方一列是班別與 ✕；多張時左右箭頭或左右滑換張。
-         照片下面是資訊（哪一班、誰、幾點、類型、描述或留言內容），再下面放呼叫的頁面給的按鈕（#actions） -->
+         照片下面是資訊（類型、誰、幾點、描述或留言內容），再下面放呼叫的頁面給的按鈕（#actions） -->
     <Teleport to="body">
         <div
             v-if="photo"
@@ -42,13 +42,13 @@
             </div>
 
             <div class="pv-info">
-                <!-- 資訊在左、第幾張在右 -->
+                <!-- 類型在最上面，下面一行是誰、幾點（第幾張在右） -->
+                <div v-if="photo.kinds?.length" class="pv-kinds">
+                    <span v-for="kind in photo.kinds" :key="kind" :class="{ observe: isObserveKind(kind) }">{{ kind }}</span>
+                </div>
                 <div class="pv-meta">
                     <span>{{ photo.meta }}</span>
                     <span v-if="photos.length > 1" class="pv-count">{{ index + 1 }} / {{ photos.length }}</span>
-                </div>
-                <div v-if="photo.kinds?.length" class="pv-kinds">
-                    <span v-for="kind in photo.kinds" :key="kind" :class="{ observe: isObserveKind(kind) }">{{ kind }}</span>
                 </div>
                 <!-- 描述（前面一條直線）或留言內容（對話氣泡），樣子就分得出是哪一種 -->
                 <div
@@ -250,7 +250,7 @@ button {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
-    margin-top: 6px;
+    margin-bottom: 6px;
 
     span {
         padding: 0 7px;
