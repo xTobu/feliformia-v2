@@ -172,149 +172,156 @@
                     </div>
 
                     <section v-for="entry in visibleEntries" :key="entry.shift_id" class="tl-entry">
-                        <!-- 點日期列到值班記錄表的那一班 -->
-                        <NuxtLink :to="`/shift?date=${entry.date}&shift=${entry.shift}`" class="tl-shift">
-                            <span class="tl-date">{{ dateLabel(entry.date) }}</span>
-                            <span class="tl-shift-tag" :class="entry.shift">{{ SHIFT_LABELS[entry.shift] }}</span>
-                            <span v-if="entry.ongoing" class="tl-ongoing">進行中</span>
-                            <Icon icon="mdi:chevron-right" width="18" class="tl-shift-go" />
-                        </NuxtLink>
                         <!-- 一班分三區，各有小標：值班、留言、照片。留言、照片沒有也顯示小標（留言 0），篩選關掉的才不出現 -->
                         <div class="tl-card">
-                            <!-- 值班：觀察分頁的飲食如廁（上一班放風的不用登記）、這班放風、各分頁的未完成 -->
-                            <div v-if="entry.showDuty" class="tl-sec">
-                                <div class="tl-sec-title">
-                                    <Icon icon="mdi:clipboard-check-outline" width="15" />值班
-                                    <!-- 前班放風：剛到時貓已經在外面（上一班離開時放的）；本班放風：這班走的時候放出來。
-                                         開著「值班」就兩個都顯示：有放綠底、沒放灰色虛線框 -->
-                                    <template v-if="entry.showIntake">
-                                        <span class="tl-flag" :class="{ off: !entry.prev_released }">前班放風</span>
-                                        <span class="tl-flag" :class="{ off: !entry.released }">本班放風</span>
-                                    </template>
-                                </div>
-                                <!-- 飲食如廁：有人登記就顯示四格（乾乾、罐罐、尿、便，位置固定）；前班放風時值班表的登記區
-                                     預設收起，但還是可以填。沒登記的：前班放風寫「不用登記」，其他寫「沒有登記」 -->
-                                <template v-if="entry.showIntake">
-                                    <div v-if="!isIntakeTouched(entry.intake)" class="tl-intake tl-muted">
-                                        {{ entry.prev_released ? '不用登記' : '沒有登記' }}
+                            <!-- 卡片頭（淡底色）：日期、班別（早班太陽、晚班月亮）、進行中；點了到值班記錄表的那一班 -->
+                            <NuxtLink :to="`/shift?date=${entry.date}&shift=${entry.shift}`" class="tl-shift">
+                                <span class="tl-date">{{ dateLabel(entry.date) }}</span>
+                                <span class="tl-shift-tag" :class="entry.shift">
+                                    <Icon
+                                        :icon="entry.shift === 'night' ? 'mdi:weather-night' : 'mdi:white-balance-sunny'"
+                                        width="13"
+                                    />{{ SHIFT_LABELS[entry.shift] }}
+                                </span>
+                                <span v-if="entry.ongoing" class="tl-ongoing">進行中</span>
+                                <Icon icon="mdi:chevron-right" width="18" class="tl-shift-go" />
+                            </NuxtLink>
+                            <div class="tl-card-body">
+                                <!-- 值班：觀察分頁的飲食如廁（上一班放風的不用登記）、這班放風、各分頁的未完成 -->
+                                <div v-if="entry.showDuty" class="tl-sec">
+                                    <div class="tl-sec-title">
+                                        <Icon icon="mdi:clipboard-check-outline" width="15" />值班
+                                        <!-- 前班放風：剛到時貓已經在外面（上一班離開時放的）；本班放風：這班走的時候放出來。
+                                             開著「值班」就兩個都顯示：有放綠底、沒放灰色虛線框 -->
+                                        <template v-if="entry.showIntake">
+                                            <span class="tl-flag" :class="{ off: !entry.prev_released }">前班放風</span>
+                                            <span class="tl-flag" :class="{ off: !entry.released }">本班放風</span>
+                                        </template>
                                     </div>
-                                    <div v-else class="tl-cells">
-                                        <div
-                                            v-for="c in intakeCells(entry.intake)"
-                                            :key="c.label"
-                                            class="tl-cell"
-                                            :class="{ warn: c.warn }"
-                                        >
-                                            <span class="tl-cell-label">{{ c.label }}</span>
-                                            <span class="tl-cell-value" :class="{ empty: c.empty }">{{ c.value }}</span>
+                                    <!-- 飲食如廁：有人登記就顯示四格（乾乾、罐罐、尿、便，位置固定）；前班放風時值班表的登記區
+                                         預設收起，但還是可以填。沒登記的：前班放風寫「不用登記」，其他寫「沒有登記」 -->
+                                    <template v-if="entry.showIntake">
+                                        <div v-if="!isIntakeTouched(entry.intake)" class="tl-intake tl-muted">
+                                            {{ entry.prev_released ? '不用登記' : '沒有登記' }}
+                                        </div>
+                                        <div v-else class="tl-cells">
+                                            <div
+                                                v-for="c in intakeCells(entry.intake)"
+                                                :key="c.label"
+                                                class="tl-cell"
+                                                :class="{ warn: c.warn }"
+                                            >
+                                                <span class="tl-cell-label">{{ c.label }}</span>
+                                                <span class="tl-cell-value" :class="{ empty: c.empty }">{{ c.value }}</span>
+                                            </div>
+                                        </div>
+                                    </template>
+                                    <div v-if="entry.unfinished.length" class="tl-missing">
+                                        <div class="tl-missing-title">未完成 {{ entry.unfinished.length }} 項</div>
+                                        <div v-for="row in entry.unfinished" :key="row.key" class="tl-missing-row">
+                                            <span class="tl-tab" :class="row.tab">{{ TAB_LABELS[row.tab] }}</span>
+                                            <span>
+                                                <!-- 類別跟分頁同名（醫療）就不重複寫 -->
+                                                <span v-if="row.tag && row.tag !== TAB_LABELS[row.tab]" class="tl-missing-tag">{{
+                                                    row.tag
+                                                }}</span>{{ row.content }}
+                                            </span>
                                         </div>
                                     </div>
-                                </template>
-                                <div v-if="entry.unfinished.length" class="tl-missing">
-                                    <div class="tl-missing-title">未完成 {{ entry.unfinished.length }} 項</div>
-                                    <div v-for="row in entry.unfinished" :key="row.key" class="tl-missing-row">
-                                        <span class="tl-tab" :class="row.tab">{{ TAB_LABELS[row.tab] }}</span>
-                                        <span>
-                                            <!-- 類別跟分頁同名（醫療）就不重複寫 -->
-                                            <span v-if="row.tag && row.tag !== TAB_LABELS[row.tab]" class="tl-missing-tag">{{
-                                                row.tag
-                                            }}</span>{{ row.content }}
-                                        </span>
-                                    </div>
                                 </div>
-                            </div>
 
-                            <!-- 留言：照分頁分組（觀察、醫療、備餐、收尾），左邊是分頁標籤 -->
-                            <div v-if="show.comments" class="tl-sec">
-                                <div class="tl-sec-title">
-                                    <Icon icon="mdi:message-text-outline" width="15" />留言 {{ entry.comments.length }}
-                                </div>
-                                <div v-for="group in byTab(entry.comments)" :key="group.tab" class="tl-group">
-                                    <div class="tl-group-head">
-                                        <span class="tl-tab" :class="group.tab">{{ TAB_LABELS[group.tab] }}</span>
+                                <!-- 留言：照分頁分組（觀察、醫療、備餐、收尾），左邊是分頁標籤 -->
+                                <div v-if="show.comments" class="tl-sec">
+                                    <div class="tl-sec-title">
+                                        <Icon icon="mdi:message-text-outline" width="15" />留言 {{ entry.comments.length }}
                                     </div>
-                                    <div class="tl-group-body">
-                                        <!-- 跟留言頻道一樣：頭像、名字、時間，下面是有尾巴的氣泡；勾了「重要」的是橘色氣泡 -->
-                                        <div
-                                            v-for="message in group.items"
-                                            :key="message.id"
-                                            class="tl-comment"
-                                            :class="{ important: message.for_next, flash: flashIds.includes(message.id) }"
-                                            :data-comment-id="message.id"
-                                        >
-                                            <span
-                                                class="tl-author-avatar"
-                                                :style="message.author_avatar ? null : authorAvatarStyle(message.author_name)"
+                                    <div v-for="group in byTab(entry.comments)" :key="group.tab" class="tl-group">
+                                        <div class="tl-group-head">
+                                            <span class="tl-tab" :class="group.tab">{{ TAB_LABELS[group.tab] }}</span>
+                                        </div>
+                                        <div class="tl-group-body">
+                                            <!-- 跟留言頻道一樣：頭像、名字、時間，下面是有尾巴的氣泡；勾了「重要」的是橘色氣泡 -->
+                                            <div
+                                                v-for="message in group.items"
+                                                :key="message.id"
+                                                class="tl-comment"
+                                                :class="{ important: message.for_next, flash: flashIds.includes(message.id) }"
+                                                :data-comment-id="message.id"
                                             >
-                                                <img v-if="message.author_avatar" :src="avatarUrl(message.author_avatar)" alt="" />
-                                                <template v-else>{{ authorInitial(message.author_name) }}</template>
-                                            </span>
-                                            <div class="tl-comment-main">
-                                                <div class="tl-comment-meta">
-                                                    <b>{{ message.author_name || '未命名' }}</b>
-                                                    <span>{{ timeOf(message.created_at, entry.date) }}</span>
-                                                    <span v-if="message.for_next" class="tl-important">重要</span>
-                                                    <span v-if="message.edited_at && !message.body">已編輯</span>
-                                                </div>
-                                                <div v-if="message.body" class="tl-line">
-                                                    <div class="tl-bubble">{{ message.body }}</div>
-                                                    <span v-if="message.edited_at" class="tl-edited">已編輯</span>
-                                                </div>
-                                                <!-- 附的照片：小縮圖（同留言頻道），點了看大圖 -->
-                                                <div v-if="message.photos.length" class="tl-comment-photos">
-                                                    <button
-                                                        v-for="(photo, i) in message.photos"
-                                                        :key="photo.id"
-                                                        type="button"
-                                                        class="tl-comment-photo"
-                                                        aria-label="看大圖"
-                                                        @click="openCommentPhotos(entry, message, i)"
-                                                    >
-                                                        <img :src="photo.thumb_url" alt="" loading="lazy" />
-                                                        <span
-                                                            v-for="kind in (photo.kinds || []).filter(isObserveKind)"
-                                                            :key="kind"
-                                                            class="tl-comment-photo-kind"
-                                                            >{{ kind }}</span
+                                                <span
+                                                    class="tl-author-avatar"
+                                                    :style="message.author_avatar ? null : authorAvatarStyle(message.author_name)"
+                                                >
+                                                    <img v-if="message.author_avatar" :src="avatarUrl(message.author_avatar)" alt="" />
+                                                    <template v-else>{{ authorInitial(message.author_name) }}</template>
+                                                </span>
+                                                <div class="tl-comment-main">
+                                                    <div class="tl-comment-meta">
+                                                        <b>{{ message.author_name || '未命名' }}</b>
+                                                        <span>{{ timeOf(message.created_at, entry.date) }}</span>
+                                                        <span v-if="message.for_next" class="tl-important">重要</span>
+                                                        <span v-if="message.edited_at && !message.body">已編輯</span>
+                                                    </div>
+                                                    <div v-if="message.body" class="tl-line">
+                                                        <div class="tl-bubble">{{ message.body }}</div>
+                                                        <span v-if="message.edited_at" class="tl-edited">已編輯</span>
+                                                    </div>
+                                                    <!-- 附的照片：小縮圖（同留言頻道），點了看大圖 -->
+                                                    <div v-if="message.photos.length" class="tl-comment-photos">
+                                                        <button
+                                                            v-for="(photo, i) in message.photos"
+                                                            :key="photo.id"
+                                                            type="button"
+                                                            class="tl-comment-photo"
+                                                            aria-label="看大圖"
+                                                            @click="openCommentPhotos(entry, message, i)"
                                                         >
-                                                    </button>
+                                                            <img :src="photo.thumb_url" alt="" loading="lazy" />
+                                                            <span
+                                                                v-for="kind in (photo.kinds || []).filter(isObserveKind)"
+                                                                :key="kind"
+                                                                class="tl-comment-photo-kind"
+                                                                >{{ kind }}</span
+                                                            >
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
 
-                            <!-- 照片：照片庫的（直接上傳的與留言附的），照分頁分組。留言附的右下角一個小泡泡 -->
-                            <div v-if="show.photos" class="tl-sec">
-                                <div class="tl-sec-title">
-                                    <Icon icon="mdi:image-outline" width="15" />照片 {{ entry.photos.length }}
-                                </div>
-                                <div v-for="group in byTab(entry.photos)" :key="group.tab" class="tl-group">
-                                    <div class="tl-group-head">
-                                        <span class="tl-tab" :class="group.tab">{{ TAB_LABELS[group.tab] }}</span>
+                                <!-- 照片：照片庫的（直接上傳的與留言附的），照分頁分組。留言附的右下角一個小泡泡 -->
+                                <div v-if="show.photos" class="tl-sec">
+                                    <div class="tl-sec-title">
+                                        <Icon icon="mdi:image-outline" width="15" />照片 {{ entry.photos.length }}
                                     </div>
-                                    <div class="tl-group-body tl-photos">
-                                        <button
-                                            v-for="(photo, i) in group.items"
-                                            :key="photo.id"
-                                            type="button"
-                                            class="tl-thumb"
-                                            @click="openPhotos(entry, group.items, i)"
-                                        >
-                                            <img :src="photo.thumb_url" alt="" loading="lazy" />
-                                            <span
-                                                v-if="photo.kinds?.length"
-                                                class="tl-thumb-kind"
-                                                :class="{ observe: isObserveKind(photo.kinds[0]) }"
+                                    <div v-for="group in byTab(entry.photos)" :key="group.tab" class="tl-group">
+                                        <div class="tl-group-head">
+                                            <span class="tl-tab" :class="group.tab">{{ TAB_LABELS[group.tab] }}</span>
+                                        </div>
+                                        <div class="tl-group-body tl-photos">
+                                            <button
+                                                v-for="(photo, i) in group.items"
+                                                :key="photo.id"
+                                                type="button"
+                                                class="tl-thumb"
+                                                @click="openPhotos(entry, group.items, i)"
                                             >
-                                                {{ photo.kinds[0]
-                                                }}<template v-if="photo.kinds.length > 1"> +{{ photo.kinds.length - 1 }}</template>
-                                            </span>
-                                            <span v-if="photo.comment_id" class="tl-thumb-comment" aria-label="留言附的照片">
-                                                <Icon icon="mdi:message-text" width="11" />
-                                            </span>
-                                        </button>
+                                                <img :src="photo.thumb_url" alt="" loading="lazy" />
+                                                <span
+                                                    v-if="photo.kinds?.length"
+                                                    class="tl-thumb-kind"
+                                                    :class="{ observe: isObserveKind(photo.kinds[0]) }"
+                                                >
+                                                    {{ photo.kinds[0]
+                                                    }}<template v-if="photo.kinds.length > 1"> +{{ photo.kinds.length - 1 }}</template>
+                                                </span>
+                                                <span v-if="photo.comment_id" class="tl-thumb-comment" aria-label="留言附的照片">
+                                                    <Icon icon="mdi:message-text" width="11" />
+                                                </span>
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1612,18 +1619,21 @@ button.cp-avatar {
     margin-top: 16px;
 }
 
-// 日期列是連結（到值班記錄表那一班）：蓋掉全域 a 的底線、紅字、下邊距
+// 卡片頭：日期、班別，淡底色，一班一整塊。是連結（到值班記錄表那一班）：蓋掉全域 a 的底線、紅字、下邊距
 .tl-shift {
     display: flex;
     align-items: center;
     gap: 8px;
-    margin-bottom: 6px;
+    margin: 0;
+    padding: 8px 12px;
+    border-bottom: 1px solid #ece6e0;
+    background: #f6f3f0;
     color: inherit;
     text-decoration: none;
 }
 
 .tl-shift-go {
-    margin-left: -4px;
+    margin-left: auto;
     color: #b8b2ad;
 }
 
@@ -1633,6 +1643,9 @@ button.cp-avatar {
 }
 
 .tl-shift-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
     padding: 0 8px;
     border-radius: 4px;
     font-size: 12px;
@@ -1650,13 +1663,17 @@ button.cp-avatar {
 }
 
 .tl-card {
+    border: 1px solid #e6e0da;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.tl-card-body {
     display: flex;
     flex-direction: column;
     gap: 12px;
     padding: 12px;
-    border: 1px solid #ece8e5;
-    border-radius: 12px;
-    background: #fff;
 }
 
 // 一區一個小標（值班、留言、照片），區與區之間一條細線
