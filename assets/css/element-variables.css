@@ -77,6 +77,8 @@ form {
 .el-dialog .el-dialog__title {
   flex: 1;
   min-width: 0;
+  /* 自己置中，不靠外層繼承：視窗放在 text-align: left 的頁面裡（例如貓咪檔案）也一樣置中 */
+  text-align: center;
 }
 
 .el-dialog .el-dialog__headerbtn {

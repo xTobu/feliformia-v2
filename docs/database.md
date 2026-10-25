@@ -150,11 +150,13 @@ votes.data
 
 | 表 | 頁面 | 說明 |
 |---|---|---|
-| `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`），花色 `coats`（可多選）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、預估生日 `birth_month`（只到月）、`notes`；選項在 `composables/catTraits.js` |
+| `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`），花色 `coats`（可多選，預設清單之外可以「＋ 其他」自己打）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、生日 `birthday`（預估，可以選到日）、領養 `adopted`＋到新家日期 `adopted_on`（已領養但不知道哪天就是 null；沒領養不能有日期）、`notes`；選項在 `composables/catTraits.js` |
 | `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／隨餐藥／補充品／放風／其他，`content`。只有隨餐藥（拌進飯裡、放碗就可以走）要在備餐分頁打勾。放風＝長期固定放風，內容選填：期間內的班，沒人按過放風的貓 `released` 照它打開（見下方「shifts 的快照與局部更新」） |
 | `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用，`treatment`、`reason`；都在醫療分頁打勾 |
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
 | `observe_items` | `/admin/observe` | 觀察管理：值班時要拍的照片，分兩組——剛到（拍剩食／拍貓砂，觀察分頁提醒）、離開（拍留餐，備餐分頁提醒）。`content` 是說明（選填）。**不用打勾**：這一班、這隻貓、那個分頁的照片（照片庫裡的，含留言附的）有對應類型（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）就算拍了，規則在 `composables/observeItems.js`，前端與 server 共用 |
+| `cat_health_records` | `/cats/[id]` 小檔案 | 醫療紀錄：類型 `kind` 單選——看診 visit／急診 emergency／回診 revisit／貓屋處理 house（資料庫有 check）；項目 `items` 可多選——預設 血檢、結紮、預防針、快篩、晶片、洗牙、拔牙、驅蟲、除蚤（醫院做的在前），或志工按「＋ 其他」自己加的標籤（存那幾個字，加過的之後所有貓都會出現在選項裡，`/api/cats/health/items`）；清單在 `composables/healthKinds.js`。每筆至少一個項目（列表上項目就是標題，例如「血檢、結紮」）。另有 `date`、`note`（描述）、陪同者 `companions`（名字陣列：有效志工名單列成膠囊點選，名單上沒有的按「＋ 其他」打字加入）、最後編輯者 `updated_by`／`updated_by_name`（新增時就是建立的人，照片的增減也算編輯）。所有登入的人可讀，新增、修改、刪除只有管理員，走 `server/api/cats/health*`（service key，沒有寫入 policy）。小檔案的驅蟲、預防針卡片算有勾那個項目的紀錄（次數與日期），結紮卡有勾結紮的紀錄就顯示已結紮與日期（沒有才看 `cat_profiles.neutered`）；卡片上的日期點了會捲到那筆紀錄，管理員按卡片右上的「＋」新增一筆（預先帶好那個項目：驅蟲是貓屋處理，預防針、結紮是看診）。入住日、估計年齡、外觀卡片管理員點了打開編輯貓咪 |
+| `cat_health_photos` | `/cats/[id]` 小檔案 | 醫療紀錄的照片（一筆最多 10 張），`uploader_name` 是上傳者當下的暱稱（看大圖時顯示）。檔案在 Storage 私人 bucket `cat-health`（`<貓 id>/` 底下），上傳與看圖同值班照片（server 發一次性上傳網址／有時效網址，手機先壓縮）；刪紀錄或拿掉照片時 API 連檔案一起刪 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
 | `profiles.avatar_path` | `/settings` | 志工頭像（`avatars` bucket，公開）。上傳走 `/api/avatar/upload-url` → 直傳 Storage → `/api/avatar/save`（換頭像會刪舊檔）；留言頻道會顯示 |
 | `shift_comments` | `/shift` | 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看（`/api/shift/comments/channel`，班與班之間有分隔線）。可以附照片、只附照片時 `body` 是空字串。作者本人可以編輯（`edited_at`，顯示「已編輯」）與刪除（附的照片連 Storage 檔一起刪）。可以搜尋（`/api/shift/comments/search`，這個頻道所有的班）。`for_next` 是「重要」：整則橘底；下一班的 💬 旁有橘點（只維持一班） |
@@ -172,15 +174,15 @@ votes.data
 ### 貓咪檔案
 
 `/cats` 是貓咪清單（照位置分區，已領養的另一區），`/cats/[id]` 是一隻貓的檔案；值班記錄表卡片上的貓名也連過去。志工都能看，管理員的「編輯」在這頁直接打開編輯視窗（`components/CatProfileDialog.vue`，跟後台貓咪管理共用，含刪除），存好留在原頁。
-頁首是頭像、名字、位置，`notes` 一行一點。兩個分頁：
+頁首是頭像（位置貼在頭像下緣）、性別符號、名字（暱稱接在後面），名字下面是「關於我」（`notes` 一行一點，每點前面一個 ❣️；編輯貓咪時一點一列，可以新增、刪除、拖拉排序）。兩個分頁，記在網址路徑：日常是 `/cats/<id>`，小檔案是 `/cats/<id>/profile`（`pages/cats/[id]/[[tab]].vue`，兩頁之間切換不重新載入，上一頁、下一頁會跟著切）：
 
 - **日常**（時間軸，`/api/cats/timeline`）：一班一段、新的在前，一次往前 7 天。篩選一排：左邊日期鈕（點開有全部／近 3／7／30 天快選與自訂起訖），右邊篩選鈕（點開列出內容：值班（飲食如廁、放風）／未完成／留言／照片，與留言與照片：觀察／醫療／備餐（收尾很少有留言，不列、一直顯示），只篩留言和照片，值班整塊不受影響；可複選）。點日期列到值班記錄表那一班（`/shift?date=&shift=`）。篩選與日期記在這台裝置（localStorage `feliformia_cat_profile_filters`，每隻貓共用；快選記天數、每次照當天重算）。一班分三區，各有小標；留言、照片沒有也顯示「留言 0」「照片 0」，篩選關掉的區才不出現：
-  - 值班：那一班快照裡這隻貓的 `intake`，顯示成乾乾／罐罐／尿／便四格（沒便、軟便、拉稀標紅；還是到班時的樣子就是「沒有登記」，上一班放風的是「不用登記」；`composables/intake.js`）。小標旁一直顯示「前班放風」（剛到時貓已在外面）與「本班放風」（這班走時放出來）兩個標籤，有放綠底、沒放灰色虛線框，
+  - 值班：那一班快照裡這隻貓的 `intake`，顯示成乾乾／罐罐／尿／便四格（沒便、軟便、拉稀標紅；有人登記就顯示四格（前班放風也一樣）；沒登記的，上一班放風寫「不用登記」、其他寫「沒有登記」；`composables/intake.js`）。小標旁一直顯示「前班放風」（剛到時貓已在外面）與「本班放風」（這班走時放出來）兩個標籤，有放綠底、沒放灰色虛線框，
     以及**未完成**（淡橘底；醫療的分頁標籤用紫色，避開橘與紅）：規則同值班表的「前班未完成」（`unfinishedOf`），只留這隻貓自己的——醫療、隨餐藥、觀察管理（全員／位置的觀察項目也算）、對象是這隻貓的收尾。
     還在進行的班（今天的晚班；今天的早班在晚班開之前）標「進行中」，未完成照樣列（看得到還剩哪些事）
   - 留言：四個分頁的，照分頁分組（觀察→醫療→備餐→收尾，每組上面一個分頁色標籤、後面一條細線）；附的照片在氣泡下面放小縮圖（48px），點了看大圖
   - 照片：照片庫的（直接上傳的與留言附的，留言附的縮圖右下角有小泡泡、看大圖顯示那則留言），一樣照分頁分組
-- **小檔案**：入住日、估計年齡（`composables/catTraits.js`）、性別毛長花色、結紮。驅蟲、預防針、就醫紀錄還沒有資料表，先顯示「尚無紀錄」。
+- **小檔案**：「基本資料」是入住日、估計年齡（`composables/catTraits.js`）、外觀（性別毛長花色）、結紮，以及驅蟲、預防針（從醫療紀錄算幾次、列日期）。「醫療紀錄」是 `cat_health_records` 新的在前（照年份分段，同一天合成一張卡：左邊日期方塊，右邊一筆一段——項目當標題，下面類型用有色圖示＋字、陪同者、描述、照片，右下角最後編輯者）；管理員按 ＋ 或筆在原頁打開 `components/CatHealthDialog.vue` 新增、編輯、刪除（類型單選、項目多選、「＋ 其他」加標籤）。
 
 ### shifts 的快照與局部更新
 
@@ -192,7 +194,7 @@ votes.data
 沒人按過的，當天（含之後）的班照飲食的「放風」項目算，每次載入重算、有變才寫回（後台加刪項目，已開的班也會跟著變）。
 
 醫療、吃藥、收尾打勾時記下 `done_by`（登入者暱稱）與 `done_at`，畫面顯示「✓ 阿明 21:40」。
-值班記錄表的分頁是 觀察、醫療、備餐、收尾（`arrive` / `care` / `meal` / `required`）。
+值班記錄表的分頁是 觀察、醫療、備餐、收尾（`arrive` / `care` / `meal` / `required`），記在網址路徑：觀察是 `/shift`，其他是 `/shift/care`、`/shift/meal`、`/shift/required`（`pages/shift/[[tab]].vue`）；哪一班在 `?date=&shift=`。舊連結的 `?tab=`（含更舊的 meds、leave）會自動換成路徑。
 `reports` 是 `{ 分頁: { user_id: { name, text, at } } }`：每個分頁、每個人各一段，用登入身分（沒有「填表志工」）。
 每個人只能改自己那一段，名字與時間由 server 填（`server/api/shift/update.post.js`）。
 下一班在**同一個分頁**上方看到上一班的回報（`components/ShiftReportBlock.vue`，可摺疊，這台裝置會記住），

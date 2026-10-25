@@ -51,20 +51,24 @@ const matches = (cat) => {
     return !word || [cat.name, ...(cat.nicknames || [])].some((name) => name.includes(word));
 };
 
+// 已領養：照領養日期，最近領養的排最後；不知道哪天的排最前面（多半是舊資料）
+const adoptedOrder = (list) =>
+    [...list].sort((a, b) => (a.adopted_on || '').localeCompare(b.adopted_on || ''));
+
 const groups = computed(() => {
     const list = cats.value.filter(matches);
     const living = list.filter((c) => !c.adopted);
     return [
         ...LOCATIONS.map((location) => ({ label: location, cats: living.filter((c) => c.location === location) })),
         { label: '未填位置', cats: living.filter((c) => !LOCATIONS.includes(c.location)) },
-        { label: '已領養', cats: list.filter((c) => c.adopted) },
+        { label: '已領養', cats: adoptedOrder(list.filter((c) => c.adopted)) },
     ].filter((g) => g.cats.length);
 });
 
 onMounted(async () => {
     const { data } = await supabase
         .from('cat_profiles')
-        .select('id, name, nicknames, location, adopted, avatar_path')
+        .select('id, name, nicknames, location, adopted, adopted_on, avatar_path')
         .order('sort_order');
     cats.value = data || [];
     loading.value = false;

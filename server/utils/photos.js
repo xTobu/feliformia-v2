@@ -13,13 +13,13 @@ export function photoPrefix(shiftId, catId) {
     return `${shiftId}/${catId}/`
 }
 
-export const storage = () => supabase.storage.from(PHOTO_BUCKET)
+export const storage = (bucket = PHOTO_BUCKET) => supabase.storage.from(bucket)
 
-// 一批照片紀錄 → 加上大圖與縮圖的有時效網址
-export async function withSignedUrls(rows) {
+// 一批照片紀錄 → 加上大圖與縮圖的有時效網址（醫療紀錄的照片在另一個 bucket，傳 bucket 進來）
+export async function withSignedUrls(rows, bucket = PHOTO_BUCKET) {
     if (!rows.length) return []
     const paths = rows.flatMap((r) => [r.path, r.thumb_path])
-    const { data, error } = await storage().createSignedUrls(paths, SIGNED_URL_SECONDS)
+    const { data, error } = await storage(bucket).createSignedUrls(paths, SIGNED_URL_SECONDS)
     if (error) throw createError({ statusCode: 500, message: error.message })
     const urlOf = new Map(data.map((d) => [d.path, d.signedUrl]))
     return rows.map((r) => ({ ...r, url: urlOf.get(r.path) || null, thumb_url: urlOf.get(r.thumb_path) || null }))

@@ -668,7 +668,7 @@
                         </p>
                     </div>
 
-                    <NuxtLink class="f_red" to="/shift">回到現在這一班</NuxtLink>
+                    <NuxtLink class="f_red" :to="tabPath(tab)">回到現在這一班</NuxtLink>
                 </div>
             </form>
 
@@ -1265,8 +1265,11 @@ import { Icon } from '@iconify/vue';
 import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
 
+// 網址：分頁在路徑（觀察 /shift、醫療 /shift/care、備餐 /shift/meal、收尾 /shift/required），
+// 哪一班在 query（?date=&shift=）。key 固定：換分頁、換班都是同一個頁面，不重新掛載
 definePageMeta({
     middleware: 'auth',
+    key: 'shift',
 });
 
 useHead({
@@ -2461,7 +2464,7 @@ function onPickDate() {
 function goTo({ date, shift }) {
     if (!canGo({ date, shift })) return;
     pickerOpen.value = false;
-    router.push({ name: 'shift', query: { date, shift, tab: tab.value } });
+    router.push({ path: tabPath(tab.value), query: { date, shift } });
 }
 
 // 編輯期限：照「日期」算，今天加前 N 天（DISABLED_DAYS，預設 2）的早晚班都能改、能補傳照片。
@@ -2474,10 +2477,21 @@ function isEditableDate(date) {
 const isDisabled = computed(() => !isEditableDate(formData.value.date));
 
 // Methods
+// 分頁 → 網址路徑：觀察是 /shift，其他是 /shift/<分頁>
+const tabPath = (value) => (value === 'arrive' ? '/shift' : `/shift/${value}`);
+// 路徑上的分頁（不認得的當成觀察）
+const tabOfPath = (value) => (TABS.includes(value) ? value : 'arrive');
+
 function setTab(value) {
     tab.value = value;
-    router.replace({ query: { ...route.query, tab: value } });
+    router.replace({ path: tabPath(value), query: route.query });
 }
+
+// 上一頁、下一頁或點連結換了路徑上的分頁
+watch(
+    () => route.params.tab,
+    (value) => (tab.value = tabOfPath(value))
+);
 
 // 上一班放風的貓：預設收起觀察欄位，已經填過的預設展開；兩種都可以自己展開或收起。
 // intakeToggled 記使用者按過的狀態（cat_id → 要不要展開），沒按過就照預設
@@ -2509,9 +2523,15 @@ function InitFromQuery() {
         : new Date().getHours() < 18
         ? 'morning'
         : 'night';
-    // 舊連結：?tab=meds（吃藥分頁已併進醫療）、?tab=leave（備餐改叫 meal）
-    const wanted = { meds: 'care', leave: 'meal' }[queryTab] || queryTab;
-    if (TABS.includes(wanted)) tab.value = wanted;
+    tab.value = tabOfPath(route.params.tab);
+    // 舊連結把分頁放在 ?tab=（還有更舊的 meds：吃藥分頁已併進醫療；leave：備餐改叫 meal）：換成路徑
+    if (queryTab) {
+        const wanted = { meds: 'care', leave: 'meal' }[queryTab] || queryTab;
+        if (TABS.includes(wanted)) tab.value = wanted;
+        const query = { ...route.query };
+        delete query.tab;
+        router.replace({ path: tabPath(tab.value), query });
+    }
 }
 
 async function InitShift() {

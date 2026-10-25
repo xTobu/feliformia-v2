@@ -7,32 +7,51 @@
             <template v-else>
                 <!-- 頁首：頭像、名字、位置，備註一行一點（紅色圖釘） -->
                 <header class="cp-head">
-                    <span class="cp-avatar">
-                        <img v-if="cat.avatar_path" :src="avatarUrl(cat.avatar_path)" alt="" />
-                        <template v-else>{{ cat.name.charAt(0) }}</template>
-                    </span>
+                    <!-- 頭像，位置貼在下緣中間 -->
+                    <div class="cp-avatar-wrap">
+                        <!-- 有頭像的點了看大圖 -->
+                        <button
+                            v-if="cat.avatar_path"
+                            type="button"
+                            class="cp-avatar"
+                            aria-label="看頭像大圖"
+                            @click="openAvatar"
+                        >
+                            <img :src="avatarUrl(cat.avatar_path)" alt="" />
+                        </button>
+                        <span v-else class="cp-avatar">{{ cat.name.charAt(0) }}</span>
+                        <span v-if="cat.location" class="cp-location">
+                            <Icon icon="mdi:map-marker" width="12" />{{ cat.location }}
+                        </span>
+                    </div>
                     <div class="cp-title">
                         <div class="cp-name-row">
+                            <!-- 性別：名字左邊一個符號（公藍、母粉），不確定就不顯示 -->
+                            <Icon
+                                v-if="cat.sex"
+                                :icon="cat.sex === '公' ? 'mdi:gender-male' : 'mdi:gender-female'"
+                                width="22"
+                                class="cp-sex"
+                                :class="cat.sex === '公' ? 'male' : 'female'"
+                                :aria-label="cat.sex"
+                            />
                             <h1 class="cp-name">{{ cat.name }}</h1>
-                            <button v-if="isAdmin" type="button" class="cp-edit" aria-label="編輯" @click="editCat">
+                            <!-- 暱稱接在名字後面，小一點的灰字 -->
+                            <span v-if="cat.nicknames?.length" class="cp-nick">{{ cat.nicknames.join('、') }}</span>
+                            <span v-if="cat.adopted" class="cp-tag adopted">已領養</span>
+                            <button v-if="isAdmin" type="button" class="cp-edit" aria-label="編輯" @click="editCat()">
                                 <Icon icon="fa6-regular:pen-to-square" width="16" />
                             </button>
                         </div>
-                        <div v-if="cat.nicknames?.length" class="cp-nicknames">{{ cat.nicknames.join('、') }}</div>
-                        <div class="cp-tags">
-                            <span v-if="cat.location" class="cp-tag location">
-                                <Icon icon="mdi:map-marker" width="13" />{{ cat.location }}
-                            </span>
-                            <span v-if="cat.adopted" class="cp-tag adopted">已領養</span>
-                        </div>
+                        <!-- 關於我（notes 一行一點），放在名字下面，每點前面一個 ❣️ -->
+                        <ul v-if="noteLines.length" class="cp-notes">
+                            <li v-for="(line, i) in noteLines" :key="i">
+                                <span class="mark" aria-hidden="true">❣️</span>
+                                <span>{{ line }}</span>
+                            </li>
+                        </ul>
                     </div>
                 </header>
-                <ul v-if="noteLines.length" class="cp-notes">
-                    <li v-for="(line, i) in noteLines" :key="i">
-                        <Icon icon="mdi:pin" width="15" class="pin" />
-                        <span>{{ line }}</span>
-                    </li>
-                </ul>
 
                 <div class="cp-tabs" role="tablist">
                     <button
@@ -173,10 +192,12 @@
                                         <span class="tl-flag" :class="{ off: !entry.released }">本班放風</span>
                                     </template>
                                 </div>
+                                <!-- 飲食如廁：有人登記就顯示四格（乾乾、罐罐、尿、便，位置固定）；前班放風時值班表的登記區
+                                     預設收起，但還是可以填。沒登記的：前班放風寫「不用登記」，其他寫「沒有登記」 -->
                                 <template v-if="entry.showIntake">
-                                    <div v-if="entry.prev_released" class="tl-intake tl-muted">不用登記</div>
-                                    <div v-else-if="!isIntakeTouched(entry.intake)" class="tl-intake tl-muted">沒有登記</div>
-                                    <!-- 飲食如廁四格：乾乾、罐罐、尿、便，位置固定 -->
+                                    <div v-if="!isIntakeTouched(entry.intake)" class="tl-intake tl-muted">
+                                        {{ entry.prev_released ? '不用登記' : '沒有登記' }}
+                                    </div>
                                     <div v-else class="tl-cells">
                                         <div
                                             v-for="c in intakeCells(entry.intake)"
@@ -313,56 +334,178 @@
                     </div>
                 </div>
 
-                <!-- ========== 小檔案：目前有的資料；驅蟲、預防針、就醫之後再加 ========== -->
-                <div v-show="view === 'profile'" class="pf-grid">
-                    <div class="pf-card">
-                        <div class="pf-label"><Icon icon="mdi:home-heart" width="15" />入住日</div>
-                        <template v-if="cat.arrived_on">
-                            <div class="pf-value">{{ fullDate(cat.arrived_on) }}</div>
-                            <div v-if="stayText(cat.arrived_on)" class="pf-sub">已入住 {{ stayText(cat.arrived_on) }}</div>
-                        </template>
-                        <div v-else class="pf-empty">未填</div>
+                <!-- ========== 小檔案：基本資料（驅蟲、預防針從醫療紀錄算）＋醫療紀錄（看診、急診、回診、驅蟲、預防針、結紮、其他） ========== -->
+                <div v-show="view === 'profile'">
+                    <div class="pf-section">基本資料</div>
+                    <div class="pf-grid">
+                        <!-- 入住日、估計年齡、外觀：管理員點卡片打開編輯貓咪 -->
+                        <div class="pf-card" :class="{ editable: isAdmin }" @click="isAdmin && editCat('arrived')">
+                            <div class="pf-label">
+                                <Icon icon="mdi:home-heart" width="15" />入住日
+                                <Icon v-if="isAdmin" icon="mdi:pencil-outline" width="14" class="pf-action" />
+                            </div>
+                            <template v-if="cat.arrived_on">
+                                <div class="pf-value">{{ fullDate(cat.arrived_on) }}</div>
+                                <div v-if="stayLine" class="pf-sub">{{ stayLine }}</div>
+                            </template>
+                            <div v-else class="pf-empty">未填</div>
+                        </div>
+                        <div class="pf-card" :class="{ editable: isAdmin }" @click="isAdmin && editCat('birthday')">
+                            <div class="pf-label">
+                                <Icon icon="mdi:cake-variant-outline" width="15" />估計年齡
+                                <Icon v-if="isAdmin" icon="mdi:pencil-outline" width="14" class="pf-action" />
+                            </div>
+                            <template v-if="cat.birthday">
+                                <div class="pf-value">{{ catAgeText(cat.birthday) || '—' }}</div>
+                                <div class="pf-sub">生日（預估）{{ fullDate(cat.birthday) }}</div>
+                            </template>
+                            <div v-else class="pf-empty">未填</div>
+                        </div>
+                        <div class="pf-card" :class="{ editable: isAdmin }" @click="isAdmin && editCat('looks')">
+                            <div class="pf-label">
+                                <Icon icon="mdi:paw" width="15" />外觀
+                                <Icon v-if="isAdmin" icon="mdi:pencil-outline" width="14" class="pf-action" />
+                            </div>
+                            <!-- 花色、毛長（性別在名字旁邊，這裡不重複） -->
+                            <div v-if="looks" class="pf-value small">{{ looks }}</div>
+                            <div v-else class="pf-empty">未填</div>
+                        </div>
+                        <!-- 結紮：有結紮的醫療紀錄就算已結紮、列日期；沒有紀錄照貓咪資料的「結紮」欄。
+                             管理員點卡片打開編輯貓咪、捲到結紮（點日期是跳到那筆醫療紀錄） -->
+                        <div class="pf-card" :class="{ editable: isAdmin }" @click="isAdmin && editCat('neutered')">
+                            <div class="pf-label">
+                                <Icon icon="mdi:content-cut" width="15" />結紮
+                                <Icon v-if="isAdmin" icon="mdi:pencil-outline" width="14" class="pf-action" />
+                            </div>
+                            <template v-if="recordsWith('結紮').length">
+                                <div class="pf-value">已結紮</div>
+                                <div class="pf-dates">
+                                    <button
+                                        v-for="r in recordsWith('結紮')"
+                                        :key="r.id"
+                                        type="button"
+                                        @click.stop="goToRecord(r.id)"
+                                    >
+                                        {{ fullDate(r.date) }}
+                                    </button>
+                                </div>
+                            </template>
+                            <div v-else-if="cat.neutered === null" class="pf-empty">不確定</div>
+                            <div v-else class="pf-value">{{ cat.neutered ? '已結紮' : '未結紮' }}</div>
+                        </div>
+                        <!-- 驅蟲、預防針：醫療紀錄裡有勾這個項目的有幾次（不管哪一種類型），下面列日期（新的在前） -->
+                        <div v-for="k in COUNTED_ITEMS" :key="k.item" class="pf-card">
+                            <div class="pf-label">
+                                <Icon :icon="k.icon" width="15" />{{ k.item }}
+                                <button
+                                    v-if="isAdmin"
+                                    type="button"
+                                    class="pf-plus"
+                                    :aria-label="`新增${k.item}紀錄`"
+                                    @click="openHealth(null, { kind: k.kind, items: [k.item] })"
+                                >
+                                    <Icon icon="mdi:plus" width="14" />
+                                </button>
+                            </div>
+                            <template v-if="recordsWith(k.item).length">
+                                <div class="pf-value">{{ recordsWith(k.item).length }} {{ k.unit }}</div>
+                                <div class="pf-dates">
+                                    <button v-for="r in recordsWith(k.item)" :key="r.id" type="button" @click="goToRecord(r.id)">
+                                        {{ fullDate(r.date) }}
+                                    </button>
+                                </div>
+                            </template>
+                            <div v-else class="pf-empty">{{ healthLoading ? '載入中' : '尚無紀錄' }}</div>
+                        </div>
                     </div>
-                    <div class="pf-card">
-                        <div class="pf-label"><Icon icon="mdi:cake-variant-outline" width="15" />估計年齡</div>
-                        <template v-if="cat.birth_month">
-                            <div class="pf-value">{{ catAgeText(cat.birth_month) || '—' }}</div>
-                            <div class="pf-sub">推估生日 {{ monthLabel(cat.birth_month) }}</div>
-                        </template>
-                        <div v-else class="pf-empty">未填</div>
+
+                    <div class="pf-section">
+                        醫療紀錄
+                        <button v-if="isAdmin" type="button" class="pf-add" aria-label="新增醫療紀錄" @click="openHealth()">
+                            <Icon icon="mdi:plus" width="18" />
+                        </button>
                     </div>
-                    <div class="pf-card">
-                        <div class="pf-label"><Icon icon="mdi:paw" width="15" />基本資料</div>
-                        <div class="pf-value small">{{ basics }}</div>
-                        <div v-if="cat.coats?.length" class="pf-sub">{{ cat.coats.join('、') }}</div>
-                    </div>
-                    <div class="pf-card">
-                        <div class="pf-label"><Icon icon="mdi:content-cut" width="15" />結紮</div>
-                        <div v-if="cat.neutered === null" class="pf-empty">不確定</div>
-                        <div v-else class="pf-value">{{ cat.neutered ? '已結紮' : '未結紮' }}</div>
-                    </div>
-                    <div class="pf-card">
-                        <div class="pf-label"><Icon icon="mdi:bug-outline" width="15" />驅蟲</div>
-                        <div class="pf-empty">尚無紀錄</div>
-                    </div>
-                    <div class="pf-card">
-                        <div class="pf-label"><Icon icon="mdi:needle" width="15" />預防針</div>
-                        <div class="pf-empty">尚無紀錄</div>
-                    </div>
-                    <div class="pf-card wide">
-                        <div class="pf-label"><Icon icon="mdi:hospital-box-outline" width="15" />就醫紀錄</div>
-                        <div class="pf-empty">尚無紀錄</div>
-                    </div>
+                    <div v-if="healthLoading" class="state">載入中...</div>
+                    <div v-else-if="!healthRecords.length" class="pf-empty-box">尚無紀錄</div>
+                    <!-- 照年份分段（年份小標題），同一天的合成一張卡：左邊日期方塊，右邊一筆一段 -->
+                    <template v-for="year in healthByYear" :key="year.year">
+                        <div class="hr-yearline">{{ year.year }}</div>
+                        <div v-for="day in year.days" :key="day.date" class="hr-card">
+                            <div class="hr-datebox">{{ $dayjs(day.date).format('MM/DD') }}</div>
+                            <div class="hr-body">
+                                <div
+                                    v-for="r in day.records"
+                                    :key="r.id"
+                                    class="hr-item"
+                                    :class="{ flash: flashRecordId === r.id }"
+                                    :data-health-id="r.id"
+                                >
+                                    <div class="hr-head">
+                                        <!-- 項目當標題：血檢、結紮 -->
+                                        <span class="hr-title">{{ r.items.join('、') }}</span>
+                                        <button
+                                            v-if="isAdmin"
+                                            type="button"
+                                            class="hr-edit"
+                                            aria-label="編輯"
+                                            @click="openHealth(r)"
+                                        >
+                                            <Icon icon="fa6-regular:pen-to-square" width="13" />
+                                        </button>
+                                    </div>
+                                    <!-- 類型：有色圖示＋字，標題下面一行小字 -->
+                                    <div class="hr-sub">
+                                        <span class="hr-kind" :class="r.kind">
+                                            <Icon :icon="healthTypeIcon(r.kind)" width="14" />{{ healthTypeLabel(r.kind) }}
+                                        </span>
+                                    </div>
+                                    <div v-if="r.companions?.length" class="hr-companions">
+                                        <Icon icon="mdi:account-multiple-outline" width="14" />陪同：{{ r.companions.join('、') }}
+                                    </div>
+                                    <div v-if="r.note" class="hr-note">{{ r.note }}</div>
+                                    <div v-if="r.photos.length" class="hr-photos">
+                                        <button
+                                            v-for="(photo, i) in r.photos"
+                                            :key="photo.id"
+                                            type="button"
+                                            class="hr-photo"
+                                            aria-label="看大圖"
+                                            @click="openHealthPhotos(r, i)"
+                                        >
+                                            <img :src="photo.thumb_url" alt="" loading="lazy" />
+                                        </button>
+                                    </div>
+                                    <!-- 最後改內容的人與時間，右下角（照片上傳者在看大圖時顯示） -->
+                                    <div class="hr-meta">
+                                        <Icon icon="mdi:pencil-outline" width="12" />{{ r.updated_by_name || r.author_name || '未命名' }}
+                                        {{ editedAt(r) }}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </template>
 
             <PhotoViewer v-model:index="viewerIndex" :photos="viewerPhotos" @close="viewerIndex = null" />
+
+            <!-- 管理員新增／編輯醫療紀錄 -->
+            <CatHealthDialog
+                v-if="isAdmin && cat"
+                v-model="healthEditing"
+                :cat-id="cat.id"
+                :record="healthRecord"
+                :preset="healthPreset"
+                @saved="onHealthSaved"
+                @deleted="onHealthDeleted"
+            />
 
             <!-- 管理員編輯（同後台貓咪管理的視窗）：留在這頁，存好重抓頁首與小檔案；刪掉回清單 -->
             <CatProfileDialog
                 v-if="isAdmin && cat"
                 v-model="editing"
                 :cat="cat"
+                :focus="editFocus"
                 @saved="loadCat"
                 @deleted="onDeleted"
             />
@@ -372,15 +515,19 @@
 
 <script setup>
 // 新版貓咪檔案（cat_profiles）：頁首＋日常（每一班分三區：值班〔飲食如廁、放風、未完成〕、四個分頁的留言、照片）＋小檔案。
-// 志工都能看；管理員的「編輯」在這頁打開編輯視窗（components/CatProfileDialog.vue）
+// 志工都能看；管理員的「編輯」在這頁打開編輯視窗（components/CatProfileDialog.vue），醫療紀錄也是管理員新增、編輯
 import { Icon } from '@iconify/vue';
 import { catAgeText, stayText } from '~/composables/catTraits';
 import { intakeCells, isIntakeTouched } from '~/composables/intake';
+import { healthTypeIcon, healthTypeLabel } from '~/composables/healthKinds';
 import { isObserveKind } from '~/composables/photoKinds';
 
+// 網址：/cats/<id> 是日常，/cats/<id>/profile 是小檔案。
+// key 只看貓：兩個分頁之間切換是同一個頁面，不重新載入
 definePageMeta({
     middleware: 'auth',
     ssr: false,
+    key: (route) => `cat-${route.params.id}`,
 });
 
 const route = useRoute();
@@ -406,7 +553,19 @@ const WEEKDAYS = '日一二三四五六';
 const catId = computed(() => Number(route.params.id));
 const cat = ref(null);
 const loadingCat = ref(true);
-const view = ref('timeline');
+// 日常／小檔案記在網址路徑（/cats/<id>、/cats/<id>/profile），重新整理或分享連結都停在同一個分頁；
+// 上一頁、下一頁也會跟著切。不認得的路徑當成日常
+const router = useRouter();
+const viewOf = (tab) => (tab === 'profile' ? 'profile' : 'timeline');
+const view = ref(viewOf(route.params.tab));
+watch(view, (v) => {
+    const path = v === 'profile' ? `/cats/${route.params.id}/profile` : `/cats/${route.params.id}`;
+    if (route.path !== path) router.push(path);
+});
+watch(
+    () => route.params.tab,
+    (tab) => (view.value = viewOf(tab))
+);
 
 useHead({ title: computed(() => (cat.value ? `${cat.value.name}｜貓咪檔案` : '貓咪檔案')) });
 
@@ -418,13 +577,22 @@ const noteLines = computed(() =>
         .filter(Boolean)
 );
 
-const basics = computed(() => {
+// 外觀卡：花色、毛長，例如「白底虎斑・短毛」
+const looks = computed(() => {
     const c = cat.value;
-    return [c.sex ? `${c.sex}貓` : '性別不確定', c.coat_length].filter(Boolean).join('・');
+    return [(c.coats || []).join('、'), c.coat_length].filter(Boolean).join('・');
+});
+
+// 入住日卡的小字：還在貓屋「已入住 X」；領養了算到領養那天「住了 X」，不知道哪天領養就不寫
+const stayLine = computed(() => {
+    const c = cat.value;
+    if (!c.arrived_on) return '';
+    if (!c.adopted) return stayText(c.arrived_on) && `已入住 ${stayText(c.arrived_on)}`;
+    const stay = c.adopted_on && stayText(c.arrived_on, c.adopted_on);
+    return stay ? `住了 ${stay}` : '';
 });
 
 const fullDate = (date) => $dayjs(date).format('YYYY/MM/DD');
-const monthLabel = (date) => $dayjs(date).format('YYYY 年 M 月');
 const dateLabel = (date) => {
     const d = $dayjs(date);
     const year = d.year() === $dayjs().year() ? '' : `${d.year()}/`;
@@ -437,7 +605,9 @@ const timeOf = (at, date) => {
 };
 
 const editing = ref(false);
-function editCat() {
+const editFocus = ref(null); // 打開編輯貓咪時要捲到哪一欄（點小檔案的卡片進來）
+function editCat(focus = null) {
+    editFocus.value = focus;
     editing.value = true;
 }
 
@@ -778,6 +948,21 @@ const viewer = ref(null);
 const viewerIndex = ref(null);
 const viewerPhotos = computed(() => {
     if (!viewer.value) return [];
+    // 頭像：一張，上方寫名字
+    if (viewer.value.avatar) {
+        return [{ url: avatarUrl(cat.value.avatar_path), label: cat.value.name, meta: '' }];
+    }
+    // 醫療紀錄的照片：上方寫日期與類型，下面是那筆的描述
+    if (viewer.value.health) {
+        const r = viewer.value.health;
+        return r.photos.map((p) => ({
+            url: p.url,
+            label: [fullDate(r.date), healthTypeLabel(r.kind), r.items.join('、')].filter(Boolean).join('・'),
+            meta: `${p.uploader_name || '未命名'} 上傳 ${editedAt({ updated_at: p.created_at })}`,
+            text: r.note,
+            textKind: 'note',
+        }));
+    }
     const { entry, photos, comment } = viewer.value;
     return photos.map((p) => ({
         url: p.url,
@@ -788,6 +973,16 @@ const viewerPhotos = computed(() => {
         textKind: p.comment_id ? 'comment' : 'note',
     }));
 });
+
+function openAvatar() {
+    viewer.value = { avatar: true };
+    viewerIndex.value = 0;
+}
+
+function openHealthPhotos(record, index) {
+    viewer.value = { health: record };
+    viewerIndex.value = index;
+}
 
 // 照片區：同一個分頁的照片左右換。留言附的顯示那則留言
 function openPhotos(entry, photos, index) {
@@ -800,11 +995,83 @@ function openCommentPhotos(entry, message, index) {
     viewerIndex.value = index;
 }
 
+// ---- 醫療紀錄（看診、急診、回診、驅蟲、預防針、結紮、其他）：志工都能看，管理員新增、編輯（components/CatHealthDialog.vue） ----
+const COUNTED_ITEMS = [
+    // kind：卡片上按「＋」新增時預設的類型（驅蟲多半在貓屋處理，預防針在醫院）
+    { item: '驅蟲', unit: '次', icon: 'mdi:bug-outline', kind: 'house' },
+    { item: '預防針', unit: '劑', icon: 'mdi:needle', kind: 'visit' },
+];
+const healthRecords = ref([]);
+const healthLoading = ref(true);
+const healthEditing = ref(false);
+const healthRecord = ref(null); // 正在編輯的那筆（null＝新增）
+
+const recordsWith = (item) => healthRecords.value.filter((r) => r.items.includes(item));
+
+// 列表：年份 → 日期 → 那天的紀錄（都是新的在前，healthRecords 本來就排好了）
+const healthByYear = computed(() => {
+    const years = [];
+    for (const r of healthRecords.value) {
+        const year = r.date.slice(0, 4);
+        let y = years.at(-1);
+        if (y?.year !== year) years.push((y = { year, days: [] }));
+        let d = y.days.at(-1);
+        if (d?.date !== r.date) y.days.push((d = { date: r.date, records: [] }));
+        d.records.push(r);
+    }
+    return years;
+});
+const byNewest = (a, b) => b.date.localeCompare(a.date) || b.id - a.id;
+
+async function loadHealth() {
+    try {
+        healthRecords.value = await $fetch('/api/cats/health', { query: { catId: catId.value } });
+    } catch (e) {
+        console.error('load health records error:', e);
+    } finally {
+        healthLoading.value = false;
+    }
+}
+
+const healthPreset = ref(null); // 新增時預先帶的類型與項目
+function openHealth(record = null, preset = null) {
+    healthRecord.value = record;
+    healthPreset.value = preset;
+    healthEditing.value = true;
+}
+
+function onHealthSaved(row) {
+    healthRecords.value = [...healthRecords.value.filter((r) => r.id !== row.id), row].sort(byNewest);
+}
+
+// 最後編輯、看大圖的上傳時間：今年的不寫年份
+function editedAt(r) {
+    const t = $dayjs(r.updated_at);
+    return t.format(t.year() === $dayjs().year() ? 'MM/DD HH:mm' : 'YYYY/MM/DD HH:mm');
+}
+
+// 基本資料卡上點日期：捲到那筆醫療紀錄、閃一下
+const flashRecordId = ref(null);
+function goToRecord(id) {
+    const el = document.querySelector(`[data-health-id="${id}"]`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setTimeout(() => {
+        flashRecordId.value = id;
+        setTimeout(() => flashRecordId.value === id && (flashRecordId.value = null), 1600);
+    }, 400);
+}
+
+function onHealthDeleted(id) {
+    healthRecords.value = healthRecords.value.filter((r) => r.id !== id);
+}
+
 onMounted(async () => {
     await loadCat();
     loadingCat.value = false;
     if (!cat.value) return;
     loadMore();
+    loadHealth();
     joinCommentChannels();
 });
 </script>
@@ -847,22 +1114,54 @@ onMounted(async () => {
 // ---- 頁首 ----
 .cp-head {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 16px;
 }
 
+.cp-avatar-wrap {
+    position: relative;
+    flex-shrink: 0;
+}
+
+// 位置：白框小膠囊，壓在頭像下緣中間
+.cp-location {
+    position: absolute;
+    bottom: -8px;
+    left: 50%;
+    display: inline-flex;
+    align-items: center;
+    gap: 1px;
+    padding: 0 8px 0 6px;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    background: #eef1f5;
+    color: #4f5d70;
+    font-size: 12px;
+    line-height: 20px;
+    white-space: nowrap;
+    transform: translateX(-50%);
+}
+
+// 有頭像時是按鈕（點了看大圖）
+button.cp-avatar {
+    cursor: pointer;
+}
+
 .cp-avatar {
+    margin: 0;
+    padding: 0;
+    border: none;
     display: flex;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
-    width: 84px;
-    height: 84px;
+    width: 104px;
+    height: 104px;
     border-radius: 50%;
     overflow: hidden;
     background: #f0eeec;
     color: #8a7f78;
-    font-size: 30px;
+    font-size: 36px;
     font-weight: 500;
 
     img {
@@ -879,8 +1178,24 @@ onMounted(async () => {
 
 .cp-name-row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
+    gap: 2px 8px;
+}
+
+.cp-sex {
+    flex-shrink: 0;
+    margin-right: -4px; // 跟名字靠近一點
+    // 對齊名字的墨水中心（實測符號比中文字低約 4px；換字體或字級要重量）
+    transform: translateY(-4px);
+
+    &.male {
+        color: #3f7ea3;
+    }
+
+    &.female {
+        color: #c0507a;
+    }
 }
 
 .cp-name {
@@ -899,31 +1214,19 @@ onMounted(async () => {
     color: #8a7f78;
 }
 
-.cp-nicknames {
-    margin-top: 2px;
+.cp-nick {
     color: #8a7f78;
-    font-size: 13px;
+    font-size: 14px;
 }
 
-.cp-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-}
 
 .cp-tag {
     display: inline-flex;
     align-items: center;
-    gap: 2px;
-    padding: 2px 10px 2px 8px;
+    padding: 0 8px;
     border-radius: 999px;
-    font-size: 13px;
-
-    &.location {
-        background: #eef1f5;
-        color: #4f5d70;
-    }
+    font-size: 12px;
+    line-height: 20px;
 
     &.adopted {
         background: #f3ede4;
@@ -931,11 +1234,10 @@ onMounted(async () => {
     }
 }
 
+// 關於我：整段貼近名字
 .cp-notes {
-    margin: 16px 0 0;
-    padding: 12px 14px;
-    border-radius: 12px;
-    background: #faf8f6;
+    margin: 0;
+    padding: 0;
     list-style: none;
 
     li {
@@ -945,14 +1247,13 @@ onMounted(async () => {
         line-height: 1.5;
 
         & + li {
-            margin-top: 6px;
+            margin-top: 4px;
         }
     }
 
-    .pin {
+    .mark {
         flex-shrink: 0;
-        margin-top: 3px;
-        color: #c0504d;
+        font-size: 13px;
     }
 }
 
@@ -1630,6 +1931,249 @@ onMounted(async () => {
 }
 
 // ---- 小檔案 ----
+// 小檔案的區塊標題：字後面拉一條細線（同後台首頁）
+.pf-section {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 10px;
+    color: #4a4542;
+    font-size: 15px;
+    font-weight: 600;
+
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #e4e0dd;
+    }
+
+    .pf-grid + & {
+        margin-top: 22px;
+    }
+}
+
+.pf-add {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #6da2c2;
+    color: #fff;
+}
+
+// 驅蟲、預防針、結紮的日期：一個日期一個淡藍框，點了捲到那筆紀錄
+.pf-dates {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    margin-top: 6px;
+
+    button {
+        width: auto;
+        margin: 0;
+        padding: 0 6px;
+        border: 1px solid #c9dff0;
+        border-radius: 4px;
+        background: #eef6fc;
+        color: #3f7ea3;
+        font-size: 12px;
+        line-height: 20px;
+    }
+}
+
+.pf-empty-box {
+    padding: 20px 0;
+    border: 1px dashed #e4e0dd;
+    border-radius: 12px;
+    color: #b8b2ad;
+    font-size: 14px;
+    text-align: center;
+}
+
+// 醫療紀錄：同一天一張卡（左邊日期，右邊一筆一段：項目當標題、類型一行小字、陪同者、描述、照片、右下角最後編輯）
+.hr-card {
+    display: flex;
+    padding: 12px;
+    border: 1px solid #ece8e5;
+    border-radius: 12px;
+    background: #fff;
+
+    & + & {
+        margin-top: 10px;
+    }
+}
+
+// 左邊日期方塊（年份在上面的分段小標題），右邊一條細線隔開
+.hr-datebox {
+    flex-shrink: 0;
+    width: 52px;
+    margin-right: 12px;
+    padding-right: 10px;
+    border-right: 1px solid #f0edea;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.3;
+    text-align: center;
+}
+
+
+
+.hr-body {
+    min-width: 0;
+    flex: 1;
+}
+
+.hr-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+// 類型：圖示與字都用類型的顏色，沒有底色
+.hr-kind {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+
+    &.visit {
+        color: #6a4a99;
+    }
+
+    &.emergency {
+        color: #b33a39;
+    }
+
+    &.revisit {
+        color: #2f7d7a;
+    }
+
+    &.house {
+        color: #4f8a5e;
+    }
+}
+
+.hr-title {
+    min-width: 0;
+    font-size: 16px;
+    font-weight: 600;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+}
+
+.hr-edit {
+    margin-left: auto;
+    display: inline-flex;
+    flex-shrink: 0;
+    width: auto;
+    padding: 2px;
+    border: none;
+    background: none;
+    color: #c9c3be;
+}
+
+// 同一天的幾筆：中間一條虛線；從基本資料的日期點過來那筆閃一下
+.hr-item {
+    margin: -4px -6px;
+    padding: 4px 6px;
+    border-radius: 8px;
+    transition: background-color 0.4s;
+
+    & + & {
+        margin-top: 8px;
+        padding-top: 12px;
+        border-top: 1px dashed #ece8e5;
+        border-radius: 0 0 8px 8px;
+    }
+
+    &.flash {
+        background: #e6f0f6;
+    }
+}
+
+.hr-sub {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-top: 2px;
+    font-size: 12px;
+}
+
+.hr-meta {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 3px;
+    margin-top: 6px;
+    color: #a8a29e;
+    font-size: 12px;
+}
+
+.hr-companions {
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    margin-top: 2px;
+    color: #8a7f78;
+    font-size: 12px;
+}
+
+// 年份分段小標題：字後面一條細線
+.hr-yearline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 4px 0 8px;
+    color: #8a7f78;
+    font-size: 13px;
+    font-weight: 600;
+
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #ece8e5;
+    }
+
+    .hr-card + & {
+        margin-top: 16px;
+    }
+}
+
+.hr-note {
+    margin-top: 8px;
+    font-size: 14px;
+    line-height: 1.5;
+    white-space: pre-line;
+    overflow-wrap: anywhere;
+}
+
+.hr-photos {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin-top: 8px;
+}
+
+.hr-photo {
+    width: 100%;
+    padding: 0;
+    border: none;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #f0eeec;
+    aspect-ratio: 1;
+
+    img {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
 .pf-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -1641,10 +2185,6 @@ onMounted(async () => {
     border: 1px solid #ece8e5;
     border-radius: 12px;
     background: #fff;
-
-    &.wide {
-        grid-column: 1 / -1;
-    }
 }
 
 .pf-label {
@@ -1654,6 +2194,36 @@ onMounted(async () => {
     margin-bottom: 6px;
     color: #8a7f78;
     font-size: 13px;
+
+    // 右上角：編輯（筆）或新增紀錄（＋）
+    .pf-action {
+        margin-left: auto;
+        color: #b8b2ad;
+    }
+}
+
+// 管理員點了打開編輯貓咪的卡片
+.pf-card.editable {
+    cursor: pointer;
+
+    &:active {
+        background: #faf8f6;
+    }
+}
+
+.pf-plus {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 22px;
+    margin: 0 0 0 auto;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: #6da2c2;
+    color: #fff;
 }
 
 .pf-value {
