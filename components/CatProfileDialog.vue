@@ -101,7 +101,7 @@
                         </div>
                     </template>
                 </draggable>
-                <button type="button" class="about-add" @click="addAbout(aboutItems.length)">＋ 新增一點</button>
+                <button type="button" class="about-add" @click="addAbout(aboutItems.length)">＋ 新增</button>
 
                 <div class="form-sec">基本資料</div>
                 <!-- 外觀：花色（可多選，自己加的灰色）、毛長（短毛／長毛擇一，再點一次取消＝不確定）都在同一排；
@@ -319,7 +319,7 @@ const aboutOf = (notes) =>
         .filter(Boolean)
         .map((text) => ({ key: crypto.randomUUID(), text }));
 
-// 按「＋ 新增一點」：在 index 的位置插一列空的並移過去（按 Enter 不會新增：中文輸入法選字也會按 Enter）
+// 按「＋ 新增」：在 index 的位置插一列空的並移過去（按 Enter 不會新增：中文輸入法選字也會按 Enter）
 function addAbout(index) {
     aboutItems.value.splice(index, 0, { key: crypto.randomUUID(), text: '' });
     nextTick(() => aboutInputs.value[index]?.focus());
