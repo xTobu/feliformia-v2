@@ -64,3 +64,13 @@ export async function compressPhoto(file) {
         source.close?.();
     }
 }
+
+// 只要一份大圖（例如頭像留著的原圖）：最長邊 1600px。回傳 { blob, width, height }
+export async function compressImage(file) {
+    const source = await decode(file);
+    try {
+        return await render(source, FULL);
+    } finally {
+        source.close?.();
+    }
+}

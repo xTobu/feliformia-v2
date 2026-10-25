@@ -91,6 +91,25 @@ export async function loadHealthRecords(catId, ids = null) {
     return records.map((r) => ({ ...r, photos: signed.filter((p) => p.record_id === r.id) }))
 }
 
+// 用到某個項目的醫療紀錄（所有貓），帶著貓的名字。刪項目前查用量、刪的時候用。
+// 自己打的項目可能有逗號、引號，不用 PostgREST 的陣列條件，抓回來自己比（紀錄不多）
+export async function recordsWithItem(client, item) {
+    const { data, error } = await client
+        .from('cat_health_records')
+        .select('id, date, items, cat_profiles(name)')
+        .order('date', { ascending: false })
+    if (error) throw createError({ statusCode: 500, message: error.message })
+    return data.filter((r) => (r.items || []).includes(item))
+}
+
+// 用量：幾筆；blocking 是只剩這個項目的（刪了會沒有項目，要先換）
+export const itemUsage = (records) => ({
+    count: records.length,
+    blocking: records
+        .filter((r) => r.items.length === 1)
+        .map((r) => ({ id: r.id, date: r.date, cat_name: r.cat_profiles?.name || '' })),
+})
+
 // 刪掉照片的 Storage 檔案（紀錄已經刪了或要刪）。失敗只記 log：檔案留著沒人用，不影響畫面
 export async function removeHealthFiles(photos) {
     if (!photos.length) return

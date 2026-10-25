@@ -4,11 +4,13 @@
         <NuxtLink v-if="isAdmin" to="/admin" class="admin-link">
             管理後台
         </NuxtLink>
+        <!-- 先行版：新版值班表與貓咪列表（跟下面的舊版並行，名稱同右上選單） -->
+        <div class="or">先行版</div>
+        <NuxtLink class="btn" to="/shift">值班表</NuxtLink>
+        <NuxtLink class="btn" to="/cats">貓咪列表</NuxtLink>
         <div class="or">今日照護</div>
         <NuxtLink class="btn" to="/regular">飲食與如廁紀錄</NuxtLink>
-        <NuxtLink class="btn" to="/medicine">餵藥及特殊飲食紀錄</NuxtLink> 
-        <NuxtLink class="btn" to="/shift">值班記錄表（新版試行）</NuxtLink>
-        <NuxtLink class="btn" to="/cats">貓咪檔案（新版試行）</NuxtLink>
+        <NuxtLink class="btn" to="/medicine">餵藥及特殊飲食紀錄</NuxtLink>
         <div class="or">協作與安排</div>
         <NuxtLink class="btn" to="/vote">值班投票</NuxtLink>
         <NuxtLink class="btn" to="/calendar">行事曆</NuxtLink>

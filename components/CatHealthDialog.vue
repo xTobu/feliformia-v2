@@ -30,7 +30,7 @@
                     </div>
                 </el-form-item>
                 <!-- 項目多選：預設的＋大家加過的標籤；「＋ 其他」打字加入新的。
-                     自己加的選起來一樣是藍色，右上角多一個 ✕（點了取消勾選） -->
+                     自己加的選起來一樣是藍色，右上角多一個 ✕：刪掉這個項目（有紀錄用到會先提醒，從那些紀錄拿掉） -->
                 <el-form-item label="項目（可多選，至少一個）">
                     <div class="chips">
                         <span v-for="item in itemChoices" :key="item" class="chip-wrap">
@@ -44,12 +44,12 @@
                                 {{ item }}
                             </button>
                             <button
-                                v-if="!isPresetItem(item) && form.items.includes(item)"
+                                v-if="!isPresetItem(item)"
                                 type="button"
                                 class="chip-remove"
-                                :aria-label="`拿掉${item}`"
+                                :aria-label="`刪除項目${item}`"
                                 :disabled="saving"
-                                @click="toggleItem(item)"
+                                @click="removeCustomItem(item)"
                             >
                                 <Icon icon="mdi:close" width="11" />
                             </button>
@@ -193,7 +193,7 @@
 
 <script setup>
 // v-model：開關。catId：哪隻貓。record：要編輯的那筆（null＝新增）。preset：新增時預先帶的 { kind, items }
-// saved(row)：存好的那筆（含照片網址）。deleted(id)：刪掉了
+// saved(row)：存好的那筆（含照片網址）。deleted(id)：刪掉了。itemRemoved(item)：自己加的項目刪掉了（已經從所有紀錄拿掉）
 import { Icon } from '@iconify/vue';
 import Swal from 'sweetalert2';
 import {
@@ -215,7 +215,7 @@ const props = defineProps({
     // 新增時預先帶好的類型與項目（基本資料卡上的「＋」：驅蟲、預防針、結紮）
     preset: { type: Object, default: null },
 });
-const emit = defineEmits(['update:modelValue', 'saved', 'deleted']);
+const emit = defineEmits(['update:modelValue', 'saved', 'deleted', 'itemRemoved']);
 
 const MAX_PHOTOS = 10;
 const { $dayjs } = useNuxtApp();
@@ -258,6 +258,59 @@ function addItem() {
     const item = newItem.value.trim().slice(0, MAX_HEALTH_ITEM_LENGTH);
     if (item && !form.value.items.includes(item)) form.value.items = [...form.value.items, item];
     cancelAddItem();
+}
+
+// 刪掉自己加的項目：還沒有紀錄用到（剛打的）直接拿掉；有紀錄用到先問，確定才從那些紀錄拿掉。
+// 有紀錄只剩這個項目就不能刪（每筆至少一個項目），列出是哪幾筆
+const escapeHtml = (text) =>
+    String(text).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+
+async function removeCustomItem(item) {
+    const dropLocal = () => {
+        form.value.items = form.value.items.filter((i) => i !== item);
+        customItems.value = customItems.value.filter((i) => i !== item);
+    };
+    if (!customItems.value.includes(item)) {
+        dropLocal();
+        return;
+    }
+    let usage;
+    try {
+        usage = await $fetch('/api/cats/health/item-usage', { query: { item } });
+    } catch (e) {
+        console.error('load item usage error:', e);
+        Swal.fire({ text: '讀不到這個項目用在哪裡，請再試一次' });
+        return;
+    }
+    const name = escapeHtml(item);
+    if (usage.blocking.length) {
+        const list = usage.blocking
+            .map((r) => `${escapeHtml(r.cat_name)} ${r.date.replaceAll('-', '/')}`)
+            .join('<br>');
+        Swal.fire({
+            html: `這些紀錄只有「${name}」一個項目，刪掉就沒有項目了，請先幫它們換別的項目：<br><span class="swal-hint">${list}</span>`,
+        });
+        return;
+    }
+    if (usage.count) {
+        const { isConfirmed } = await Swal.fire({
+            html: `有 ${usage.count} 筆醫療紀錄用到「${name}」，確定要刪除嗎？<br><span class="swal-hint">會從這些紀錄拿掉，刪除後無法復原。</span>`,
+            showCancelButton: true,
+            confirmButtonText: '刪除',
+            cancelButtonText: '取消',
+            confirmButtonColor: '#b33a39',
+        });
+        if (!isConfirmed) return;
+        try {
+            await $fetch('/api/cats/health/remove-item', { method: 'POST', body: { item } });
+        } catch (e) {
+            console.error('remove item error:', e);
+            Swal.fire({ text: '刪除失敗，請再試一次' });
+            return;
+        }
+    }
+    dropLocal();
+    emit('itemRemoved', item);
 }
 
 // ---- 陪同者：有效志工的暱稱（/api/volunteer/list，打開視窗時抓一次）＋這筆已經有、但不在名單上的 ----

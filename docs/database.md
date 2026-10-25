@@ -150,7 +150,7 @@ votes.data
 
 | 表 | 頁面 | 說明 |
 |---|---|---|
-| `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`），花色 `coats`（可多選，預設清單之外可以「＋ 其他」自己打）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、生日 `birthday`（預估，可以選到日）、領養 `adopted`＋到新家日期 `adopted_on`（已領養但不知道哪天就是 null；沒領養不能有日期）、`notes`；選項在 `composables/catTraits.js` |
+| `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`；原圖 `avatar_source_path` 與框的範圍 `avatar_crop` 留著，點頭像可以重新調整位置），花色 `coats`（可多選，預設清單之外可以「＋ 其他」自己打）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、生日 `birthday`（預估，可以選到日）、領養 `adopted`＋到新家日期 `adopted_on`（已領養但不知道哪天就是 null；沒領養不能有日期）、`notes`；選項在 `composables/catTraits.js` |
 | `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／隨餐藥／補充品／放風／其他，`content`。只有隨餐藥（拌進飯裡、放碗就可以走）要在備餐分頁打勾。放風＝長期固定放風，內容選填：期間內的班，沒人按過放風的貓 `released` 照它打開（見下方「shifts 的快照與局部更新」） |
 | `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用，`treatment`、`reason`；都在醫療分頁打勾 |
 | `required_items` | `/admin/required` | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次 |
@@ -158,7 +158,7 @@ votes.data
 | `cat_health_records` | `/cats/[id]` 小檔案 | 醫療紀錄：類型 `kind` 單選——看診 visit／急診 emergency／回診 revisit／貓屋處理 house（資料庫有 check）；項目 `items` 可多選——預設 血檢、結紮、預防針、快篩、晶片、洗牙、拔牙、驅蟲、除蚤、吐血、血便、傷口（醫院做的在前、症狀在最後），或志工按「＋ 其他」自己加的標籤（存那幾個字，加過的之後所有貓都會出現在選項裡，`/api/cats/health/items`）；清單在 `composables/healthKinds.js`。每筆至少一個項目（列表上項目就是標題，例如「血檢、結紮」）。另有 `date`、`note`（描述）、陪同者 `companions`（名字陣列：有效志工名單列成膠囊點選，名單上沒有的按「＋ 其他」打字加入）、最後編輯者 `updated_by`／`updated_by_name`（新增時就是建立的人，照片的增減也算編輯）。所有登入的人可讀，新增、修改、刪除只有管理員，走 `server/api/cats/health*`（service key，沒有寫入 policy）。小檔案的驅蟲、預防針卡片算有勾那個項目的紀錄（次數與日期），結紮卡有勾結紮的紀錄就顯示已結紮與日期（沒有才看 `cat_profiles.neutered`）；卡片上的日期點了會捲到那筆紀錄，管理員按驅蟲、預防針卡片右上的「＋」新增一筆（預先帶好那個項目：驅蟲是貓屋處理，預防針是看診）。入住日、估計年齡、外觀、結紮卡片管理員點了打開編輯貓咪 |
 | `cat_health_photos` | `/cats/[id]` 小檔案 | 醫療紀錄的照片（一筆最多 10 張），`uploader_name` 是上傳者當下的暱稱（看大圖時顯示）。檔案在 Storage 私人 bucket `cat-health`（`<貓 id>/` 底下），上傳與看圖同值班照片（server 發一次性上傳網址／有時效網址，手機先壓縮）；刪紀錄或拿掉照片時 API 連檔案一起刪 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
-| `profiles.avatar_path` | `/settings` | 志工頭像（`avatars` bucket，公開）。上傳走 `/api/avatar/upload-url` → 直傳 Storage → `/api/avatar/save`（換頭像會刪舊檔）；留言頻道會顯示 |
+| `profiles.avatar_path` | `/settings` | 志工頭像（`avatars` bucket，公開）。另外留原圖 `avatar_source_path`（最長邊 1600px）與框的範圍 `avatar_crop`（`{ left, top, width, height }`，原圖上的像素），點頭像可以重新調整位置、點相機換照片（貓的頭像同一套）。上傳走 `/api/avatar/upload-url` → 直傳 Storage → `/api/avatar/save`（換頭像會刪舊檔）；留言頻道會顯示 |
 | `shift_comments` | `/shift` | 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看（`/api/shift/comments/channel`，班與班之間有分隔線）。可以附照片、只附照片時 `body` 是空字串。作者本人可以編輯（`edited_at`，顯示「已編輯」）與刪除（附的照片連 Storage 檔一起刪）。可以搜尋（`/api/shift/comments/search`，這個頻道所有的班）。`for_next` 是「重要」：整則橘底；下一班的 💬 旁有橘點（只維持一班） |
 | `shift_photos` | `/shift` | 每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kinds` 是類型（選填、可多選，照片庫上方可以篩選；觀察 剩食／貓砂｜嘔吐／血跡／毛髮皮膚／其他（剩食、貓砂是「剛到要拍」那兩種，畫面上自成一組），醫療 傷口／皮膚／眼耳口鼻／治療／用藥／其他，備餐 留餐｜乾乾／罐罐／加藥／其他（留餐是「離開要拍」的那種），清單在 `composables/photoKinds.js`）。🗂️ 照片庫 = 這隻貓、這個分頁的所有照片：`comment_id` 空的是直接上傳的，有值的是留言附的（縮圖標 💬，看大圖顯示那則留言、可以跳過去；只能改類型，描述與刪除跟著留言）。照班分組往上看：打開時這一班加前 4 班，往上再 5 班（`/api/shift/photos/history`）。留言頻道標題列的「留言／照片」切換到照片庫。`upload_batch` 是同一次上傳共用的 id：留言頻道裡把直接上傳的照片顯示成「誰上傳了幾張照片到照片庫」，一次上傳一筆（沒有 id 的舊照片一張一筆） |
 

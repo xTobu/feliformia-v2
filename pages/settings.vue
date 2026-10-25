@@ -5,16 +5,41 @@
         <!-- 名稱設定 -->
         <section class="settings-section">
             <h2>個人資料</h2>
-            <!-- 頭像：選照片 → 裁切（拖曳、縮放）→ 上傳。留言頻道會顯示 -->
+            <!-- 頭像：選照片 → 裁切（拖曳、縮放）→ 上傳。留言頻道會顯示。
+                 點頭像調整位置（沒頭像就是選照片），點右下角相機換一張（同編輯貓咪） -->
             <div class="avatar-row">
-                <div class="avatar">
-                    <img v-if="avatarPath" :src="avatarUrl(avatarPath)" alt="我的頭像" />
-                    <span v-else>{{ (nickname || '？').trim().charAt(0) }}</span>
+                <div class="avatar-wrap">
+                    <button
+                        type="button"
+                        class="avatar"
+                        :aria-label="avatarPath ? '調整頭像位置' : '上傳頭像'"
+                        :disabled="avatarSaving"
+                        @click="avatarPath ? adjustAvatar() : avatarInput?.click()"
+                    >
+                        <img v-if="avatarPath" :src="avatarUrl(avatarPath)" alt="我的頭像" />
+                        <span v-else>{{ (nickname || '？').trim().charAt(0) }}</span>
+                    </button>
+                    <button
+                        type="button"
+                        class="avatar-badge"
+                        aria-label="換一張照片"
+                        :disabled="avatarSaving"
+                        @click="avatarInput?.click()"
+                    >
+                        <Icon icon="mdi:camera" width="14" />
+                    </button>
                 </div>
                 <div class="avatar-actions">
-                    <button type="button" class="avatar-btn" :disabled="avatarSaving" @click="avatarInput?.click()">
-                        {{ avatarPath ? '更換頭像' : '上傳頭像' }}
+                    <button
+                        v-if="!avatarPath"
+                        type="button"
+                        class="avatar-btn"
+                        :disabled="avatarSaving"
+                        @click="avatarInput?.click()"
+                    >
+                        上傳頭像
                     </button>
+                    <span v-else class="avatar-hint">點頭像調整位置</span>
                     <button
                         v-if="avatarPath"
                         type="button"
@@ -30,9 +55,10 @@
             <ClientOnly>
                 <AvatarCropper
                     :file="avatarFile"
+                    :source="avatarAdjust"
                     :busy="avatarSaving"
                     @done="saveAvatar"
-                    @cancel="avatarFile = null"
+                    @cancel="(avatarFile = null), (avatarAdjust = null)"
                 />
             </ClientOnly>
             <p v-if="avatarError" class="error">{{ avatarError }}</p>
@@ -150,6 +176,7 @@
 </template>
 
 <script setup>
+import { Icon } from '@iconify/vue';
 import { CopyDocument, Check } from '@element-plus/icons-vue';
 import { ElMessage } from 'element-plus';
 
@@ -173,6 +200,8 @@ const { avatarUrl, uploadAvatar, removeAvatar } = useAvatar();
 // 頭像
 const avatarInput = ref(null);
 const avatarFile = ref(null); // 選好的照片，有值就打開裁切視窗
+const avatarAdjust = ref(null); // 重新調整位置：{ url, crop }，有值就打開裁切視窗
+const avatarSourcePath = ref(null); // 調整位置時沿用的原圖
 const avatarSaving = ref(false);
 const avatarError = ref(null);
 
@@ -182,12 +211,35 @@ function pickAvatar(event) {
     if (file) avatarFile.value = file;
 }
 
-async function saveAvatar(blob) {
+// 點頭像：抓原圖和上次框的範圍再打開裁切（舊頭像沒有原圖就拿那張頭像本身）
+async function adjustAvatar() {
+    const { data, error } = await supabase
+        .from('profiles')
+        .select('avatar_path, avatar_source_path, avatar_crop')
+        .eq('id', getUserId())
+        .maybeSingle();
+    if (error || !data?.avatar_path) {
+        console.error('load avatar source error:', error);
+        ElMessage.error('讀不到頭像，請再試一次');
+        return;
+    }
+    avatarSourcePath.value = data.avatar_source_path || data.avatar_path;
+    avatarAdjust.value = {
+        url: avatarUrl(avatarSourcePath.value),
+        crop: data.avatar_source_path ? data.avatar_crop : null,
+    };
+}
+
+async function saveAvatar(blob, { crop, sourceBlob }) {
     avatarSaving.value = true;
     avatarError.value = null;
     try {
-        avatarPath.value = await uploadAvatar({ target: 'me', blob });
+        // 新選的照片連原圖一起傳；調整位置沿用原本的原圖
+        const source = sourceBlob ? { blob: sourceBlob } : { path: avatarSourcePath.value };
+        const res = await uploadAvatar({ target: 'me', blob, source, crop });
+        avatarPath.value = res.avatar_path;
         avatarFile.value = null;
+        avatarAdjust.value = null;
     } catch (e) {
         console.error('saveAvatar error:', e);
         // 裁切視窗還開著、蓋住下面的錯誤訊息，另外跳一個提示
@@ -516,6 +568,35 @@ async function updatePassword() {
     gap: 16px;
     margin-bottom: 16px;
 
+    // 頭像與右下角的相機（兩顆分開的按鈕：點頭像調整位置，點相機換照片）
+    .avatar-wrap {
+        position: relative;
+        flex-shrink: 0;
+    }
+
+    .avatar-badge {
+        position: absolute;
+        right: -2px;
+        bottom: -2px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        margin: 0;
+        padding: 0;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        background: #6da2c2;
+        color: #fff;
+        cursor: pointer;
+    }
+
+    .avatar-hint {
+        color: #8a7f78;
+        font-size: 13px;
+    }
+
     .avatar {
         display: flex;
         flex-shrink: 0;
@@ -525,10 +606,14 @@ async function updatePassword() {
         height: 72px;
         border-radius: 50%;
         overflow: hidden;
+        margin: 0;
+        padding: 0;
+        border: none;
         background: #e8e2dc;
         color: #6b625d;
         font-size: 28px;
         font-weight: 500;
+        cursor: pointer;
 
         img {
             width: 100%;

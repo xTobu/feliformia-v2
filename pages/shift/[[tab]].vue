@@ -164,14 +164,21 @@
                                         "
                                         >乾</el-checkbox
                                     >
-                                    <el-slider
-                                        v-model="cat.intake.feed_detail"
-                                        :step="25"
-                                        :marks="marks"
-                                        :show-tooltip="false"
-                                        :disabled="isDisabled || !cat.intake.feed"
-                                        @change="saveIntake(cat)"
-                                    />
+                                    <!-- 沒勾也可以直接點、拖拉，會自動勾起來 -->
+                                    <div
+                                        class="intake-slider"
+                                        :class="{ off: !cat.intake.feed }"
+                                        @pointerdown.capture="checkFoodBySlider(cat, 'feed')"
+                                    >
+                                        <el-slider
+                                            v-model="cat.intake.feed_detail"
+                                            :step="25"
+                                            :marks="marks"
+                                            :show-tooltip="false"
+                                            :disabled="isDisabled"
+                                            @change="saveIntake(cat)"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -188,14 +195,21 @@
                                         "
                                         >罐</el-checkbox
                                     >
-                                    <el-slider
-                                        v-model="cat.intake.can_detail"
-                                        :step="25"
-                                        :marks="marks"
-                                        :show-tooltip="false"
-                                        :disabled="isDisabled || !cat.intake.can"
-                                        @change="saveIntake(cat)"
-                                    />
+                                    <!-- 沒勾也可以直接點、拖拉，會自動勾起來 -->
+                                    <div
+                                        class="intake-slider"
+                                        :class="{ off: !cat.intake.can }"
+                                        @pointerdown.capture="checkFoodBySlider(cat, 'can')"
+                                    >
+                                        <el-slider
+                                            v-model="cat.intake.can_detail"
+                                            :step="25"
+                                            :marks="marks"
+                                            :show-tooltip="false"
+                                            :disabled="isDisabled"
+                                            @change="saveIntake(cat)"
+                                        />
+                                    </div>
                                 </div>
                             </div>
 
@@ -2511,6 +2525,13 @@ function foodHandler(cat, type) {
     cat.intake[type === 'can' ? 'can_detail' : 'feed_detail'] = 0;
 }
 
+// 乾、罐沒勾時點了拖拉條：自動勾起來（點在「沒吃」上值不會變，所以這裡先存一次）
+function checkFoodBySlider(cat, type) {
+    if (isDisabled.value || cat.intake[type]) return;
+    cat.intake[type] = true;
+    saveIntake(cat);
+}
+
 function fecesHandler(cat) {
     cat.intake.feces_warning = cat.intake.feces ? '正常' : null;
 }
@@ -3156,8 +3177,19 @@ watch(
 
     .intake {
         .food {
-            .el-slider {
+            .intake-slider {
                 width: calc(100% - 60px);
+
+                // 沒勾（沒放）：看起來跟停用一樣淡，但點了、拖了會自動勾起來
+                &.off .el-slider {
+                    opacity: 0.5;
+                    :deep(.el-slider__marks-text) {
+                        color: #bbb;
+                    }
+                }
+            }
+            .el-slider {
+                width: 100%;
                 transform: translate(0, -6px);
             }
             .el-checkbox {

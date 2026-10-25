@@ -1,8 +1,8 @@
 <template>
-    <!-- 頭像裁切：選好照片後跳出來，拖曳移動、雙指或按鈕縮放，圓框裡的就是頭像。
-         按「使用這張」輸出 512×512 的 JPEG（done 事件），由呼叫的頁面上傳 -->
+    <!-- 頭像裁切：選好新照片，或點現有頭像重新調整位置時跳出來；拖曳移動、雙指或按鈕縮放，圓框裡的就是頭像。
+         按「完成」輸出 512×512 的 JPEG（done 事件），由呼叫的頁面上傳 -->
     <el-dialog
-        :model-value="!!file"
+        :model-value="!!(file || source)"
         title="調整頭像"
         width="90%"
         class="avatar-cropper-dialog"
@@ -19,6 +19,7 @@
                 :stencil-component="CircleStencil"
                 :stencil-props="{ aspectRatio: 1 }"
                 :default-size="defaultSize"
+                :default-position="defaultPosition"
                 image-restriction="stencil"
                 background-class="ac-background"
             />
@@ -31,8 +32,8 @@
         <template #footer>
             <div class="ac-actions">
                 <button type="button" class="ac-cancel" @click="emit('cancel')">取消</button>
-                <button type="button" class="ac-ok" :disabled="busy" @click="confirm">
-                    {{ busy ? '處理中…' : '使用這張' }}
+                <button type="button" class="ac-ok" :disabled="busy || !src" @click="confirm">
+                    {{ busy ? '處理中…' : src ? '完成' : '載入中…' }}
                 </button>
             </div>
         </template>
@@ -42,10 +43,14 @@
 <script setup>
 import { Cropper, CircleStencil } from 'vue-advanced-cropper';
 import 'vue-advanced-cropper/dist/style.css';
+import { compressImage } from '~/composables/useImageCompress';
 
+// file：新選的照片（先壓成最長邊 1600px 的原圖再裁，原圖跟著 done 一起交出去）。
+// source：{ url, crop } 重新調整現有頭像：原圖網址與上次框的範圍（舊頭像沒有原圖就給那張頭像）
+// done(blob, { crop, sourceBlob })：裁好的 512×512、這次框的範圍（原圖上的像素）、新選照片的原圖（調整位置時是 null）
 const props = defineProps({
-    // 選好的照片；有值就打開
     file: { type: Object, default: null },
+    source: { type: Object, default: null },
     // 外面在上傳時顯示「處理中」
     busy: { type: Boolean, default: false },
 });
@@ -54,23 +59,49 @@ const emit = defineEmits(['done', 'cancel']);
 const OUTPUT_SIZE = 512;
 const cropper = ref(null);
 const src = ref(null);
+let sourceBlob = null; // 新選照片壓好的原圖
+let loadId = 0;
 
+function setSrc(blob) {
+    if (src.value) URL.revokeObjectURL(src.value);
+    src.value = blob ? URL.createObjectURL(blob) : null;
+}
+
+// 原圖一律先變成 blob 再給裁切：新照片先壓過；網址的先抓下來（同源的 blob，畫到 canvas 才不會被擋）
 watch(
-    () => props.file,
-    (file) => {
-        if (src.value) URL.revokeObjectURL(src.value);
-        src.value = file ? URL.createObjectURL(file) : null;
-    }
+    () => [props.file, props.source],
+    async ([file, source]) => {
+        const id = ++loadId;
+        setSrc(null);
+        sourceBlob = null;
+        if (!file && !source) return;
+        try {
+            const blob = file ? (await compressImage(file)).blob : await (await fetch(source.url)).blob();
+            if (id !== loadId) return;
+            if (file) sourceBlob = blob;
+            setSrc(blob);
+        } catch (e) {
+            console.error('avatar cropper load error:', e);
+            if (id === loadId) emit('cancel');
+        }
+    },
+    { immediate: true }
 );
 
-onBeforeUnmount(() => {
-    if (src.value) URL.revokeObjectURL(src.value);
-});
+onBeforeUnmount(() => setSrc(null));
 
-// 一開始框住照片中間、取短邊的 9 成
+// 一開始：重新調整就框在上次的位置；新照片框住中間、取短邊的 9 成
+const initialCrop = () => (props.file ? null : props.source?.crop || null);
 const defaultSize = ({ imageSize }) => {
+    const crop = initialCrop();
+    if (crop) return { width: crop.width, height: crop.height };
     const side = Math.min(imageSize.width, imageSize.height) * 0.9;
     return { width: side, height: side };
+};
+const defaultPosition = ({ coordinates, imageSize }) => {
+    const crop = initialCrop();
+    if (crop) return { left: crop.left, top: crop.top };
+    return { left: (imageSize.width - coordinates.width) / 2, top: (imageSize.height - coordinates.height) / 2 };
 };
 
 const zoom = (factor) => cropper.value?.zoom(factor);
@@ -86,7 +117,8 @@ function confirm() {
     ctx.fillStyle = '#fff'; // 透明背景（png）轉成 JPEG 時是白底
     ctx.fillRect(0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
     ctx.drawImage(result.canvas, 0, 0, OUTPUT_SIZE, OUTPUT_SIZE);
-    out.toBlob((blob) => blob && emit('done', blob), 'image/jpeg', 0.85);
+    const crop = { ...result.coordinates };
+    out.toBlob((blob) => blob && emit('done', blob, { crop, sourceBlob }), 'image/jpeg', 0.85);
 }
 </script>
 

@@ -206,7 +206,7 @@
                                             :class="{ warn: c.warn }"
                                         >
                                             <span class="tl-cell-label">{{ c.label }}</span>
-                                            <span class="tl-cell-value" :class="{ empty: c.value === null }">{{ c.value ?? '—' }}</span>
+                                            <span class="tl-cell-value" :class="{ empty: c.empty }">{{ c.value }}</span>
                                         </div>
                                     </div>
                                 </template>
@@ -484,7 +484,7 @@
                                         </span>
                                     </div>
                                     <div v-if="r.companions?.length" class="hr-companions">
-                                        <Icon icon="mdi:account-multiple-outline" width="14" />陪同：<Marked :text="r.companions.join('、')" />
+                                        <Icon icon="mdi:account-multiple-outline" width="14" aria-label="陪同" /><Marked :text="r.companions.join('、')" />
                                     </div>
                                     <div v-if="r.note" class="hr-note"><Marked :text="r.note" /></div>
                                     <div v-if="r.photos.length" class="hr-photos">
@@ -529,6 +529,7 @@
                 :preset="healthPreset"
                 @saved="onHealthSaved"
                 @deleted="onHealthDeleted"
+                @item-removed="onHealthItemRemoved"
             />
 
             <!-- 管理員編輯（同後台貓咪管理的視窗）：留在這頁，存好重抓頁首與小檔案；刪掉回清單 -->
@@ -1205,6 +1206,15 @@ async function goToRecord(id) {
 
 function onHealthDeleted(id) {
     healthRecords.value = healthRecords.value.filter((r) => r.id !== id);
+}
+
+// 自己加的項目刪掉了（server 已經從所有紀錄拿掉）：畫面上的紀錄與搜尋條件也拿掉
+function onHealthItemRemoved(item) {
+    healthRecords.value = healthRecords.value.map((r) =>
+        r.items.includes(item) ? { ...r, items: r.items.filter((i) => i !== item) } : r
+    );
+    const f = healthFilter.value;
+    if (f.items.includes(item)) healthFilter.value = { ...f, items: f.items.filter((i) => i !== item) };
 }
 
 onMounted(async () => {

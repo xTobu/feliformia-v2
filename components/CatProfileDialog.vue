@@ -9,19 +9,35 @@
             class="cat-dialog"
             align-center
             @update:model-value="emit('update:modelValue', $event)"
-            @opened="scrollToFocus"
+            @open="placeScroll"
+            @opened="flashFocus"
         >
-            <AvatarCropper :file="avatarFile" @done="onCropped" @cancel="avatarFile = null" />
+            <AvatarCropper
+                :file="avatarFile"
+                :source="avatarAdjust"
+                @done="onCropped"
+                @cancel="(avatarFile = null), (avatarAdjust = null)"
+            />
 
             <el-form :model="form" label-position="top" @submit.prevent>
-                <!-- 淡底卡片：左邊頭像（點了換，右下角相機；下面「移除頭像」），右邊名稱、暱稱上下疊 -->
+                <!-- 淡底卡片：左邊頭像（點頭像調整位置，沒頭像就是選照片；右下角相機換一張；下面「移除頭像」），
+                     右邊名稱、暱稱、性別上下疊 -->
                 <div class="head-card">
                     <div class="avatar-col">
-                        <button type="button" class="avatar" aria-label="更換頭像" @click="avatarInput?.click()">
-                            <img v-if="avatarPreview" :src="avatarPreview" alt="" />
-                            <span v-else>{{ (form.name || '？').trim().charAt(0) }}</span>
-                            <span class="avatar-badge"><Icon icon="mdi:camera" width="16" /></span>
-                        </button>
+                        <div class="avatar-wrap">
+                            <button
+                                type="button"
+                                class="avatar"
+                                :aria-label="avatarPreview ? '調整頭像位置' : '上傳頭像'"
+                                @click="avatarPreview ? adjustAvatar() : avatarInput?.click()"
+                            >
+                                <img v-if="avatarPreview" :src="avatarPreview" alt="" />
+                                <span v-else>{{ (form.name || '？').trim().charAt(0) }}</span>
+                            </button>
+                            <button type="button" class="avatar-badge" aria-label="換一張照片" @click="avatarInput?.click()">
+                                <Icon icon="mdi:camera" width="16" />
+                            </button>
+                        </div>
                         <button v-if="avatarPreview" type="button" class="avatar-link" @click="clearAvatar">
                             移除頭像
                         </button>
@@ -232,15 +248,27 @@ const emit = defineEmits(['update:modelValue', 'saved', 'deleted']);
 const supabase = useSupabaseClient();
 const { avatarUrl, uploadAvatar, removeAvatar } = useAvatar();
 
-// 打開動畫結束後，視窗內容捲到指定的欄位，那一欄底色閃一下
+// 打開時直接定位（不要捲動的過程）：有指定欄位（貓咪檔案點卡片進來）就停在那一欄，沒有就從最上面開始
+// （視窗關掉不會拆掉，上次捲到哪會留著）
 const root = ref(null);
-function scrollToFocus() {
-    if (!props.focus) return;
-    const body = root.value?.querySelector('.el-dialog__body');
-    const field = body?.querySelector(`[data-field="${props.focus}"]`);
+const dialogBody = () => root.value?.querySelector('.el-dialog__body');
+const focusField = () => (props.focus ? dialogBody()?.querySelector(`[data-field="${props.focus}"]`) : null);
+
+function placeScroll() {
+    nextTick(() => {
+        const body = dialogBody();
+        if (!body) return;
+        const field = focusField();
+        body.scrollTop = field
+            ? field.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 8
+            : 0;
+    });
+}
+
+// 打開動畫結束後，指定的那一欄底色閃一下
+function flashFocus() {
+    const field = focusField();
     if (!field) return;
-    const top = field.getBoundingClientRect().top - body.getBoundingClientRect().top + body.scrollTop - 8;
-    body.scrollTo({ top, behavior: 'smooth' });
     field.classList.add('field-flash');
     setTimeout(() => field.classList.remove('field-flash'), 1600);
 }
@@ -360,12 +388,23 @@ const avatarPreview = computed(() => {
     return editingCat.value?.avatar_path ? avatarUrl(editingCat.value.avatar_path) : null;
 });
 
+// 頭像的原圖與框的範圍（裁好還沒存的）：新選照片是 { blob }，沿用已經存著的原圖是 { path }
+const avatarSource = ref(null);
+const avatarCrop = ref(null);
+const avatarAdjust = ref(null); // 重新調整位置：{ url, crop }，有值就打開裁切視窗
+let avatarSourceUrl = null; // 新選照片原圖的暫時網址（還沒存之前再調一次用）
+
 function resetAvatarDraft() {
     if (avatarBlobUrl.value) URL.revokeObjectURL(avatarBlobUrl.value);
+    if (avatarSourceUrl) URL.revokeObjectURL(avatarSourceUrl);
+    avatarSourceUrl = null;
     avatarBlobUrl.value = null;
     avatarBlob.value = null;
+    avatarSource.value = null;
+    avatarCrop.value = null;
     avatarRemoved.value = false;
     avatarFile.value = null;
+    avatarAdjust.value = null;
 }
 
 function pickAvatar(event) {
@@ -374,8 +413,36 @@ function pickAvatar(event) {
     if (file) avatarFile.value = file;
 }
 
-function onCropped(blob) {
+// 點頭像：用原圖和上次框的範圍打開裁切。這次已經裁過、還沒存的，接著剛剛的原圖與範圍；
+// 不然用存著的 avatar_source_path；舊頭像沒有原圖就拿那張頭像本身
+function adjustAvatar() {
+    const draft = avatarSource.value;
+    if (draft) {
+        avatarAdjust.value = { url: draft.blob ? avatarSourceUrl : avatarUrl(draft.path), crop: avatarCrop.value };
+        return;
+    }
+    const cat = editingCat.value;
+    if (!cat?.avatar_path) return;
+    avatarAdjust.value = {
+        url: avatarUrl(cat.avatar_source_path || cat.avatar_path),
+        crop: cat.avatar_source_path ? cat.avatar_crop : null,
+    };
+}
+
+function onCropped(blob, { crop, sourceBlob }) {
+    // 調整位置沿用原本的原圖；新選的照片換成它的原圖
+    const source = sourceBlob
+        ? { blob: sourceBlob }
+        : avatarSource.value?.blob
+          ? avatarSource.value
+          : { path: editingCat.value?.avatar_source_path || editingCat.value?.avatar_path };
+    const sourceUrl = sourceBlob ? URL.createObjectURL(sourceBlob) : avatarSourceUrl;
+    if (sourceBlob && avatarSourceUrl) URL.revokeObjectURL(avatarSourceUrl);
+    avatarSourceUrl = null; // 先拿走，reset 才不會把它收掉
     resetAvatarDraft();
+    avatarSourceUrl = sourceUrl;
+    avatarSource.value = source;
+    avatarCrop.value = crop;
     avatarBlob.value = blob;
     avatarBlobUrl.value = URL.createObjectURL(blob);
 }
@@ -387,7 +454,17 @@ function clearAvatar() {
 
 // 儲存貓咪之後處理頭像：有新裁的就上傳，按了移除就刪掉
 async function saveCatAvatar(catId) {
-    if (avatarBlob.value) await uploadAvatar({ target: 'cat', catId, blob: avatarBlob.value });
+    if (avatarBlob.value) {
+        const res = await uploadAvatar({
+            target: 'cat',
+            catId,
+            blob: avatarBlob.value,
+            source: avatarSource.value,
+            crop: avatarCrop.value,
+        });
+        // 頭像傳失敗再按儲存時，原圖已經在 Storage 了，之後沿用路徑
+        avatarSource.value = { path: res.avatar_source_path };
+    }
     else if (avatarRemoved.value && editingCat.value?.avatar_path) await removeAvatar({ target: 'cat', catId });
 }
 
@@ -560,8 +637,12 @@ watch(
 }
 
 // 頭像：點了選照片，右下角一個藍色相機小圓
-.avatar {
+// 頭像與右下角的相機（兩顆分開的按鈕：點頭像調整位置，點相機換照片）
+.avatar-wrap {
     position: relative;
+}
+
+.avatar {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -594,10 +675,13 @@ watch(
     justify-content: center;
     width: 30px;
     height: 30px;
+    margin: 0;
+    padding: 0;
     border: 2px solid #fff;
     border-radius: 50%;
     background: #6da2c2;
     color: #fff;
+    cursor: pointer;
 }
 
 .avatar-link {
