@@ -189,7 +189,10 @@ async function readMp4(file) {
                 // MP4 的 meta 多 4 bytes 版本；QuickTime 的沒有（後面直接是 hdlr）
                 const qt = text4(moov, body + 4) === 'hdlr';
                 walk(qt ? body : body + 4, at + size);
-            } else if (type === 'hdlr' && current) current.handler = text4(moov, body + 8);
+            } else if (type === 'hdlr' && current && !current.handler) {
+                // 軌道的類型在 mdia 的 hdlr（vide＝影片）；iPhone 的 .mov 軌道裡還有 meta 的 hdlr（mdta），不能蓋掉
+                current.handler = text4(moov, body + 8);
+            }
             else if (type === 'tkhd' && current) {
                 current.width = moov.getUint32(at + size - 8) / 65536;
                 current.height = moov.getUint32(at + size - 4) / 65536;
