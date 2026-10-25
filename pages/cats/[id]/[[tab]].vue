@@ -864,7 +864,8 @@ onBeforeUnmount(() => observer?.disconnect());
 
 // ---- 即時（Broadcast，見 composables/useBroadcast.js）----
 // 留言：這隻貓四個分頁的留言頻道 comments:<貓>:<分頁>（留言板新增、編輯、刪除都會發）。
-// 值班與照片：進行中的班（今天的，最多兩班）的頻道 shift:<id>（打勾、登記、放風、照片庫）。
+// 值班與照片：進行中的班（今天的，最多兩班）的頻道 shift:<id>（打勾、登記、放風、照片庫）；
+// 過去的班改到這隻貓的格子或照片，值班表會發到這隻貓的頻道 cat:<貓>。
 // 收到就把那一天重抓（只抓一天，留言、照片、未完成一起對上）；斷線重連、從背景回來超過 30 秒就從頭重載
 const { join: joinBroadcast } = useBroadcast();
 const commentChannels = [];
@@ -905,12 +906,22 @@ async function onRemoteMessage({ action, message, id }) {
     if (isNew && hasComment(message.id)) announceComment(message.id);
 }
 
+// cat:<貓> 的通知：那一班的日子重抓；改了放風的話，下一班（畫面上排在它前面那班）的「前班放風」也變了，一起重抓
+function onCatChanged({ shiftId, next }) {
+    const i = entries.value.findIndex((e) => e.shift_id === shiftId);
+    if (i === -1) return; // 還沒載到那一天，往下滑到時自然是新的
+    const dates = new Set([entries.value[i].date]);
+    if (next && i > 0) dates.add(entries.value[i - 1].date);
+    dates.forEach(refreshDate);
+}
+
 function joinCommentChannels() {
     for (const tab of Object.keys(TAB_LABELS)) {
         commentChannels.push(
             joinBroadcast(`comments:${catId.value}:${tab}`, { message: onRemoteMessage }, { onResync: resetTimeline })
         );
     }
+    commentChannels.push(joinBroadcast(`cat:${catId.value}`, { changed: onCatChanged }));
 }
 
 // 進行中的班一變（例如晚班開了），頻道跟著換

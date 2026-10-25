@@ -1389,6 +1389,7 @@ async function flush() {
         // 存好了：記進自己這份原始資料，再廣播給其他開著這一班的人（他們照路徑套上）
         applyOpsToRaw(res.ops || []);
         broadcastShift('ops', { ops: res.ops || [] });
+        notifyCatsOfOps(formData.value.recordId, res.ops || []);
         saveStatus.value = 'success';
         lastSavedAt.value = new Date();
     } catch (e) {
@@ -2629,6 +2630,24 @@ function broadcastPhotos(shiftId, action, list) {
     if (!shiftId || !list.length) return;
     const payload = action === 'delete' ? { action, ids: list.map((p) => p.id) } : { action, photos: list.map(cloneJson) };
     broadcastShift('photo', payload, shiftId);
+    notifyCats(shiftId, list.map((p) => p.cat_id));
+}
+
+// 貓咪檔案（/cats/[id]）的頻道 cat:<貓>：改到這隻貓的格子或照片就通知一聲（過去的班也是），那邊重抓那一班的日子。
+// next：改了放風，下一班的「前班放風」也跟著變（server 已經同步），那邊連下一班一起重抓
+function notifyCats(shiftId, catIds, next = false) {
+    for (const id of new Set(catIds.filter(Boolean).map(String))) {
+        sendBroadcast(`cat:${id}`, 'changed', { shiftId, next });
+    }
+}
+
+// 存好的格子是哪幾隻貓的：貓的格子看路徑第一段；事項看那一項記的是哪隻貓（全員、位置的不用）
+function notifyCatsOfOps(shiftId, ops) {
+    const catIds = ops.map((op) =>
+        op.column === 'cats' ? op.path?.[0] : op.column === 'tasks' ? remoteRaw.tasks[op.path?.[0]]?.cat_id : null
+    );
+    const released = ops.some((op) => op.column === 'cats' && op.path?.[1] === 'released');
+    notifyCats(shiftId, catIds, released);
 }
 
 function applyRemotePhotos({ action, photos: list = [], ids = [] }) {
