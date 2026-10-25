@@ -82,6 +82,8 @@
                                             {{ itemMeta(item) }}
                                         </div>
                                     </div>
+                                    <!-- 附圖：放在文字右邊、編輯左邊，只顯示第一張（多張角落標 +N），點了看大圖 -->
+                                    <CareItemPhotos v-if="withPhotos" :paths="item.photos || []" :label="itemTitle(item)" compact />
                                     <div class="item-actions">
                                         <button type="button" class="icon-btn" aria-label="編輯" @click="openDialog(item)">
                                             <Icon icon="mdi:pencil-outline" width="16" />
@@ -205,10 +207,43 @@
                         />
                     </div>
                 </el-form-item>
+                <!-- 附圖：例如份量、藥瓶長怎樣、要拍成怎樣。手機上先壓縮，按儲存才上傳 -->
+                <el-form-item v-if="withPhotos" :label="`附圖（${photoCount}/${MAX_CARE_ITEM_PHOTOS}）`">
+                    <div class="photos">
+                        <div v-for="path in form.photos" :key="path" class="photo">
+                            <img :src="thumbUrl(path)" alt="" />
+                            <button
+                                v-if="!saving"
+                                type="button"
+                                class="photo-remove"
+                                aria-label="拿掉這張"
+                                @click="form.photos = form.photos.filter((p) => p !== path)"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div v-for="added in addedPhotos" :key="added.key" class="photo">
+                            <img :src="added.preview" alt="" />
+                            <button v-if="!saving" type="button" class="photo-remove" aria-label="拿掉這張" @click="removeAdded(added)">
+                                ✕
+                            </button>
+                        </div>
+                        <button
+                            v-if="photoCount < MAX_CARE_ITEM_PHOTOS && !saving"
+                            type="button"
+                            class="photo-add"
+                            aria-label="加照片"
+                            @click="photoInput?.click()"
+                        >
+                            <Icon icon="mdi:camera-plus-outline" width="22" />
+                        </button>
+                        <input ref="photoInput" type="file" accept="image/*" multiple hidden @change="pickPhotos" />
+                    </div>
+                </el-form-item>
             </el-form>
             <template #footer>
-                <el-button @click="dialogVisible = false">取消</el-button>
-                <el-button type="primary" @click="saveItem">儲存</el-button>
+                <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
+                <el-button type="primary" :loading="saving" @click="saveItem">{{ savingText || '儲存' }}</el-button>
             </template>
         </el-dialog>
 
@@ -217,12 +252,14 @@
 </template>
 
 <script setup>
-// 飲食（diet_items）、醫療（medical_items）、值班收尾（required_items）三頁共用。
+// 飲食（diet_items）、醫療（medical_items）、值班收尾（required_items）、觀察（observe_items）四頁共用。
 // 共同欄位：cat_id / location（兩個都空 = 全員）、shift、start_date / end_date、sort_order。
 // 收尾的 location 多一個「貓屋」（withHouse）
 import draggable from 'vuedraggable';
 import { Icon } from '@iconify/vue';
 import Swal from 'sweetalert2';
+import { MAX_CARE_ITEM_PHOTOS, useCareItemPhotos } from '~/composables/careItemPhotos';
+import { compressPhoto } from '~/composables/useImageCompress';
 
 const props = defineProps({
     title: { type: String, required: true },
@@ -242,10 +279,14 @@ const props = defineProps({
     emptyGroupText: { type: String, default: '' },
     // 對象多一個「貓屋」（整間屋子，跟貓無關）。只有收尾用
     withHouse: { type: Boolean, default: false },
+    // 可以附圖（飲食、醫療、收尾）；觀察管理不用
+    withPhotos: { type: Boolean, default: true },
 });
 
 const supabase = useSupabaseClient();
 const { $dayjs } = useNuxtApp();
+const { thumbUrl } = useCareItemPhotos();
+const { uploadFile } = usePhotoUpload();
 
 // 狀態
 const items = ref([]);
@@ -271,8 +312,63 @@ function emptyForm(target = '') {
         shift: 'both',
         start_date: null,
         end_date: null,
+        photos: [], // 已經存著、留下來的附圖路徑
     };
 }
+
+// ---- 附圖：新選的先放這裡（壓縮、上傳在按儲存時），已經存著的在 form.photos ----
+const addedPhotos = ref([]); // { key, file, preview }
+const photoInput = ref(null);
+const saving = ref(false);
+const savingText = ref('');
+const photoCount = computed(() => form.value.photos.length + addedPhotos.value.length);
+
+function clearAdded() {
+    addedPhotos.value.forEach((a) => URL.revokeObjectURL(a.preview));
+    addedPhotos.value = [];
+}
+
+function pickPhotos(event) {
+    const files = [...(event.target.files || [])].slice(0, MAX_CARE_ITEM_PHOTOS - photoCount.value);
+    event.target.value = '';
+    addedPhotos.value = [
+        ...addedPhotos.value,
+        ...files.map((file) => ({ key: crypto.randomUUID(), file, preview: URL.createObjectURL(file) })),
+    ];
+}
+
+function removeAdded(added) {
+    URL.revokeObjectURL(added.preview);
+    addedPhotos.value = addedPhotos.value.filter((a) => a !== added);
+}
+
+// 新選的照片：壓縮 → 拿上傳網址 → 傳大圖與縮圖。回傳存好的大圖路徑
+async function uploadAdded() {
+    if (!addedPhotos.value.length) return [];
+    const slots = await $fetch('/api/care-items/upload-url', {
+        method: 'POST',
+        body: { table: props.table, count: addedPhotos.value.length },
+    });
+    const paths = [];
+    for (const [i, added] of addedPhotos.value.entries()) {
+        savingText.value = `上傳照片 ${i + 1}/${addedPhotos.value.length}`;
+        const { full, thumb } = await compressPhoto(added.file);
+        await uploadFile(slots[i].path, slots[i].token, full.blob, () => {}, 'care-item-photos');
+        await uploadFile(slots[i].thumbPath, slots[i].thumbToken, thumb.blob, () => {}, 'care-item-photos');
+        paths.push(slots[i].path);
+    }
+    return paths;
+}
+
+// 不再用的附圖檔（拿掉的、整項刪除的、傳了但沒存成功的）。刪不掉不影響畫面，不提示
+function removePhotoFiles(paths) {
+    if (!paths.length) return;
+    $fetch('/api/care-items/remove-photos', { method: 'POST', body: { paths } }).catch((e) =>
+        console.error('remove care item photos error:', e)
+    );
+}
+
+watch(dialogVisible, (open) => !open && clearAdded());
 
 // 對象在表單裡是一個字串：cat:12、all、loc:客廳
 function targetOf(item) {
@@ -451,8 +547,10 @@ function openDialog(item = null, target = '') {
               shift: item.shift || 'both',
               start_date: item.start_date || null,
               end_date: item.end_date || null,
+              photos: [...(item.photos || [])],
           }
         : emptyForm(target);
+    clearAdded();
     dialogVisible.value = true;
 }
 
@@ -488,30 +586,42 @@ async function saveItem() {
         payload[props.reasonField.key] = form.value.reason.trim() || null;
     }
 
-    if (editingItem.value) {
-        const { error } = await supabase
-            .from(props.table)
-            .update(payload)
-            .eq('id', editingItem.value.id);
+    saving.value = true;
+    let uploaded = [];
+    try {
+        uploaded = await uploadAdded();
+    } catch (e) {
+        console.error('upload care item photos error:', e);
+        Swal.fire({ text: '照片上傳失敗，請再試一次' });
+        saving.value = false;
+        savingText.value = '';
+        return;
+    }
+    savingText.value = '儲存中';
+    if (props.withPhotos) payload.photos = [...form.value.photos, ...uploaded];
 
-        if (error) {
-            Swal.fire({ text: '更新失敗' });
-            return;
-        }
+    let error;
+    if (editingItem.value) {
+        ({ error } = await supabase.from(props.table).update(payload).eq('id', editingItem.value.id));
     } else {
         const maxOrder =
             items.value.length > 0
                 ? Math.max(...items.value.map((i) => i.sort_order || 0))
                 : 0;
+        ({ error } = await supabase.from(props.table).insert({ ...payload, sort_order: maxOrder + 1 }));
+    }
+    saving.value = false;
+    savingText.value = '';
 
-        const { error } = await supabase
-            .from(props.table)
-            .insert({ ...payload, sort_order: maxOrder + 1 });
-
-        if (error) {
-            Swal.fire({ text: '新增失敗' });
-            return;
-        }
+    if (error) {
+        // 剛傳上去的照片沒存進去，刪掉
+        removePhotoFiles(uploaded);
+        Swal.fire({ text: editingItem.value ? '更新失敗' : '新增失敗' });
+        return;
+    }
+    // 存好了：拿掉的附圖檔刪掉
+    if (props.withPhotos) {
+        removePhotoFiles((editingItem.value?.photos || []).filter((p) => !payload.photos.includes(p)));
     }
 
     dialogVisible.value = false;
@@ -538,6 +648,7 @@ async function confirmDelete(item, groupName) {
             Swal.fire({ text: '刪除失敗' });
             return;
         }
+        if (props.withPhotos) removePhotoFiles(item.photos || []);
 
         await loadAll();
     }
@@ -897,6 +1008,59 @@ onMounted(loadAll);
     .el-dialog__footer .el-button {
         flex: 1;
     }
+}
+
+// 附圖：一列三張的小方塊（最多 6 張剛好兩列），右上角 ✕ 拿掉，最後一格加照片
+.photos {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px;
+    width: 100%;
+}
+
+.photo,
+.photo-add {
+    position: relative;
+    aspect-ratio: 1;
+    margin: 0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.photo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.photo-remove {
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    height: 20px;
+    margin: 0;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    background: rgba(0, 0, 0, 0.55);
+    color: #fff;
+    font-size: 11px;
+}
+
+.photo-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    border: 1px dashed #c9c3be;
+    background: #faf8f6;
+    color: #8a7f78;
+    cursor: pointer;
 }
 
 .period-row {

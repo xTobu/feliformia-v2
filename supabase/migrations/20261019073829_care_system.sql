@@ -54,6 +54,7 @@ create table public.cat_profiles (
 -- ── 飲食／醫療／收尾／觀察 ─────────────────────────
 -- 對象：cat_id 有值 = 那隻貓；location 有值 = 那個位置；兩個都空 = 全員（不能同時有值）
 -- 期間：start_date / end_date 空代表不限。刪掉貓會連帶刪掉牠的項目，不會變成全員
+-- photos（飲食、醫療、收尾）：附圖（例如份量、藥瓶長怎樣），最多 6 張，存 care-item-photos bucket 的路徑（縮圖是同名加 _thumb，見下面「照護項目的附圖」）
 
 -- 飲食：只看不打勾，只有「隨餐藥」（拌進飯裡、放碗就可以走）要在備餐分頁打勾。
 -- 「放風」是長期固定放風：期間內新開的班，這隻貓的放風預設打開
@@ -67,6 +68,7 @@ create table public.diet_items (
   start_date  date,
   end_date    date,
   sort_order  integer,
+  photos      text[] not null default '{}' check (cardinality(photos) <= 6),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   constraint diet_items_target_check check (cat_id is null or location is null),
@@ -85,6 +87,7 @@ create table public.medical_items (
   start_date  date,
   end_date    date,
   sort_order  integer,
+  photos      text[] not null default '{}' check (cardinality(photos) <= 6),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   constraint medical_items_target_check check (cat_id is null or location is null),
@@ -102,6 +105,7 @@ create table public.required_items (
   start_date  date,
   end_date    date,
   sort_order  integer,
+  photos      text[] not null default '{}' check (cardinality(photos) <= 6),
   created_at  timestamptz not null default now(),
   updated_at  timestamptz not null default now(),
   constraint required_items_target_check check (cat_id is null or location is null),
@@ -269,6 +273,19 @@ begin
   if to_regclass('storage.buckets') is not null then
     insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
     values ('shift-photos', 'shift-photos', false, 5242880, array['image/jpeg', 'image/webp'])
+    on conflict (id) do nothing;
+  end if;
+end $$;
+
+-- ── 照護項目的附圖 ─────────────────────────────────
+-- 飲食、醫療、收尾項目的附圖（各表的 photos；觀察不用）。公開 bucket（同頭像）：照護說明不是個資，網址不會過期、不用 server 發；
+-- 上傳走 server 發的一次性上傳網址（server/api/care-items/*），沒有寫入的 storage policy。
+-- 路徑 <表名>/<uuid>.jpg（最長邊 1600px）與 <表名>/<uuid>_thumb.jpg（400px），單檔上限 5MB
+do $$
+begin
+  if to_regclass('storage.buckets') is not null then
+    insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+    values ('care-item-photos', 'care-item-photos', true, 5242880, array['image/jpeg'])
     on conflict (id) do nothing;
   end if;
 end $$;

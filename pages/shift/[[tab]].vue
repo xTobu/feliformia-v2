@@ -307,6 +307,7 @@
                                             <font v-if="item.end_date" class="f_grey"
                                                 >療程至 {{ $dayjs(item.end_date).format('MM/DD') }}</font
                                             >
+                                            <CareItemPhotos :paths="itemPhotos('medical', item)" :label="item.treatment" />
                                         </div>
                                         <div class="done">
                                             <el-checkbox
@@ -348,6 +349,7 @@
                                         <div class="txt">
                                             <font class="treatment">{{ item.treatment }}</font>
                                             <font v-if="item.reason" class="f_grey">{{ item.reason }}</font>
+                                            <CareItemPhotos :paths="itemPhotos('medical', item)" :label="item.treatment" />
                                         </div>
                                         <div class="done">
                                             <el-checkbox
@@ -494,6 +496,7 @@
                                                     ><span v-if="it.item.done && it.item.done_by" class="done-by">{{ doneLabel(it.item) }}</span></el-checkbox
                                                 >
                                             </div>
+                                            <CareItemPhotos :paths="itemPhotos('diet', it.item)" :label="it.item.content" />
                                             <div v-if="it.item.end_date" class="diet-note">
                                                 至 {{ $dayjs(it.item.end_date).format('MM/DD') }}
                                             </div>
@@ -553,6 +556,7 @@
                                 <div class="d_flex">
                                     <div class="txt">
                                         <font class="treatment">{{ item.content }}</font>
+                                        <CareItemPhotos :paths="itemPhotos('required', item)" :label="item.content" />
                                     </div>
                                     <div class="done">
                                         <el-checkbox
@@ -591,6 +595,7 @@
                                 <div class="d_flex">
                                     <div class="txt">
                                         <font class="treatment">{{ item.content }}</font>
+                                        <CareItemPhotos :paths="itemPhotos('required', item)" :label="item.content" />
                                     </div>
                                     <div class="done">
                                         <el-checkbox
@@ -2297,6 +2302,27 @@ const observeRows = computed(() => {
     return map;
 });
 const observeRowsOf = (cat, tab = 'arrive') => (observeRows.value.get(cat.cat_id) || []).filter((r) => r.tab === tab);
+// ---- 照護項目的附圖（後台飲食、醫療、收尾管理加的）：值班表的快照只記項目 id，附圖直接讀項目表，
+// 後台換了照片這裡馬上看得到。key 是「種類:id」，例如 medical:12 ----
+const ITEM_PHOTO_TABLES = { diet: 'diet_items', medical: 'medical_items', required: 'required_items' };
+const careItemPhotos = ref({});
+const itemPhotos = (kind, item) => careItemPhotos.value[`${kind}:${item.id}`] || [];
+
+async function loadItemPhotos() {
+    try {
+        const results = await Promise.all(
+            Object.entries(ITEM_PHOTO_TABLES).map(async ([kind, table]) => {
+                const { data, error } = await supabase.from(table).select('id, photos').neq('photos', '{}');
+                if (error) throw error;
+                return data.map((row) => [`${kind}:${row.id}`, row.photos]);
+            })
+        );
+        careItemPhotos.value = Object.fromEntries(results.flat());
+    } catch (e) {
+        // 讀不到附圖不影響值班表本身
+        console.error('load care item photos error:', e);
+    }
+}
 
 // 點膠囊：打開這隻貓那個分頁（觀察或備餐）的照片庫。還沒拍的直接跳出拍照／相簿選單（要在點擊當下觸發），
 // 選好的照片類型預先選好（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）
@@ -3042,6 +3068,7 @@ async function load() {
 onMounted(() => {
     window.addEventListener('beforeunload', handleBeforeUnload);
     load();
+    loadItemPhotos();
 });
 
 onBeforeUnmount(() => {

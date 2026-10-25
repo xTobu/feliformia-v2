@@ -1,9 +1,12 @@
 <template>
     <ClientOnly>
         <div id="cats-index">
-            <h1>貓咪列表</h1>
-
-            <el-input v-model="keyword" placeholder="搜尋名字或暱稱" clearable class="search" />
+            <!-- 標題靠左、右邊搜尋（同後台貓咪管理，components/CatSearch.vue） -->
+            <div class="page-header">
+                <h1>貓咪列表</h1>
+                <CatSearch v-model:filter="filter" :cats="cats" />
+            </div>
+            <CatFilterBar v-model:filter="filter" :count="shownCount" />
 
             <div v-if="loading" class="state">載入中...</div>
             <template v-else>
@@ -22,7 +25,7 @@
                         </NuxtLink>
                     </div>
                 </section>
-                <div v-if="!groups.length" class="state">{{ keyword ? '找不到這隻貓' : '尚無貓咪資料' }}</div>
+                <div v-if="!groups.length" class="state">{{ cats.length ? '沒有符合的貓咪' : '尚無貓咪資料' }}</div>
             </template>
         </div>
     </ClientOnly>
@@ -30,6 +33,8 @@
 
 <script setup>
 // 新版貓咪檔案（cat_profiles）的清單：志工都能看，點進去是 /cats/[id]
+import { emptyCatFilter, matchesCatFilter } from '~/composables/catSearch';
+
 definePageMeta({
     middleware: 'auth',
     ssr: false,
@@ -44,23 +49,25 @@ const { avatarUrl } = useAvatar();
 
 const cats = ref([]);
 const loading = ref(true);
-const keyword = ref('');
-
-const matches = (cat) => {
-    const word = keyword.value.trim();
-    return !word || [cat.name, ...(cat.nicknames || [])].some((name) => name.includes(word));
-};
+// 搜尋：名稱、暱稱與領養狀態（composables/catSearch.js）
+const filter = ref(emptyCatFilter());
+const matches = (cat) => matchesCatFilter(cat, filter.value);
+const shownCount = computed(() => cats.value.filter(matches).length);
 
 // 已領養：照領養日期，最近領養的排最後；不知道哪天的排最前面（多半是舊資料）
 const adoptedOrder = (list) =>
     [...list].sort((a, b) => (a.adopted_on || '').localeCompare(b.adopted_on || ''));
 
+// 名字跟位置一樣的（例如「房間」）不是真的貓，是記那個位置的公共飯碗、貓砂用的：另外一區，不跟那個位置的貓放一起
+const isPlaceCat = (cat) => LOCATIONS.includes(cat.name);
+
 const groups = computed(() => {
     const list = cats.value.filter(matches);
-    const living = list.filter((c) => !c.adopted);
+    const living = list.filter((c) => !c.adopted && !isPlaceCat(c));
     return [
         ...LOCATIONS.map((location) => ({ label: location, cats: living.filter((c) => c.location === location) })),
         { label: '未填位置', cats: living.filter((c) => !LOCATIONS.includes(c.location)) },
+        { label: '公共飯碗、貓砂', cats: list.filter((c) => !c.adopted && isPlaceCat(c)) },
         { label: '已領養', cats: adoptedOrder(list.filter((c) => c.adopted)) },
     ].filter((g) => g.cats.length);
 });
@@ -83,8 +90,20 @@ onMounted(async () => {
     padding-bottom: 80px;
 }
 
-.search {
-    margin-bottom: 8px;
+// 標題靠左、右邊搜尋鈕（同後台貓咪管理）
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+
+    h1 {
+        // 全域 h1 有 margin-bottom: 10px !important（element-variables.css）
+        margin: 0 !important;
+        font-size: 22px;
+        text-align: left;
+    }
 }
 
 .state {

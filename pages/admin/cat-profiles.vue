@@ -7,31 +7,13 @@
                     <el-button type="primary" @click="openDialog()">
                         ＋ 新增貓咪
                     </el-button>
-                    <!-- 搜尋：名稱、暱稱，與已領養／未領養，在視窗裡選 -->
-                    <button
-                        type="button"
-                        class="search-btn"
-                        :class="{ on: filtering }"
-                        aria-label="搜尋貓咪"
-                        @click="openSearch"
-                    >
-                        <Icon icon="mdi:magnify" width="18" />
-                    </button>
+                    <!-- 搜尋：名稱、暱稱，與已領養／未領養，在視窗裡選（components/CatSearch.vue） -->
+                    <CatSearch v-model:filter="filter" :cats="cats" />
                 </div>
             </div>
 
             <!-- 套用中的條件：一個一個可以拿掉；下面寫找到幾隻、清除 -->
-            <template v-if="filtering">
-                <div class="filter-tags">
-                    <button v-for="t in filterTags" :key="t.key" type="button" class="filter-tag" @click="t.remove()">
-                        {{ t.label }}<Icon icon="mdi:close" width="13" />
-                    </button>
-                </div>
-                <div class="filter-found">
-                    <span>找到 {{ shownCount }} 隻（篩選時不能拖拉排序）</span>
-                    <button type="button" @click="filter = { keyword: '', status: 'all' }">清除</button>
-                </div>
-            </template>
+            <CatFilterBar v-model:filter="filter" :count="shownCount" hint="（篩選時不能拖拉排序）" />
 
             <!-- 貓咪列表 - 拖拉排序。順序也是飲食、醫療、待辦管理與值班記錄表的順序。
                  篩選時只是把不符合的藏起來，而且不能拖（藏起來的會讓順序對不上） -->
@@ -70,7 +52,13 @@
                                         :class="cat.sex === '公' ? 'male' : 'female'"
                                         :aria-label="cat.sex"
                                     />
-                                    <span class="cat-title-name">{{ cat.name }}</span>
+                                    <span class="cat-title-name">
+                                        {{ cat.name }}
+                                        <!-- 到這隻貓的貓咪檔案 -->
+                                        <NuxtLink :to="`/cats/${cat.id}`" class="cat-profile-link" :aria-label="`${cat.name}的貓咪檔案`">
+                                            <Icon icon="mdi:open-in-new" width="16" />
+                                        </NuxtLink>
+                                    </span>
                                     <div v-if="cat.nicknames?.length" class="cat-nick">{{ cat.nicknames.join('、') }}</div>
                                     <div v-if="cat.adopted" class="cat-adopted">🏠 已領養</div>
                                 </div>
@@ -93,37 +81,6 @@
             <div v-if="cats.length === 0" class="empty">尚無貓咪資料</div>
             <div v-else-if="filtering && !shownCount" class="empty">沒有符合的貓咪</div>
 
-            <!-- 搜尋視窗：視窗裡改的是草稿，按「看 N 隻」才套用 -->
-            <el-dialog v-model="searchOpen" title="搜尋貓咪" width="90%" class="cat-search-dialog" align-center>
-                <div class="search-label">名稱或暱稱</div>
-                <el-input
-                    v-model="draft.keyword"
-                    placeholder="例如：餅乾"
-                    clearable
-                    @keydown.enter="(e) => !isImeEnter(e) && applySearch()"
-                >
-                    <template #prefix><Icon icon="mdi:magnify" width="16" /></template>
-                </el-input>
-                <div class="search-label">領養</div>
-                <div class="search-chips">
-                    <button
-                        v-for="o in STATUS_OPTIONS"
-                        :key="o.key"
-                        type="button"
-                        class="chip"
-                        :class="{ on: draft.status === o.key }"
-                        @click="draft.status = o.key"
-                    >
-                        {{ o.label }}
-                    </button>
-                </div>
-                <template #footer>
-                    <el-button @click="draft = { keyword: '', status: 'all' }">清除</el-button>
-                    <el-button type="primary" @click="applySearch">
-                        {{ draftCount ? `看 ${draftCount} 隻` : '沒有符合的貓咪' }}
-                    </el-button>
-                </template>
-            </el-dialog>
 
             <!-- 新增／編輯（含刪除）：components/CatProfileDialog.vue，貓咪檔案頁也用這個 -->
             <CatProfileDialog
@@ -144,6 +101,7 @@
 import draggable from 'vuedraggable';
 import { Icon } from '@iconify/vue';
 import Swal from 'sweetalert2';
+import { emptyCatFilter, isCatFilterOn, matchesCatFilter } from '~/composables/catSearch';
 
 definePageMeta({
     middleware: 'admin',
@@ -161,49 +119,11 @@ const cats = ref([]);
 const dialogVisible = ref(false);
 const editingCat = ref(null);
 
-// ---- 搜尋：名稱、暱稱（不分大小寫），與領養狀態 ----
-const STATUS_OPTIONS = [
-    { key: 'all', label: '全部' },
-    { key: 'active', label: '未領養' },
-    { key: 'adopted', label: '已領養' },
-];
-const filter = ref({ keyword: '', status: 'all' });
-const draft = ref({ ...filter.value });
-const searchOpen = ref(false);
-
-const matchesFilter = (cat, f) => {
-    if (f.status === 'active' && cat.adopted) return false;
-    if (f.status === 'adopted' && !cat.adopted) return false;
-    const word = f.keyword.trim().toLowerCase();
-    return !word || [cat.name, ...(cat.nicknames || [])].some((n) => n.toLowerCase().includes(word));
-};
-const matches = (cat) => matchesFilter(cat, filter.value);
-const filtering = computed(() => !!filter.value.keyword.trim() || filter.value.status !== 'all');
+// ---- 搜尋：名稱、暱稱與領養狀態（composables/catSearch.js） ----
+const filter = ref(emptyCatFilter());
+const matches = (cat) => matchesCatFilter(cat, filter.value);
+const filtering = computed(() => isCatFilterOn(filter.value));
 const shownCount = computed(() => cats.value.filter(matches).length);
-const draftCount = computed(() => cats.value.filter((c) => matchesFilter(c, draft.value)).length);
-
-const filterTags = computed(() => {
-    const f = filter.value;
-    const tags = [];
-    if (f.keyword.trim()) {
-        tags.push({ key: 'keyword', label: `「${f.keyword.trim()}」`, remove: () => (filter.value = { ...f, keyword: '' }) });
-    }
-    if (f.status !== 'all') {
-        const label = STATUS_OPTIONS.find((o) => o.key === f.status).label;
-        tags.push({ key: 'status', label, remove: () => (filter.value = { ...f, status: 'all' }) });
-    }
-    return tags;
-});
-
-function openSearch() {
-    draft.value = { ...filter.value };
-    searchOpen.value = true;
-}
-
-function applySearch() {
-    filter.value = { keyword: draft.value.keyword.trim(), status: draft.value.status };
-    searchOpen.value = false;
-}
 
 // 新增的貓排在最後
 const nextSortOrder = computed(() =>
@@ -303,121 +223,6 @@ onMounted(loadCats);
     }
 }
 
-// 搜尋鈕：跟「新增貓咪」一樣高的方塊；有套用條件時淡藍底
-.search-btn {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 32px;
-    height: 32px;
-    margin: 0;
-    padding: 0;
-    border: 1px solid #c9dff0;
-    border-radius: 6px;
-    background: #fff;
-    color: #3f7ea3;
-    cursor: pointer;
-
-    &.on {
-        border-color: #6da2c2;
-        background: #eef6fc;
-    }
-}
-
-// 套用中的條件（點了拿掉）與「找到幾隻・清除」
-.filter-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-bottom: 8px;
-}
-
-.filter-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    width: auto;
-    height: 26px;
-    margin: 0;
-    padding: 0 6px 0 10px;
-    border: 1px solid #c9dff0;
-    border-radius: 13px;
-    background: #eef6fc;
-    color: #3f7ea3;
-    font-size: 13px;
-}
-
-.filter-found {
-    display: flex;
-    justify-content: space-between;
-    margin-bottom: 10px;
-    color: #8a7f78;
-    font-size: 13px;
-
-    button {
-        width: auto;
-        margin: 0;
-        padding: 0;
-        border: none;
-        background: none;
-        color: #3f7ea3;
-        font-size: 13px;
-    }
-}
-
-// 搜尋視窗
-.search-label {
-    margin: 14px 0 6px;
-    color: #767676;
-    font-size: 13px;
-    font-weight: 500;
-    text-align: left;
-
-    &:first-child {
-        margin-top: 0;
-    }
-}
-
-.search-chips {
-    display: flex;
-    gap: 6px;
-
-    .chip {
-        width: auto;
-        height: 30px;
-        margin: 0;
-        padding: 0 14px;
-        border: 1px solid #d8d4d1;
-        border-radius: 15px;
-        background: #fff;
-        color: #657181;
-        font-size: 14px;
-        cursor: pointer;
-
-        &.on {
-            border-color: #6da2c2;
-            background: #6da2c2;
-            color: #fff;
-        }
-    }
-}
-
-:deep(.cat-search-dialog) {
-    max-width: 420px;
-
-    .el-input__wrapper {
-        height: 40px;
-    }
-
-    .el-dialog__footer {
-        display: flex;
-
-        .el-button {
-            flex: 1;
-        }
-    }
-}
-
 .cats-list {
     display: flex;
     flex-direction: column;
@@ -483,10 +288,21 @@ onMounted(loadCats);
 }
 
 .cat-title-name {
+    display: flex;
+    align-items: center;
+    gap: 6px;
     grid-column: 2;
     grid-row: 1;
     font-size: 17px;
     font-weight: 600;
+}
+
+// 名字旁的小圖示：到貓咪檔案（蓋掉全域 a 的紅字、底線）
+.cat-profile-link {
+    display: inline-flex;
+    margin: 0;
+    color: #6da2c2;
+    text-decoration: none;
 }
 
 // 性別符號：緊貼名字左邊（公藍、母粉）

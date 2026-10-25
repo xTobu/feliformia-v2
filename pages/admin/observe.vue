@@ -14,6 +14,7 @@
                 optionalPlaceholder: '例如：看罐罐剩多少（選填）',
             }"
             empty-group-text="沒有要拍的"
+            :with-photos="false"
         />
     </ClientOnly>
 </template>

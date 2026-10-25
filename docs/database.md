@@ -148,6 +148,10 @@ votes.data
 建表在 `supabase/migrations/*_care_system.sql`，位置清單在 `composables/locations.js`
 （資料庫有 check 擋，兩邊要一起改）。
 
+飲食、醫療、收尾三張項目表都有 `photos`（觀察不用）：附圖（最多 6 張），存公開 bucket `care-item-photos` 的大圖路徑
+（`<表名>/<uuid>.jpg`，縮圖同名加 `_thumb`）。後台編輯項目時上傳（`/api/care-items/upload-url`，拿掉或刪除項目時
+`/api/care-items/remove-photos` 刪檔）；值班表直接讀項目表的 `photos`（快照裡只有項目 id），後台換了照片馬上看得到。
+
 | 表 | 頁面 | 說明 |
 |---|---|---|
 | `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`；原圖 `avatar_source_path` 與框的範圍 `avatar_crop` 留著，點頭像可以重新調整位置），花色 `coats`（可多選，預設清單之外可以「＋ 其他」自己打）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、生日 `birthday`（預估，可以選到日）、領養 `adopted`＋到新家日期 `adopted_on`（已領養但不知道哪天就是 null；沒領養不能有日期）、`notes`；選項在 `composables/catTraits.js` |
