@@ -12,7 +12,16 @@
                     <!-- <li class="red" @click="toggleDialogNotice()">
                         # 注意事項
                     </li> -->
- 
+
+                    <!-- 新版（先行版）：值班表與貓咪列表，跟下面的舊版並行 -->
+                    <li class="red" @click="goto('/shift')">
+                        <Icon icon="mdi:clipboard-check-outline" width="17" /> <span>值班表</span>
+                        <span class="beta">先行版</span>
+                    </li>
+                    <li class="red" @click="goto('/cats')">
+                        <Icon icon="mdi:cat" width="17" /> <span>貓咪列表</span>
+                        <span class="beta">先行版</span>
+                    </li>
                     <li class="red" @click="open('/regular')">
                         <Icon icon="mdi:silverware-fork-knife" width="17" /> <span>飲食與如廁紀錄</span>
                     </li>
@@ -261,6 +270,16 @@ async function GetNotice() {
         }
         &.grey {
             color: #657181;
+        }
+
+        // 新版功能的小標籤
+        .beta {
+            padding: 0 6px;
+            border: 1px solid #e8b9b8;
+            border-radius: 9px;
+            color: #b43a39;
+            font-size: 11px;
+            line-height: 16px;
         }
     }
 }
