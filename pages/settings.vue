@@ -5,8 +5,8 @@
         <!-- 名稱設定 -->
         <section class="settings-section">
             <h2>個人資料</h2>
-            <!-- 頭像：選照片 → 裁切（拖曳、縮放）→ 上傳。留言頻道會顯示。
-                 點頭像調整位置（沒頭像就是選照片），點右下角相機換一張（同編輯貓咪） -->
+            <!-- 頭像：選照片 → 裁切（拖曳、縮放）→ 上傳。留言頻道會顯示。置中、大一點，下面「移除頭像」（同編輯貓咪）。
+                 點頭像調整位置（沒頭像就是選照片），點右下角相機換一張 -->
             <div class="avatar-row">
                 <div class="avatar-wrap">
                     <button
@@ -26,30 +26,12 @@
                         :disabled="avatarSaving"
                         @click="avatarInput?.click()"
                     >
-                        <Icon icon="mdi:camera" width="14" />
+                        <Icon icon="mdi:camera" width="16" />
                     </button>
                 </div>
-                <div class="avatar-actions">
-                    <button
-                        v-if="!avatarPath"
-                        type="button"
-                        class="avatar-btn"
-                        :disabled="avatarSaving"
-                        @click="avatarInput?.click()"
-                    >
-                        上傳頭像
-                    </button>
-                    <span v-else class="avatar-hint">點頭像調整位置</span>
-                    <button
-                        v-if="avatarPath"
-                        type="button"
-                        class="avatar-link"
-                        :disabled="avatarSaving"
-                        @click="deleteAvatar"
-                    >
-                        移除
-                    </button>
-                </div>
+                <button v-if="avatarPath" type="button" class="avatar-link" :disabled="avatarSaving" @click="deleteAvatar">
+                    移除頭像
+                </button>
                 <input ref="avatarInput" type="file" accept="image/*" hidden @change="pickAvatar" />
             </div>
             <ClientOnly>
@@ -562,10 +544,12 @@ async function updatePassword() {
 }
 
 // 頭像：圓形，右邊是更換、移除
+// 頭像置中，下面「移除頭像」
 .avatar-row {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    gap: 16px;
+    gap: 6px;
     margin-bottom: 16px;
 
     // 頭像與右下角的相機（兩顆分開的按鈕：點頭像調整位置，點相機換照片）
@@ -576,13 +560,13 @@ async function updatePassword() {
 
     .avatar-badge {
         position: absolute;
-        right: -2px;
-        bottom: -2px;
+        right: 0;
+        bottom: 0;
         display: flex;
         align-items: center;
         justify-content: center;
-        width: 26px;
-        height: 26px;
+        width: 30px;
+        height: 30px;
         margin: 0;
         padding: 0;
         border: 2px solid #fff;
@@ -592,18 +576,13 @@ async function updatePassword() {
         cursor: pointer;
     }
 
-    .avatar-hint {
-        color: #8a7f78;
-        font-size: 13px;
-    }
-
     .avatar {
         display: flex;
         flex-shrink: 0;
         align-items: center;
         justify-content: center;
-        width: 72px;
-        height: 72px;
+        width: 112px;
+        height: 112px;
         border-radius: 50%;
         overflow: hidden;
         margin: 0;
@@ -611,7 +590,7 @@ async function updatePassword() {
         border: none;
         background: #e8e2dc;
         color: #6b625d;
-        font-size: 28px;
+        font-size: 40px;
         font-weight: 500;
         cursor: pointer;
 
@@ -622,24 +601,6 @@ async function updatePassword() {
         }
     }
 
-    .avatar-actions {
-        display: flex;
-        align-items: center;
-        gap: 14px;
-    }
-
-    .avatar-btn {
-        width: auto;
-        height: 36px;
-        padding: 0 16px;
-        border: 1px solid #ddd;
-        border-radius: 18px;
-        background: #fff;
-        color: #657181;
-        font-size: 14px;
-        cursor: pointer;
-    }
-
     .avatar-link {
         width: auto;
         height: auto;
@@ -647,7 +608,7 @@ async function updatePassword() {
         border: none;
         background: none;
         color: #b33a39;
-        font-size: 14px;
+        font-size: 13px;
         cursor: pointer;
     }
 }
