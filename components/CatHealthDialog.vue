@@ -29,20 +29,31 @@
                         </template>
                     </div>
                 </el-form-item>
-                <!-- 項目多選：預設的＋大家加過的標籤（灰色）；「＋ 其他」打字加入新的 -->
+                <!-- 項目多選：預設的＋大家加過的標籤；「＋ 其他」打字加入新的。
+                     自己加的選起來一樣是藍色，右上角多一個 ✕（點了取消勾選） -->
                 <el-form-item label="項目（可多選，至少一個）">
                     <div class="chips">
-                        <button
-                            v-for="item in itemChoices"
-                            :key="item"
-                            type="button"
-                            class="chip"
-                            :class="{ on: form.items.includes(item), custom: !isPresetItem(item) }"
-                            :disabled="saving"
-                            @click="toggleItem(item)"
-                        >
-                            {{ item }}
-                        </button>
+                        <span v-for="item in itemChoices" :key="item" class="chip-wrap">
+                            <button
+                                type="button"
+                                class="chip"
+                                :class="{ on: form.items.includes(item) }"
+                                :disabled="saving"
+                                @click="toggleItem(item)"
+                            >
+                                {{ item }}
+                            </button>
+                            <button
+                                v-if="!isPresetItem(item) && form.items.includes(item)"
+                                type="button"
+                                class="chip-remove"
+                                :aria-label="`拿掉${item}`"
+                                :disabled="saving"
+                                @click="toggleItem(item)"
+                            >
+                                <Icon icon="mdi:close" width="11" />
+                            </button>
+                        </span>
                         <button
                             v-if="!addingItem"
                             type="button"
@@ -62,7 +73,7 @@
                                 type="text"
                                 placeholder="例如：剪耳"
                                 :maxlength="MAX_HEALTH_ITEM_LENGTH"
-                                @keydown.enter.prevent="addItem"
+                                @keydown.enter.prevent="(e) => !isImeEnter(e) && addItem()"
                             />
                             <button type="button" class="item-add" @click="addItem">加入</button>
                         </div>
@@ -114,7 +125,7 @@
                                 type="text"
                                 placeholder="例如：林醫師"
                                 :maxlength="MAX_COMPANION_LENGTH"
-                                @keydown.enter.prevent="addCompanion"
+                                @keydown.enter.prevent="(e) => !isImeEnter(e) && addCompanion()"
                             />
                             <button type="button" class="item-add" @click="addCompanion">加入</button>
                         </div>
@@ -488,7 +499,7 @@ async function confirmDelete() {
             color: #fff;
         }
 
-        // 自己加的標籤：勾起來是灰色（跟預設項目分得出來）
+        // 名單上沒有、自己打的陪同者：勾起來是灰色（跟志工分得出來）
         &.custom.on {
             border-color: #8a7f78;
             background: #8a7f78;
@@ -498,6 +509,30 @@ async function confirmDelete() {
             border-style: dashed;
             color: #8a7f78;
         }
+    }
+
+    // 自己加的項目：右上角的 ✕ 疊在標籤上
+    .chip-wrap {
+        position: relative;
+        display: inline-flex;
+    }
+
+    .chip-remove {
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        padding: 0;
+        border: 2px solid #fff;
+        border-radius: 50%;
+        background: #8a7f78;
+        color: #fff;
+        cursor: pointer;
     }
 
     // 看醫生的三種與貓屋處理之間的分隔線

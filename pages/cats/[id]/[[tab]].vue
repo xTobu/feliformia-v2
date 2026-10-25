@@ -424,10 +424,34 @@
                         <button v-if="isAdmin" type="button" class="pf-add" aria-label="新增醫療紀錄" @click="openHealth()">
                             <Icon icon="mdi:plus" width="18" />
                         </button>
+                        <!-- 搜尋：關鍵字、時間、類型、項目、陪同者都在視窗裡（components/HealthFilterDialog.vue） -->
+                        <button
+                            v-if="healthRecords.length"
+                            type="button"
+                            class="pf-search"
+                            :class="{ on: filterTags.length }"
+                            aria-label="搜尋醫療紀錄"
+                            @click="healthFilterOpen = true"
+                        >
+                            <Icon icon="mdi:magnify" width="18" />
+                        </button>
                     </div>
+                    <!-- 套用中的條件：一個一個可以拿掉；下面寫找到幾筆、清除 -->
+                    <template v-if="filterTags.length">
+                        <div class="hf-tags">
+                            <button v-for="t in filterTags" :key="t.key" type="button" class="hf-tag" @click="t.remove()">
+                                {{ t.label }}<Icon icon="mdi:close" width="13" />
+                            </button>
+                        </div>
+                        <div class="hf-found">
+                            <span>找到 {{ shownRecords.length }} 筆</span>
+                            <button type="button" @click="healthFilter = emptyHealthFilter()">清除</button>
+                        </div>
+                    </template>
                     <div v-if="healthLoading" class="state">載入中...</div>
                     <div v-else-if="!healthRecords.length" class="pf-empty-box">尚無紀錄</div>
-                    <!-- 照年份分段（年份小標題），同一天的合成一張卡：左邊日期方塊，右邊一筆一段 -->
+                    <div v-else-if="!shownRecords.length" class="pf-empty-box">沒有符合的紀錄</div>
+                    <!-- 照年份分段（年份小標題），同一天的合成一張卡：左邊日期方塊，右邊一筆一段。搜尋的關鍵字標黃 -->
                     <template v-for="year in healthByYear" :key="year.year">
                         <div class="hr-yearline">{{ year.year }}</div>
                         <div v-for="day in year.days" :key="day.date" class="hr-card">
@@ -442,7 +466,7 @@
                                 >
                                     <div class="hr-head">
                                         <!-- 項目當標題：血檢、結紮 -->
-                                        <span class="hr-title">{{ r.items.join('、') }}</span>
+                                        <span class="hr-title"><Marked :text="r.items.join('、')" /></span>
                                         <button
                                             v-if="isAdmin"
                                             type="button"
@@ -460,9 +484,9 @@
                                         </span>
                                     </div>
                                     <div v-if="r.companions?.length" class="hr-companions">
-                                        <Icon icon="mdi:account-multiple-outline" width="14" />陪同：{{ r.companions.join('、') }}
+                                        <Icon icon="mdi:account-multiple-outline" width="14" />陪同：<Marked :text="r.companions.join('、')" />
                                     </div>
-                                    <div v-if="r.note" class="hr-note">{{ r.note }}</div>
+                                    <div v-if="r.note" class="hr-note"><Marked :text="r.note" /></div>
                                     <div v-if="r.photos.length" class="hr-photos">
                                         <button
                                             v-for="(photo, i) in r.photos"
@@ -488,6 +512,13 @@
             </template>
 
             <PhotoViewer v-model:index="viewerIndex" :photos="viewerPhotos" @close="viewerIndex = null" />
+
+            <HealthFilterDialog
+                v-model="healthFilterOpen"
+                :records="healthRecords"
+                :filter="healthFilter"
+                @apply="healthFilter = $event"
+            />
 
             <!-- 管理員新增／編輯醫療紀錄 -->
             <CatHealthDialog
@@ -516,10 +547,21 @@
 <script setup>
 // 新版貓咪檔案（cat_profiles）：頁首＋日常（每一班分三區：值班〔飲食如廁、放風、未完成〕、四個分頁的留言、照片）＋小檔案。
 // 志工都能看；管理員的「編輯」在這頁打開編輯視窗（components/CatProfileDialog.vue），醫療紀錄也是管理員新增、編輯
+import { Fragment, h } from 'vue';
 import { Icon } from '@iconify/vue';
 import { catAgeText, stayText } from '~/composables/catTraits';
 import { intakeCells, isIntakeTouched } from '~/composables/intake';
-import { healthTypeIcon, healthTypeLabel } from '~/composables/healthKinds';
+import {
+    HEALTH_TYPES,
+    emptyHealthFilter,
+    healthDateRangeLabel,
+    healthDateRanges,
+    healthKeywords,
+    healthTypeIcon,
+    healthTypeLabel,
+    isHealthFilterEmpty,
+    matchHealthFilter,
+} from '~/composables/healthKinds';
 import { isObserveKind } from '~/composables/photoKinds';
 
 // 網址：/cats/<id> 是日常，/cats/<id>/profile 是小檔案。
@@ -1008,10 +1050,93 @@ const healthRecord = ref(null); // 正在編輯的那筆（null＝新增）
 
 const recordsWith = (item) => healthRecords.value.filter((r) => r.items.includes(item));
 
+// ---- 搜尋：條件在視窗裡選（components/HealthFilterDialog.vue），記在這台裝置 ----
+const healthFilter = ref(emptyHealthFilter());
+const healthFilterOpen = ref(false);
+
+// 每隻貓分開記（項目、陪同者每隻不一樣）：{ 貓 id: 條件 }。快速時間記名字，下次打開照當天重算
+const HEALTH_FILTER_KEY = 'cat_health_filters';
+
+function restoreHealthFilter() {
+    const saved = storage.get(HEALTH_FILTER_KEY)?.[catId.value];
+    if (!saved || typeof saved !== 'object') return;
+    const f = emptyHealthFilter();
+    const isDay = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '');
+    const strings = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string') : []);
+    if (typeof saved.keyword === 'string') f.keyword = saved.keyword;
+    const range = healthDateRanges($dayjs).find((r) => r.key === saved.range);
+    if (range) Object.assign(f, { from: range.from, to: range.to });
+    else Object.assign(f, { from: isDay(saved.from) ? saved.from : null, to: isDay(saved.to) ? saved.to : null });
+    f.kinds = strings(saved.kinds).filter((k) => HEALTH_TYPES.some((t) => t.key === k));
+    f.items = strings(saved.items);
+    f.companions = strings(saved.companions);
+    healthFilter.value = f;
+}
+
+function saveHealthFilter() {
+    const all = storage.get(HEALTH_FILTER_KEY) || {};
+    const f = healthFilter.value;
+    if (isHealthFilterEmpty(f)) delete all[catId.value];
+    else {
+        const range = healthDateRanges($dayjs).find((r) => r.from === f.from && r.to === f.to);
+        const { from, to, ...rest } = f;
+        all[catId.value] = range ? { ...rest, range: range.key } : f;
+    }
+    storage.set(HEALTH_FILTER_KEY, all);
+}
+
+restoreHealthFilter();
+watch(healthFilter, saveHealthFilter, { deep: true });
+const shownRecords = computed(() =>
+    isHealthFilterEmpty(healthFilter.value)
+        ? healthRecords.value
+        : healthRecords.value.filter((r) => matchHealthFilter(r, healthFilter.value))
+);
+
+// 套用中的條件，一個一個列出來（點了拿掉那一個）
+const filterTags = computed(() => {
+    const f = healthFilter.value;
+    const set = (patch) => (healthFilter.value = { ...f, ...patch });
+    const tags = [];
+    if (f.keyword) tags.push({ key: 'keyword', label: `「${f.keyword}」`, remove: () => set({ keyword: '' }) });
+    if (f.from || f.to) {
+        const label = healthDateRangeLabel(f, healthDateRanges($dayjs));
+        tags.push({ key: 'date', label, remove: () => set({ from: null, to: null }) });
+    }
+    for (const k of f.kinds)
+        tags.push({ key: `kind-${k}`, label: healthTypeLabel(k), remove: () => set({ kinds: f.kinds.filter((v) => v !== k) }) });
+    for (const i of f.items)
+        tags.push({ key: `item-${i}`, label: i, remove: () => set({ items: f.items.filter((v) => v !== i) }) });
+    for (const c of f.companions)
+        tags.push({
+            key: `companion-${c}`,
+            label: `陪同：${c}`,
+            remove: () => set({ companions: f.companions.filter((v) => v !== c) }),
+        });
+    return tags;
+});
+
+// 關鍵字標黃：把字切成一段一段，符合任一個關鍵字的包 <mark>（不分大小寫）
+const keywordPattern = computed(() => {
+    const words = healthKeywords(healthFilter.value.keyword);
+    if (!words.length) return null;
+    // 長的先比，「血檢」不會只標到「血」
+    const escaped = words.sort((a, b) => b.length - a.length).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    return new RegExp(`(${escaped.join('|')})`, 'gi');
+});
+const Marked = (props) => {
+    const text = props.text || '';
+    if (!keywordPattern.value) return text;
+    // split 帶括號：奇數位置是符合的那段
+    const parts = text.split(keywordPattern.value).map((part, i) => (i % 2 ? h('mark', part) : part));
+    return h(Fragment, parts);
+};
+Marked.props = ['text'];
+
 // 列表：年份 → 日期 → 那天的紀錄（都是新的在前，healthRecords 本來就排好了）
 const healthByYear = computed(() => {
     const years = [];
-    for (const r of healthRecords.value) {
+    for (const r of shownRecords.value) {
         const year = r.date.slice(0, 4);
         let y = years.at(-1);
         if (y?.year !== year) years.push((y = { year, days: [] }));
@@ -1052,7 +1177,12 @@ function editedAt(r) {
 
 // 基本資料卡上點日期：捲到那筆醫療紀錄、閃一下
 const flashRecordId = ref(null);
-function goToRecord(id) {
+async function goToRecord(id) {
+    // 被搜尋條件藏起來了：先清掉條件再捲過去
+    if (!document.querySelector(`[data-health-id="${id}"]`) && !isHealthFilterEmpty(healthFilter.value)) {
+        healthFilter.value = emptyHealthFilter();
+        await nextTick();
+    }
     const el = document.querySelector(`[data-health-id="${id}"]`);
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1965,6 +2095,67 @@ button.cp-avatar {
     color: #fff;
 }
 
+// 醫療紀錄的搜尋按鈕：白底細框；有套用條件時淡藍底
+.pf-search {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    margin: 0;
+    padding: 0;
+    border: 1px solid #c9dff0;
+    border-radius: 50%;
+    background: #fff;
+    color: #3f7ea3;
+
+    &.on {
+        border-color: #6da2c2;
+        background: #eef6fc;
+    }
+}
+
+// 套用中的搜尋條件（點了拿掉）與「找到幾筆・清除」
+.hf-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.hf-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    width: auto;
+    height: 26px;
+    margin: 0;
+    padding: 0 6px 0 10px;
+    border: 1px solid #c9dff0;
+    border-radius: 13px;
+    background: #eef6fc;
+    color: #3f7ea3;
+    font-size: 13px;
+}
+
+.hf-found {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 10px;
+    color: #8a7f78;
+    font-size: 13px;
+
+    button {
+        width: auto;
+        margin: 0;
+        padding: 0;
+        border: none;
+        background: none;
+        color: #3f7ea3;
+        font-size: 13px;
+    }
+}
+
 // 驅蟲、預防針、結紮的日期：一個日期一個淡藍框，點了捲到那筆紀錄
 .pf-dates {
     display: flex;
@@ -2025,6 +2216,14 @@ button.cp-avatar {
 .hr-body {
     min-width: 0;
     flex: 1;
+
+    // 搜尋的關鍵字（<Marked>）
+    :deep(mark) {
+        padding: 0 1px;
+        border-radius: 2px;
+        background: #fbe7a6;
+        color: inherit;
+    }
 }
 
 .hr-head {
@@ -2038,6 +2237,12 @@ button.cp-avatar {
     display: inline-flex;
     align-items: center;
     gap: 2px;
+
+    // 中文字的墨水中心比 box 低，圖示跟著往下（實測差 1～1.3px）
+    svg {
+        flex-shrink: 0;
+        transform: translateY(1px);
+    }
 
     &.visit {
         color: #6a4a99;
@@ -2110,6 +2315,12 @@ button.cp-avatar {
     margin-top: 6px;
     color: #a8a29e;
     font-size: 12px;
+
+    // 對齊字的墨水中心（實測差 1.5px）
+    svg {
+        flex-shrink: 0;
+        transform: translateY(1.5px);
+    }
 }
 
 .hr-companions {
@@ -2119,6 +2330,12 @@ button.cp-avatar {
     margin-top: 2px;
     color: #8a7f78;
     font-size: 12px;
+
+    // 對齊字的墨水中心（實測差 1.2px）
+    svg {
+        flex-shrink: 0;
+        transform: translateY(1px);
+    }
 }
 
 // 年份分段小標題：字後面一條細線

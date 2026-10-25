@@ -122,7 +122,7 @@
                                 type="text"
                                 placeholder="例如：暹羅"
                                 :maxlength="MAX_COAT_LENGTH"
-                                @keydown.enter.prevent="addCoat"
+                                @keydown.enter.prevent="(e) => !isImeEnter(e) && addCoat()"
                             />
                             <button type="button" class="item-add" @click="addCoat">加入</button>
                         </div>
