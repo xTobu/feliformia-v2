@@ -125,7 +125,8 @@ export function isValidShiftQuery(date, shift) {
 // 這裡留著給以前的班快照裡飲食的隨餐藥（要打勾）
 export const MEAL_MED = '隨餐藥'
 
-// 飲食裡的長期固定放風：期間內新開的班，放風預設打開
+// 長期固定放風：期間內新開的班，備餐的放風按鈕預設打開。
+// 2026-11-12 起是觀察管理（observe_items）「離開」組的類別（以前在飲食管理）；不放進班的快照、不是要點的膠囊
 export const RELEASE = '放風'
 
 // 到班時還沒填的樣子（欄位與 /regular 相同）
@@ -151,10 +152,10 @@ const byKey = (list, keyOf) => Object.fromEntries(list.map((item) => [keyOf(item
 const inPeriodOn = (date) => (i) =>
     (!i.start_date || i.start_date <= date) && (!i.end_date || i.end_date >= date)
 
-// 飲食的「放風」項目（這一班、在期間內的）→ 判斷某隻貓預設要不要放風：
+// 觀察管理的「放風」項目（這一班、在期間內的）→ 判斷某隻貓預設要不要放風：
 // 指定這隻貓的、全員的、或牠所在位置的都算
-function releaseRule(dietItems) {
-    const items = dietItems.filter((i) => i.category === RELEASE)
+function releaseRule(observeItems) {
+    const items = observeItems.filter((i) => i.category === RELEASE)
     return (catId, location) =>
         items.some((i) => i.cat_id === catId || (!i.cat_id && (!i.location || i.location === location)))
 }
@@ -162,7 +163,7 @@ function releaseRule(dietItems) {
 async function fetchReleaseRule(date, shift) {
     const rows = check(
         await supabase
-            .from('diet_items')
+            .from('observe_items')
             .select('cat_id, location, category, start_date, end_date')
             .eq('category', RELEASE)
             .or(`shift.eq.both,shift.eq.${shift}`)
@@ -250,10 +251,11 @@ export async function buildSnapshot(date, shift) {
     const lists = {
         medical: medical.filter(inPeriod),
         diet: diet.filter(inPeriod),
-        observe: observe.filter(inPeriod),
+        // 放風不放進快照：它只決定放風按鈕的預設，不是要點的膠囊（見 RELEASE）
+        observe: observe.filter((i) => inPeriod(i) && i.category !== RELEASE),
     }
-    // 有「放風」飲食項目的貓（自己的、全員的、所在位置的），放風預設打開
-    const releasedByDefault = releaseRule(lists.diet)
+    // 有「放風」觀察項目的貓（自己的、全員的、所在位置的），放風預設打開
+    const releasedByDefault = releaseRule(observe.filter(inPeriod))
 
     const ofCat = (kind, catId) =>
         byKey(

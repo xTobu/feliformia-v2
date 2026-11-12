@@ -155,10 +155,10 @@ votes.data
 | 表 | 頁面 | 說明 |
 |---|---|---|
 | `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`；原圖 `avatar_source_path` 與框的範圍 `avatar_crop` 留著，點頭像可以重新調整位置），花色 `coats`（可多選，預設清單之外可以「＋ 其他」自己打）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、生日 `birthday`（預估，可以選到日）、領養 `adopted`＋到新家日期 `adopted_on`（已領養但不知道哪天就是 null；沒領養不能有日期）、`notes`；選項在 `composables/catTraits.js` |
-| `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／補充品／放風／其他，`content`，備餐分頁只看不勾。隨餐藥 2026-11-12 搬到 `medical_items`（以前的班快照裡飲食的隨餐藥照舊在備餐分頁打勾）。放風＝長期固定放風，內容選填：期間內的班，沒人按過放風的貓 `released` 照它打開（見下方「shifts 的快照與局部更新」） |
-| `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用／隨餐藥，`treatment`、`reason`；都在醫療照護分頁打勾。隨餐藥（拌進飯裡、放碗就可以走，2026-11-12 從飲食搬過來）備餐分頁也列，兩個分頁是同一項，勾哪邊都一樣 |
+| `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／補充品／其他，`content`，備餐分頁只看不勾。2026-11-12：隨餐藥搬到 `medical_items`、放風搬到 `observe_items`（以前的班快照裡飲食的隨餐藥、放風照舊在備餐分頁顯示） |
+| `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用／隨餐藥／其他，`treatment`、`reason`；都在醫療照護分頁打勾。隨餐藥（拌進飯裡、放碗就可以走，2026-11-12 從飲食搬過來）備餐分頁也列，兩個分頁是同一項，勾哪邊都一樣 |
 | `required_items` | `/admin/required`（後台選單已拿掉） | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次。**2026-11-12 停用**：值班表拿掉收尾分頁，新的班不再放收尾、未完成不算收尾、貓咪檔案不顯示；表、設定與以前的班留著的收尾紀錄（`shifts.tasks` 的 `required:*`、收尾分頁的回報、留言、照片）都沒刪，要恢復就把分頁與 `buildSnapshot` 加回來 |
-| `observe_items` | `/admin/observe` | 觀察管理：值班時要做的事，分兩組——剛到（拍剩食／拍貓砂，飲食如廁分頁）、離開（拍留餐，備餐分頁）。`content` 是說明（選填，只在後台看，值班表不顯示）。**2026-11-12 起打勾**（值班表的留言、照片拿掉了）：膠囊樣子不變（沒勾紅色相機、勾了藍色 ✓），點了就勾、再點取消；記下誰、幾點但畫面不顯示，存在那一班 `shifts.cats.<貓>.observe_done.<項目 id>` = `{ done_by, done_at }`（取消是 `null`），全員／位置的項目每隻貓各勾各的；沒勾算未完成。以前的班沒有勾，照舊看那一班、這隻貓、那個分頁的照片有沒有對應類型（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）。規則在 `composables/observeItems.js`（`isObserveDone`），前端與 server 共用 |
+| `observe_items` | `/admin/observe` | 觀察管理：值班時要做的事，分兩組——剛到（拍剩食／拍貓砂，飲食如廁分頁）、離開（拍留餐、放風，備餐分頁）。**放風**＝長期固定放風（2026-11-12 從飲食搬過來）：不放進班的快照、不是膠囊；期間內的班，沒人按過放風的貓 `released` 照它打開（見下方「shifts 的快照與局部更新」）。`content` 是說明（選填，只在後台看，值班表不顯示）。**2026-11-12 起打勾**（值班表的留言、照片拿掉了）：膠囊樣子不變（沒勾紅色相機、勾了藍色 ✓），點了就勾、再點取消；記下誰、幾點但畫面不顯示，存在那一班 `shifts.cats.<貓>.observe_done.<項目 id>` = `{ done_by, done_at }`（取消是 `null`），全員／位置的項目每隻貓各勾各的；沒勾算未完成。以前的班沒有勾，照舊看那一班、這隻貓、那個分頁的照片有沒有對應類型（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）。規則在 `composables/observeItems.js`（`isObserveDone`），前端與 server 共用 |
 | `cat_health_records` | `/cats/[id]` 小檔案 | 醫療紀錄：類型 `kind` 單選——看診 visit／急診 emergency／回診 revisit／貓屋處理 house（資料庫有 check）；項目 `items` 可多選——預設 血檢、結紮、預防針、快篩、晶片、洗牙、拔牙、驅蟲、除蚤、吐血、血便、傷口（醫院做的在前、症狀在最後），或志工按「＋ 其他」自己加的標籤（存那幾個字，加過的之後所有貓都會出現在選項裡，`/api/cats/health/items`）；清單在 `composables/healthKinds.js`。每筆至少一個項目（列表上項目就是標題，例如「血檢、結紮」）。另有 `date`、`note`（描述）、陪同者 `companions`（名字陣列：有效志工名單列成膠囊點選，名單上沒有的按「＋ 其他」打字加入）、最後編輯者 `updated_by`／`updated_by_name`（新增時就是建立的人，照片的增減也算編輯）。所有登入的人可讀，新增、修改、刪除只有管理員，走 `server/api/cats/health*`（service key，沒有寫入 policy）。小檔案的驅蟲、預防針卡片算有勾那個項目的紀錄（次數與日期），結紮卡有勾結紮的紀錄就顯示已結紮與日期（沒有才看 `cat_profiles.neutered`）；卡片上的日期點了會捲到那筆紀錄，管理員按驅蟲、預防針卡片右上的「＋」新增一筆（預先帶好那個項目：驅蟲是貓屋處理，預防針是看診）。入住日、估計年齡、外觀、結紮卡片管理員點了打開編輯貓咪 |
 | `cat_health_photos` | `/cats/[id]` 小檔案 | 醫療紀錄的照片（一筆最多 10 張），`uploader_name` 是上傳者當下的暱稱（看大圖時顯示）。檔案在 Storage 私人 bucket `cat-health`（`<貓 id>/` 底下），上傳與看圖同值班照片（server 發一次性上傳網址／有時效網址，手機先壓縮）；刪紀錄或拿掉照片時 API 連檔案一起刪 |
 | `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
@@ -192,7 +192,7 @@ votes.data
 上一班離開時放風的貓，這一班記 `prev_released: true`（貓沒關籠，觀察分頁不用登記吃喝排泄）。
 這個值記在這一班自己身上：當天的班每次載入會照上一班現在的記錄重算，有變才寫回（`persistReleased`）；有人按放風時，`/api/shift/update` 也會把下一班（已經開了的話）那隻貓的 `prev_released` 一起改掉，過了午夜補按或改過去的班也對得上。
 備餐的放風 `released`：有人按過就記 `released_set: true`（`update.post.js` 自動加），之後照人選的；
-沒人按過的，當天（含之後）的班照飲食的「放風」項目算，每次載入重算、有變才寫回（後台加刪項目，已開的班也會跟著變）。
+沒人按過的，當天（含之後）的班照觀察管理的「放風」項目算，每次載入重算、有變才寫回（後台加刪項目，已開的班也會跟著變）。
 
 醫療、隨餐藥、收尾、觀察管理打勾時都記下 `done_by`（登入者暱稱）與 `done_at`，2026-11-12 起畫面上都不顯示（以前是「✓ 阿明 21:40」），只存著；觀察管理的存在 `cats.<貓>.observe_done`（見 `observe_items`）。
 值班記錄表的分頁是 飲食如廁、醫療照護、備餐（`arrive` / `care` / `meal`；2026-11-12 起，原本叫觀察、醫療），記在網址路徑：飲食如廁是 `/shift`，其他是 `/shift/care`、`/shift/meal`（`pages/shift/[[tab]].vue`）；哪一班在 `?date=&shift=`。分頁上的紅色未完成數字只有醫療照護有。收尾分頁（`required`）2026-11-12 拿掉了，舊網址 `/shift/required` 會導回 `/shift`。舊連結的 `?tab=`（含更舊的 meds、leave）會自動換成路徑。
