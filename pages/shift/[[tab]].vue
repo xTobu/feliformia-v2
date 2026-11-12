@@ -71,7 +71,7 @@
                                 :disabled="isDisabled"
                                 @click="toggleObserve(cat, row, !row.done)"
                             >
-                                <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                                <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="14" />{{ row.label }}
                             </button>
                         </div>
                         <!-- 上一班放風：貓沒關籠，吃多少、排泄看不出來，預設不登記，卡片只剩一行；
@@ -106,7 +106,7 @@
                                     :disabled="isDisabled"
                                     @click="toggleObserve(cat, row, !row.done)"
                                 >
-                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="14" />{{ row.label }}
                                 </button>
                             </div>
                         </div>
@@ -328,7 +328,7 @@
                                     :disabled="isDisabled"
                                     @click="toggleObserve(entry.cat, row, !row.done)"
                                 >
-                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="14" />{{ row.label }}
                                 </button>
                             </template>
                         </div>
@@ -356,7 +356,7 @@
                                     :disabled="isDisabled"
                                     @click="toggleObserve(entry.cat, row, !row.done)"
                                 >
-                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
+                                    <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="14" />{{ row.label }}
                                 </button>
                             </div>
                         </div>
@@ -1935,19 +1935,21 @@ watch(
     // 放風：膠囊按鈕，沒勾是外框、勾了變實心。離上緣、右緣留白，不擠著卡片邊框。
     // 全域有 button { width: 100%; border; padding } 的樣式，這裡每一項都要蓋回來
     // 跟貓名標籤（34px）垂直置中
+    // 跟貓名旁的膠囊（留餐）同高 24px、同一條中線（標籤高 34px → top 5px），上下緣才對齊
     .release-pill {
         position: absolute;
-        top: 4px;
+        top: 5px;
         right: 10px;
         width: auto;
-        height: 26px;
+        height: 24px;
         padding: 0 12px;
         border: 1px solid #c9c4c0;
-        border-radius: 13px;
+        border-radius: 12px;
         background: #fff;
+        box-sizing: border-box;
         color: #657181;
         font-size: 13px;
-        line-height: 24px;
+        line-height: 22px;
         cursor: pointer;
 
         &.on {
@@ -2193,16 +2195,16 @@ watch(
     align-items: center;
     gap: 3px;
     width: auto;
-    height: 22px;
+    height: 24px;
     margin: 0 0 0 2px;
-    padding: 0 9px 0 7px;
+    padding: 0 10px 0 8px;
     border: 1px solid #e9a3a3;
-    border-radius: 11px;
+    border-radius: 12px;
     background: #fdf0f0;
     box-sizing: border-box;
     color: #c0504d;
-    font-size: 12px;
-    line-height: 20px;
+    font-size: 13px;
+    line-height: 22px;
     white-space: nowrap;
     cursor: pointer;
 
