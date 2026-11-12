@@ -50,18 +50,6 @@
 
                 <!-- ========== 觀察：上一班放的飯吃了多少、排泄 ========== -->
                 <div v-show="tab === 'arrive'" class="W100">
-                    <ShiftReportBlock v-bind="prevBlock('arrive')" />
-                    <!-- 「剛到要拍」膠囊用的選照片：照片面板裡的那個要等面板打開才有，
-                         手機又只在點擊當下准許跳出選單，所以另外放一個，點膠囊時直接觸發 -->
-                    <input
-                        ref="observeInput"
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        hidden
-                        @change="onPickPhotos"
-                    />
-
                     <div
                         v-for="cat in formData.cats"
                         :key="cat.cat_id"
@@ -70,45 +58,21 @@
                     >
                         <div class="name-wrap">
                             <NuxtLink :to="`/cats/${cat.cat_id}`" class="name">{{ cat.name }}</NuxtLink>
-                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
+                            <!-- 觀察管理：剛到班要拍的照片，接在貓名後面。上一班放風的卡片右邊有放風標籤，手機上只擠得下一個膠囊，
+                                 兩個以上改放下一行（同備餐分頁）。
+                                 點了就打勾（變藍 ✓、記誰幾點），再點取消。2026-11-12 起拿掉照片，改成打勾（以前的班照舊看那一班有沒有拍對應的照片） -->
                             <button
-                                type="button"
-                                class="comment-btn"
-                                :class="{ has: commentCount(cat.cat_id) }"
-                                :aria-label="`${cat.name}的留言`"
-                                @click="openComments(cat)"
-                            >
-                                💬<span v-if="commentCount(cat.cat_id)">{{
-                                    commentCount(cat.cat_id)
-                                }}</span>
-                                <i v-if="hasHandover(cat.cat_id)" class="handover-dot"></i>
-                            </button>
-                            <!-- 這一班、這隻貓的觀察照片（剩食、貓砂…），點了從下方滑出 -->
-                            <button
-                                type="button"
-                                class="comment-btn"
-                                :class="{ has: photoCount(cat.cat_id, 'arrive') }"
-                                :aria-label="`${cat.name}的照片`"
-                                @click="openPhotos(cat, 'arrive')"
-                            >
-                                🗂️<span v-if="photoCount(cat.cat_id, 'arrive')">{{
-                                    photoCount(cat.cat_id, 'arrive')
-                                }}</span>
-                            </button>
-                            <!-- 觀察管理：剛到班要拍的照片，接在 🗂️ 後面（上一班放風的卡片右上角已經有標籤，膠囊改放下一行）。
-                                 拍了對應類型就變藍 ✓。沒拍的點了直接跳出拍照／相簿選單，選完進預覽、類型已經選好；拍好的點了打開照片牆 -->
-                            <template v-if="!cat.prev_released">
-                            <button
-                                v-for="row in observeRowsOf(cat)"
+                                v-for="row in observeInline(cat) ? observeRowsOf(cat) : []"
                                 :key="row.key"
                                 type="button"
                                 class="observe-chip"
                                 :class="{ done: row.done }"
-                                @click="openObservePhotos(cat, row)"
+                                :aria-pressed="row.done"
+                                :disabled="isDisabled"
+                                @click="toggleObserve(cat, row, !row.done)"
                             >
                                 <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
                             </button>
-                            </template>
                         </div>
                         <!-- 上一班放風：貓沒關籠，吃多少、排泄看不出來，預設不登記，卡片只剩一行；
                              有看到的話按「仍要登記」展開。已經填過的會自動展開 -->
@@ -129,19 +93,21 @@
                                 }}
                             </button>
                         </div>
-                        <!-- 名字那列下面：上一班放風的卡片放剛到要拍的膠囊；有寫說明的一行小字 -->
+                        <!-- 名字那列下面：上一班放風、要拍兩個以上的膠囊；有寫說明的一行小字 -->
                         <div
-                            v-if="(cat.prev_released && observeRowsOf(cat).length) || observeRowsOf(cat).some((r) => r.note)"
+                            v-if="(!observeInline(cat) && observeRowsOf(cat).length) || observeRowsOf(cat).some((r) => r.note)"
                             class="observe-row"
                         >
-                            <div v-if="cat.prev_released" class="observe-chips">
+                            <div v-if="!observeInline(cat)" class="observe-chips">
                                 <button
                                     v-for="row in observeRowsOf(cat)"
                                     :key="row.key"
                                     type="button"
                                     class="observe-chip"
                                     :class="{ done: row.done }"
-                                    @click="openObservePhotos(cat, row)"
+                                    :aria-pressed="row.done"
+                                    :disabled="isDisabled"
+                                    @click="toggleObserve(cat, row, !row.done)"
                                 >
                                     <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
                                 </button>
@@ -254,7 +220,6 @@
                 <!-- ========== 醫療：醫療管理的項目（醫療、餵藥、外用），只列有事項的貓 ========== -->
                 <template v-for="section in medicalSections" :key="section.tab">
                     <div v-show="tab === section.tab" class="W100">
-                        <ShiftReportBlock v-bind="prevBlock(section.tab)" />
                         <!-- 兩區都有時各加小標題：貓咪／全員與位置（同後台） -->
                         <div v-if="section.cats.length && section.taskGroups.length" class="section-title">
                             貓咪
@@ -266,31 +231,6 @@
                         >
                             <div class="name-wrap">
                                 <NuxtLink :to="`/cats/${entry.cat.cat_id}`" class="name">{{ entry.cat.name }}</NuxtLink>
-                                <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
-                                <button
-                                    type="button"
-                                    class="comment-btn"
-                                    :class="{ has: commentCount(entry.cat.cat_id) }"
-                                    :aria-label="`${entry.cat.name}的留言`"
-                                    @click="openComments(entry.cat)"
-                                >
-                                    💬<span v-if="commentCount(entry.cat.cat_id)">{{
-                                        commentCount(entry.cat.cat_id)
-                                    }}</span>
-                                    <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
-                                </button>
-                                <!-- 這一班、這隻貓的醫療照片（傷口、病情…） -->
-                                <button
-                                    type="button"
-                                    class="comment-btn"
-                                    :class="{ has: photoCount(entry.cat.cat_id, 'care') }"
-                                    :aria-label="`${entry.cat.name}的醫療照片`"
-                                    @click="openPhotos(entry.cat, 'care')"
-                                >
-                                    🗂️<span v-if="photoCount(entry.cat.cat_id, 'care')">{{
-                                        photoCount(entry.cat.cat_id, 'care')
-                                    }}</span>
-                                </button>
                             </div>
                             <div class="detail">
                                 <div
@@ -377,7 +317,6 @@
 
                 <!-- ========== 備餐：乾乾、罐罐、隨餐藥、補充品、放風、其他，放風按鈕。全員／位置的飲食併進適用的貓 ========== -->
                 <div v-show="tab === 'meal'" class="W100">
-                    <ShiftReportBlock v-bind="prevBlock('meal')" />
                     <div
                         v-for="entry in leaveCats"
                         :key="entry.cat.cat_id"
@@ -385,32 +324,7 @@
                     >
                         <div class="name-wrap">
                             <NuxtLink :to="`/cats/${entry.cat.cat_id}`" class="name">{{ entry.cat.name }}</NuxtLink>
-                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
-                            <button
-                                type="button"
-                                class="comment-btn"
-                                :class="{ has: commentCount(entry.cat.cat_id) }"
-                                :aria-label="`${entry.cat.name}的留言`"
-                                @click="openComments(entry.cat)"
-                            >
-                                💬<span v-if="commentCount(entry.cat.cat_id)">{{
-                                    commentCount(entry.cat.cat_id)
-                                }}</span>
-                                <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
-                            </button>
-                            <!-- 這一班、這隻貓的備餐照片（盛好的乾乾、罐罐、加藥…） -->
-                            <button
-                                type="button"
-                                class="comment-btn"
-                                :class="{ has: photoCount(entry.cat.cat_id, 'meal') }"
-                                :aria-label="`${entry.cat.name}的照片`"
-                                @click="openPhotos(entry.cat, 'meal')"
-                            >
-                                🗂️<span v-if="photoCount(entry.cat.cat_id, 'meal')">{{
-                                    photoCount(entry.cat.cat_id, 'meal')
-                                }}</span>
-                            </button>
-                            <!-- 觀察管理的「離開要拍」（拍留餐…）：只有一個就接在 🗂️ 後面；兩個以上放下一行（右邊有放風鈕） -->
+                            <!-- 觀察管理的「離開要拍」（拍留餐…）：只有一個就接在貓名後面；兩個以上放下一行（右邊有放風鈕） -->
                             <template v-if="observeRowsOf(entry.cat, 'meal').length === 1">
                                 <button
                                     v-for="row in observeRowsOf(entry.cat, 'meal')"
@@ -418,13 +332,15 @@
                                     type="button"
                                     class="observe-chip"
                                     :class="{ done: row.done }"
-                                    @click="openObservePhotos(entry.cat, row)"
+                                    :aria-pressed="row.done"
+                                    :disabled="isDisabled"
+                                    @click="toggleObserve(entry.cat, row, !row.done)"
                                 >
                                     <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
                                 </button>
                             </template>
                         </div>
-                        <!-- 放風：離開時沒有關籠，下一班在觀察分頁會看到。貓名同一列最右邊的膠囊按鈕 -->
+                        <!-- 放風：離開時沒有關籠，下一班在飲食如廁分頁會看到。貓名同一列最右邊的膠囊按鈕 -->
                         <button
                             type="button"
                             class="release-pill"
@@ -450,7 +366,9 @@
                                     type="button"
                                     class="observe-chip"
                                     :class="{ done: row.done }"
-                                    @click="openObservePhotos(entry.cat, row)"
+                                    :aria-pressed="row.done"
+                                    :disabled="isDisabled"
+                                    @click="toggleObserve(entry.cat, row, !row.done)"
                                 >
                                     <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
                                 </button>
@@ -517,20 +435,19 @@
 
                 </div>
 
-                <!-- ========== 回報：每個分頁、每個人各一段（用登入身分）。下一班在同一個分頁上方看得到 ========== -->
+                <!-- ========== 回報：每個分頁、每個人各一段（用登入身分）。下一班在同一個分頁的這裡看得到 ========== -->
                 <div class="W100 mb20 report">
                     <!-- 跟上面的貓咪、項目分開：小標題＋細線 -->
                     <div class="section-title report-title">回報</div>
+                    <!-- 前一班同一個分頁的回報，放在寫自己的回報之前（2026-11-12 起分頁最上面不再放前班區塊與未完成） -->
+                    <ShiftReportBlock v-bind="prevBlock(tab)" />
                     <ShiftReportBlock
                         :title="`其他人的${tabLabel}回報`"
                         :entries="othersEntries"
                         :storage-key="`now:${tab}`"
                     />
-                    <!-- 我的回報：標題、輸入框、儲存列收在同一張卡片 -->
+                    <!-- 我的回報：輸入框、儲存列收在同一張卡片 -->
                     <div class="my-report">
-                        <div class="mr-head">
-                            <span class="mr-title">我的{{ tabLabel }}回報</span>
-                        </div>
                         <el-input
                             type="textarea"
                             v-model="drafts[tab]"
@@ -656,293 +573,7 @@
                 </button>
             </el-drawer>
 
-            <!-- 照片面板：從下方滑出，這隻貓、這個分頁（觀察或醫療）的照片，照班分組往上看。點縮圖全螢幕看，可左右滑 -->
-            <el-drawer
-                v-model="photoOpen"
-                direction="btt"
-                size="72%"
-                :with-header="false"
-                class="comment-drawer"
-                :modal-class="instantDrawers ? 'drawer-instant' : ''"
-            >
-                <div class="cd-head">
-                    <span class="cd-title">{{ photoCat?.name }}</span>
-                    <span v-if="selecting" class="cd-tab">已選 {{ selectedIds.length }} 張</span>
-                    <span v-else class="cd-tab">{{ TAB_LABELS[photoTab] }}照片</span>
-                    <!-- 右邊依序：選取（選取中是 全選、退出）、留言／照片、✕ -->
-                    <div class="cd-actions">
-                        <!-- 選取模式：一次刪多張。只能選自己傳的（管理員可選全部） -->
-                        <template v-if="!drawerPending.length && deletablePhotos.length">
-                            <button v-if="selecting" type="button" class="cd-link" @click="toggleSelectAll">
-                                {{ allSelected ? '取消全選' : '全選' }}
-                            </button>
-                            <button type="button" class="cd-link" @click="toggleSelectMode">
-                                {{ selecting ? '退出' : '選取' }}
-                            </button>
-                        </template>
-                        <!-- 切到這隻貓、這個分頁的留言頻道。選取中、預覽要上傳的照片時按不了（切走會丟掉） -->
-                        <ChannelSwitch current="photos" :disabled="!canSwitchChannel" @switch="switchToComments" />
-                    </div>
-                    <button
-                        type="button"
-                        class="cd-close"
-                        aria-label="關閉"
-                        @click="photoOpen = false"
-                    >
-                        ✕
-                    </button>
-                </div>
-
-                <!-- 類型篩選（可多選）：只看有這些類型的照片（例如貓砂），往上滑也只找這些 -->
-                <div v-if="!drawerPending.length && photoKindList.length" class="pd-filter">
-                    <PhotoKindPicker v-model="photoKindFilter" :tab="photoTab" all-label="全部" />
-                </div>
-
-                <!-- 上傳中的整體進度：固定在標題列下面，不用滑到每張照片才看得到 -->
-                <div v-if="isUploading" class="pu-progress">
-                    <div class="pu-text">
-                        <span>上傳中 {{ uploadedCount }}/{{ uploadBatch.length }} 張</span>
-                        <b>{{ uploadPercent }}%</b>
-                    </div>
-                    <div class="pu-bar"><i :style="{ width: `${uploadPercent}%` }"></i></div>
-                </div>
-
-                <!-- 選好照片後先預覽：每張照片滿版、描述在正下方，往下滑看下一張；點圖全螢幕看。
-                     每張可以寫描述或取消選取，按「上傳」才開始傳 -->
-                <div v-if="drawerPending.length" class="cd-list">
-                    <div v-if="!isUploading" class="cd-section">
-                        <template v-if="failedCount">{{ failedCount }} 張上傳失敗</template>
-                        <template v-else
-                            >準備上傳 {{ drawerPending.length }} 張<template v-if="pendingPastLabel"
-                                >到 {{ pendingPastLabel }}</template
-                            ></template
-                        >
-                    </div>
-                    <div v-for="(item, index) in drawerPending" :key="item.key" class="pp-item">
-                        <div class="pp-stage">
-                            <el-image
-                                class="pp-image"
-                                :src="item.previewUrl"
-                                fit="contain"
-                                :preview-src-list="drawerPending.map((p) => p.previewUrl)"
-                                :initial-index="index"
-                                preview-teleported
-                                hide-on-click-modal
-                            />
-                            <!-- 按了上傳之後，每張蓋上自己的狀態：排隊中、壓縮中、上傳中、✓ 完成、失敗可重試 -->
-                            <div v-if="item.status !== 'idle'" class="pp-status" :class="item.status">
-                                <span>
-                                    {{ STATUS_TEXT[item.status] }}
-                                    <b v-if="['compressing', 'uploading', 'saving'].includes(item.status)"
-                                        >{{ item.progress }}%</b
-                                    >
-                                </span>
-                                <span
-                                    v-if="['compressing', 'uploading', 'saving'].includes(item.status)"
-                                    class="pp-bar"
-                                ><i :style="{ width: `${item.progress}%` }"></i></span>
-                                <button
-                                    v-if="item.status === 'error'"
-                                    type="button"
-                                    class="pp-retry"
-                                    @click="retryUpload(item)"
-                                >
-                                    重試
-                                </button>
-                            </div>
-                            <!-- 取消選取這一張（其他張還在）；全部不要就按下面的「取消」 -->
-                            <button
-                                v-if="item.status === 'idle' || item.status === 'error'"
-                                type="button"
-                                class="pp-remove"
-                                aria-label="取消選取這張"
-                                @click="removePending(item)"
-                            >
-                                ✕
-                            </button>
-                        </div>
-                        <!-- 類型（選填、可多選）：點一下選、再點一下取消 -->
-                        <div v-if="PHOTO_KINDS[item.tab]" class="pp-kinds">
-                            <PhotoKindPicker
-                                v-model="item.kinds"
-                                :tab="item.tab"
-                                :disabled="item.status !== 'idle' && item.status !== 'error'"
-                            />
-                        </div>
-                        <el-input
-                            v-model="item.note"
-                            :disabled="item.status !== 'idle' && item.status !== 'error'"
-                            class="pp-note"
-                            type="textarea"
-                            :autosize="{ minRows: 2, maxRows: 4 }"
-                            maxlength="500"
-                            placeholder="描述（選填）"
-                        />
-                    </div>
-                </div>
-
-                <!-- 照片牆：照班分組，跟留言頻道一樣跨班往上看（打開時是這一班加前面 4 班，捲到最上面再往前 5 班）。
-                     每一班都有分隔線（沒照片的班也是，看得出滑到哪一天、也能補傳）；這一班是藍色 -->
-                <div v-else ref="photoListEl" class="cd-list" @scroll="onPhotoScroll">
-                    <div v-if="historyLoading" class="pd-hint">載入更早的照片…</div>
-                    <div v-else-if="historyHasMore" class="pd-hint">往上滑看更早的班</div>
-                    <!-- 更早已經沒有任何班的紀錄（新版值班記錄表開始用之前） -->
-                    <div v-else-if="historyShifts.length" class="pd-hint">已經是最早的班了</div>
-                    <template v-for="group in drawerGroups" :key="group.key">
-                        <div class="pd-divider" :class="{ current: group.isCurrent }" :data-shift="group.key">
-                            {{ shiftLabel(group) }}
-                            <!-- 以前的班也可以補傳照片（還能編輯的班才有） -->
-                            <button
-                                v-if="!group.isCurrent && !selecting && !drawerPending.length && canUploadTo(group)"
-                                type="button"
-                                class="pd-divider-add"
-                                :aria-label="`補傳照片到${shiftLabel(group)}`"
-                                @click="pickPhotosFor(group)"
-                            >
-                                📷
-                            </button>
-                        </div>
-                        <div v-if="group.photos.length" class="pd-grid">
-                            <div v-for="photo in group.photos" :key="photo.id" class="pd-item">
-                                <button
-                                    v-if="selecting"
-                                    type="button"
-                                    class="pd-thumb pd-selectable"
-                                    :class="{
-                                        selected: selectedIds.includes(photo.id),
-                                        locked: !canDeletePhoto(photo),
-                                    }"
-                                    :disabled="!canDeletePhoto(photo)"
-                                    :aria-pressed="selectedIds.includes(photo.id)"
-                                    @click="toggleSelect(photo)"
-                                >
-                                    <img :src="photo.thumb_url" alt="" />
-                                    <span class="pd-check">✓</span>
-                                </button>
-                                <!-- 點了看大圖（PhotoViewer：下面有哪一班、誰、類型、描述，可以左右換張） -->
-                                <button
-                                    v-else
-                                    type="button"
-                                    class="pd-thumb pd-open"
-                                    :aria-label="`看大圖：${photo.note || ''}`"
-                                    @click="openPhotoViewer(photo)"
-                                >
-                                    <img :src="photo.thumb_url" alt="" loading="lazy" />
-                                </button>
-                                <!-- 類型：縮圖左上角的膠囊（跟右上角編輯鈕同高）。最多先放兩個，第三個起收成下一行的「+N」；
-                                     點了展開成蓋住整張縮圖的面板（類型並排、太多可捲），點面板任何地方收起 -->
-                                <div
-                                    v-if="photo.kinds?.length"
-                                    class="pd-kinds"
-                                    :class="{ open: expandedKinds.includes(photo.id) }"
-                                    @click="expandedKinds.includes(photo.id) && toggleKinds(photo)"
-                                >
-                                    <div class="pd-kinds-row">
-                                        <span
-                                            v-for="kind in shownKinds(photo)"
-                                            :key="kind"
-                                            :class="{ observe: isObserveKind(kind) }"
-                                            >{{ kind }}</span
-                                        >
-                                    </div>
-                                    <button
-                                        v-if="photo.kinds.length > KINDS_SHOWN"
-                                        type="button"
-                                        class="pd-kinds-toggle"
-                                        :aria-label="
-                                            expandedKinds.includes(photo.id)
-                                                ? '收起類型'
-                                                : `還有 ${photo.kinds.length - KINDS_SHOWN} 個類型`
-                                        "
-                                        @click.stop="toggleKinds(photo)"
-                                    >
-                                        {{ expandedKinds.includes(photo.id) ? '‹' : `+${photo.kinds.length - KINDS_SHOWN}` }}
-                                    </button>
-                                </div>
-                                <!-- 誰、幾點；留言附的照片最右邊標「留言」 -->
-                                <div class="pd-meta">
-                                    <span class="pd-who">{{ photo.author_name || '未命名' }} {{ photoTime(photo, group) }}</span>
-                                    <span v-if="photo.comment_id" class="pd-from-comment">留言</span>
-                                </div>
-                                <div v-if="photo.comment_id ? photo.comment?.body : photo.note" class="pd-note">
-                                    {{ photo.comment_id ? photo.comment.body : photo.note }}
-                                </div>
-                                <!-- 右上角的編輯（上傳的人或管理員；留言的照片也是）：類型、描述，刪除也在編輯視窗裡 -->
-                                <button
-                                    v-if="canEditPhoto(photo) && !selecting"
-                                    type="button"
-                                    class="pd-edit"
-                                    aria-label="編輯這張照片"
-                                    @click="editPhoto(photo)"
-                                >
-                                    <Icon icon="fa6-regular:pen-to-square" width="14" />
-                                </button>
-                            </div>
-                        </div>
-                        <div v-else class="pd-none">
-                            {{ group.isCurrent ? '這一班' : '這班' }}{{
-                                photoKindFilter.length ? `沒有${photoKindFilter.join('、')}照片` : '還沒有照片'
-                            }}
-                        </div>
-                    </template>
-                </div>
-
-                <div class="cd-input">
-                    <!-- 不加 capture：手機會讓人選要拍照還是從相簿選，可以一次選多張 -->
-                    <input
-                        ref="photoInput"
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        class="pd-file"
-                        @change="onPickPhotos"
-                    />
-                    <div v-if="selecting" class="pd-confirm">
-                        <button type="button" class="pd-cancel" @click="toggleSelectMode">取消</button>
-                        <button
-                            type="button"
-                            class="pd-add pd-danger"
-                            :disabled="!selectedIds.length || deleting"
-                            @click="deleteSelected"
-                        >
-                            {{ deleting ? '刪除中…' : `刪除 ${selectedIds.length} 張` }}
-                        </button>
-                    </div>
-                    <button v-else-if="isUploading" type="button" class="pd-add" disabled>
-                        上傳中 {{ uploadedCount }}/{{ uploadBatch.length }}…
-                    </button>
-                    <div v-else-if="drawerPending.length" class="pd-confirm">
-                        <button type="button" class="pd-cancel" @click="clearPending">取消</button>
-                        <button type="button" class="pd-add" @click="uploadPending">
-                            {{ failedCount ? `重試 ${failedCount} 張` : `上傳 ${drawerPending.length} 張` }}
-                        </button>
-                    </div>
-                    <button
-                        v-else
-                        type="button"
-                        class="pd-add"
-                        :disabled="isDisabled"
-                        @click="pickPhotosFor(null)"
-                    >
-                        📷 拍照或選照片
-                    </button>
-                </div>
-            </el-drawer>
-
-            <!-- 照片庫的看大圖：下面有哪一班、誰傳的、類型，以及描述或那則留言的內容。
-                 上傳的人或管理員可以直接編輯（留言的照片只能改類型）；留言的照片可以跳到那則留言 -->
-            <PhotoViewer v-model:index="photoViewerIndex" :photos="viewerPhotos" @close="photoViewerIndex = null">
-                <template #actions="{ photo }">
-                    <button v-if="canEditPhoto(photo.raw)" type="button" @click="editFromViewer(photo.raw)">
-                        ✎ 編輯
-                    </button>
-                    <button v-if="photo.raw.comment_id" type="button" @click="jumpToComment(photo)">
-                        跳到這則留言
-                    </button>
-                </template>
-            </PhotoViewer>
-
-            <!-- LINE 發送前的確認：要發的文字＋勾選要附的照片（最多 4 張；文字超過 5000 字會提醒並可以編輯） -->
+            <!-- LINE 發送前的確認：要發的文字（這個分頁的回報）。超過 LINE 一則 5000 字會自動分成幾則 -->
             <el-dialog
                 :model-value="!!linePush"
                 title="發送至 LINE 群組"
@@ -950,219 +581,22 @@
                 class="line-push-dialog"
                 align-center
                 append-to-body
-                @update:model-value="(v) => !v && closeLinePush(null)"
+                @update:model-value="(v) => !v && closeLinePush(false)"
             >
                 <template v-if="linePush">
-                    <div v-if="linePush.editing || linePushBudget.chunks > 1" class="lp-warn">
-                        <template v-if="linePushBudget.chunks > 1">
-                            內容有 {{ linePushBudget.length }} 字，超過 LINE 一則 {{ LINE_TEXT_MAX }} 字，會分成
-                            {{ linePushBudget.chunks }} 則發送<template v-if="linePush.photos.length"
-                                >，照片最多只能附 {{ linePushBudget.room }} 張</template
-                            >。<template v-if="linePush.editing">可以直接在下面刪減。</template>
-                            <template v-else
-                                >可以取消不重要的留言，或
-                                <button type="button" class="lp-link" @click="editLinePushText">直接編輯文字</button>
-                            </template>
-                        </template>
-                        <template v-else>現在 {{ linePushBudget.length }} 字，一則就發得完。</template>
+                    <div v-if="linePush.chunks > 1" class="lp-warn">
+                        內容有 {{ linePush.text.length }} 字，超過 LINE 一則 {{ LINE_TEXT_MAX }} 字，會分成
+                        {{ linePush.chunks }} 則發送。
                     </div>
-                    <template v-if="linePush.editing">
-                        <el-input
-                            v-model="linePush.text"
-                            type="textarea"
-                            :autosize="{ minRows: 8, maxRows: 14 }"
-                            class="lp-textarea"
-                        />
-                        <button type="button" class="lp-link lp-back" @click="linePush.editing = false">
-                            回到勾選留言（手動改的內容會不見）
-                        </button>
-                    </template>
-                    <!-- 換行與縮排都照實際發出去的樣子；留言一則一列，點了切換要不要發 -->
-                    <template v-else>
-                        <div v-if="linePush.comments.length" class="lp-hint">
-                            點留言可以取消，沒勾的不會發出去（{{ linePush.chosen.length }} / {{ linePush.comments.length }}）
-                        </div>
-                        <div class="lp-text">
-                            <div>{{ linePushPreview.head }}</div>
-                            <template v-if="linePushPreview.groups.length">
-                                <div>{{ linePushPreview.commentsTitle }}</div>
-                                <div v-for="(group, i) in linePushPreview.groups" :key="group.catId" :class="{ 'lp-cat-gap': i > 0 }">
-                                    <div>{{ group.title }}</div>
-                                    <button
-                                        v-for="item in group.comments"
-                                        :key="item.comment.id"
-                                        type="button"
-                                        class="lp-pick"
-                                        :class="{ off: !linePush.chosen.includes(item.comment.id) }"
-                                        role="checkbox"
-                                        :aria-checked="linePush.chosen.includes(item.comment.id)"
-                                        @click="toggleLineComment(item.comment.id)"
-                                    >
-                                        <span class="lp-check">{{ linePush.chosen.includes(item.comment.id) ? '✓' : '' }}</span>
-                                        <span class="lp-pick-text">{{ item.text }}</span>
-                                    </button>
-                                </div>
-                            </template>
-                        </div>
-                    </template>
-
-                    <!-- 沒勾的留言，它的照片不會出現在這裡 -->
-                    <template v-if="linePushGroups.wall.length || linePushGroups.comments.length">
-                        <!-- 跟上面的文字用分隔線隔開，提示可以點照片勾選；預設都不勾 -->
-                        <div class="lp-section">
-                            <div class="lp-section-title">
-                                附上照片
-                                <span v-if="linePushBudget.room" class="lp-count"
-                                    >{{ linePush.selected.length }} / {{ linePushBudget.room }}</span
-                                >
-                            </div>
-                            <div class="lp-section-hint">
-                                <template v-if="linePushBudget.room">
-                                    點照片勾選要一起發到群組的，最多 {{ linePushBudget.room }} 張；不勾就只發文字
-                                </template>
-                                <template v-else>文字太長，這次不能附照片</template>
-                            </div>
-                        </div>
-                        <!-- 照片牆的照片：一張一格，下面寫哪隻貓、誰傳的、類型、描述 -->
-                        <template v-if="linePushGroups.wall.length">
-                            <div class="lp-sub">🗂️ 照片牆</div>
-                            <div class="lp-grid">
-                                <div v-for="photo in linePushGroups.wall" :key="photo.id" class="lp-cell">
-                                    <button
-                                        type="button"
-                                        class="lp-photo"
-                                        :class="{ on: linePush.selected.includes(photo.id) }"
-                                        :disabled="!linePushBudget.room"
-                                        :aria-pressed="linePush.selected.includes(photo.id)"
-                                        @click="toggleLinePhoto(photo)"
-                                    >
-                                        <img :src="photo.thumb_url" alt="" />
-                                        <span class="lp-mark">{{ linePush.selected.includes(photo.id) ? '✓' : '' }}</span>
-                                    </button>
-                                    <div class="lp-wall-who">
-                                        <b>{{ catNameOf(photo.cat_id) }}</b>・{{ photo.author_name || '未命名' }}
-                                        {{ $dayjs(photo.created_at).format('HH:mm') }}
-                                    </div>
-                                    <div v-if="photo.kinds?.length" class="lp-wall-kinds">
-                                        <span v-for="kind in photo.kinds" :key="kind">{{ kind }}</span>
-                                    </div>
-                                    <div v-if="photo.note" class="lp-wall-note">{{ photo.note }}</div>
-                                </div>
-                            </div>
-                        </template>
-
-                        <!-- 留言附的照片：一則留言一塊（哪隻貓、誰、幾點、說了什麼），下面是那則的照片 -->
-                        <template v-if="linePushGroups.comments.length">
-                            <div class="lp-sub">💬 留言的照片</div>
-                            <div v-for="group in linePushGroups.comments" :key="group.comment.id" class="lp-comment">
-                                <div class="lp-comment-head">
-                                    <b>{{ catNameOf(group.comment.cat_id) }}</b>
-                                    <span>{{ group.comment.author_name || '未命名' }} {{ $dayjs(group.comment.created_at).format('HH:mm') }}</span>
-                                    <span v-if="group.comment.for_next" class="lp-important-tag">重要</span>
-                                </div>
-                                <div class="lp-comment-body">{{ group.comment.body || '（只有照片）' }}</div>
-                                <div class="lp-grid">
-                                    <button
-                                        v-for="photo in group.photos"
-                                        :key="photo.id"
-                                        type="button"
-                                        class="lp-photo"
-                                        :class="{ on: linePush.selected.includes(photo.id) }"
-                                        :disabled="!linePushBudget.room"
-                                        :aria-pressed="linePush.selected.includes(photo.id)"
-                                        @click="toggleLinePhoto(photo)"
-                                    >
-                                        <img :src="photo.thumb_url" alt="" />
-                                        <span class="lp-mark">{{ linePush.selected.includes(photo.id) ? '✓' : '' }}</span>
-                                    </button>
-                                </div>
-                            </div>
-                        </template>
-                    </template>
+                    <div class="lp-text">{{ linePush.text }}</div>
                 </template>
                 <template #footer>
                     <div class="pd-confirm">
-                        <button type="button" class="pd-cancel" @click="closeLinePush(null)">取消</button>
-                        <button type="button" class="pd-add" @click="sendLinePush">發送</button>
+                        <button type="button" class="pd-cancel" @click="closeLinePush(false)">取消</button>
+                        <button type="button" class="pd-add" @click="closeLinePush(true)">發送</button>
                     </div>
                 </template>
             </el-dialog>
-
-            <!-- 編輯照片：類型（跟上傳時一樣點標籤、可多選）與描述在同一個視窗，按儲存一起改；也可以刪除這張。
-                 留言附的照片只有類型 -->
-            <el-dialog
-                :model-value="!!photoEditing"
-                title="編輯照片"
-                width="90%"
-                class="photo-edit-dialog"
-                align-center
-                append-to-body
-                @update:model-value="(v) => !v && (photoEditing = null)"
-            >
-                <div class="pe-label">類型</div>
-                <div class="pp-kinds">
-                    <PhotoKindPicker v-model="kindDraft" :tab="photoEditing?.tab" />
-                </div>
-                <!-- 留言附的照片：描述的位置顯示那則留言（在這裡不能改；沒有文字就是空白的框），刪除時提醒是留言裡的照片 -->
-                <template v-if="photoEditing?.comment_id">
-                    <div class="pe-label">💬 {{ photoEditingComment?.author_name || '未命名' }} 的留言</div>
-                    <div class="pe-comment">{{ photoEditingComment?.body?.trim() || '' }}</div>
-                </template>
-                <template v-else>
-                    <div class="pe-label">描述</div>
-                    <el-input
-                        v-model="noteDraft"
-                        type="textarea"
-                        :autosize="{ minRows: 3, maxRows: 6 }"
-                        maxlength="500"
-                        placeholder="描述（選填）"
-                        class="pe-note"
-                    />
-                </template>
-                <!-- 留言裡的照片跟留言一樣，只有留言的本人可以刪（管理員也不行，只能改類型） -->
-                <button
-                    v-if="photoEditing && canDeletePhoto(photoEditing)"
-                    type="button"
-                    class="pe-delete"
-                    :disabled="savingPhotoEdit"
-                    @click="deleteEditingPhoto"
-                >
-                    刪除這張照片
-                </button>
-                <div v-if="photoEditing?.comment_id && canDeletePhoto(photoEditing)" class="pe-hint">
-                    這張是留言裡的照片，刪除後那則留言也不會再有這張。
-                </div>
-                <template #footer>
-                    <div class="pd-confirm">
-                        <button type="button" class="pd-cancel" @click="photoEditing = null">取消</button>
-                        <button type="button" class="pd-add" :disabled="savingPhotoEdit" @click="savePhotoEdit">
-                            {{ savingPhotoEdit ? '儲存中…' : '儲存' }}
-                        </button>
-                    </div>
-                </template>
-            </el-dialog>
-
-            <!-- 留言頻道：一隻貓、一個分頁一個頻道，跨班往上看，可以附照片（components/ShiftCommentDrawer.vue） -->
-            <ShiftCommentDrawer
-                ref="commentDrawer"
-                v-model="drawerOpen"
-                :cat="drawerCat"
-                :tab="tab"
-                :tab-label="tabLabel"
-                :current="channelCurrent"
-                :disabled="isDisabled"
-                :me="me"
-                :jump="commentJump"
-                :admin="isAdmin"
-                :instant="instantDrawers"
-                :current-photos="photos"
-                @jumped="commentJump = null"
-                @edit-photo="editPhoto"
-                @added="onCommentAdded"
-                @updated="onCommentUpdated"
-                @removed="onCommentRemoved"
-                @open-photos="switchToPhotos"
-            />
         </div>
 
         <template #fallback>
@@ -1172,7 +606,7 @@
 </template>
 
 <script setup>
-// 新版值班記錄表：一個班一筆 shifts，合併觀察、醫療、備餐、收尾四個分頁。
+// 新版值班記錄表：一個班一筆 shifts，合併飲食如廁、醫療照護、備餐三個分頁（收尾、留言、照片 2026-11-12 拿掉了）。
 // 資料來自新版的 cat_profiles 與飲食／醫療／待辦管理；/regular、/medicine 維持原樣，兩邊不互通。
 // 存檔是「局部更新」：每改一格只送那一格（saveIntake、saveCatItem…），
 // 兩個人同時改不同的貓或項目不會互相覆蓋
@@ -1262,6 +696,8 @@ function normalize(rawCats, rawTasks) {
             medical: sortedValues(c.medical),
             diet: sortedValues(c.diet),
             observe: sortedValues(c.observe),
+            // 觀察管理的打勾 { 項目 id: { done_by, done_at } | null }
+            observe_done: { ...(c.observe_done || {}) },
         }))
         .sort(bySort);
     const tasks = Object.entries(rawTasks || {})
@@ -1408,6 +844,10 @@ function mergeRemote(row) {
         if (raw.intake && !busy('cats', [id, 'intake'])) lc.intake = rc.intake;
         if ('released' in raw && !busy('cats', [id, 'released'])) lc.released = rc.released;
         if ('prev_released' in raw) lc.prev_released = rc.prev_released;
+        for (const [itemId, value] of Object.entries(raw.observe_done || {})) {
+            if (busy('cats', [id, 'observe_done', itemId])) continue;
+            lc.observe_done = { ...lc.observe_done, [itemId]: value };
+        }
         for (const list of ['medical', 'diet']) {
             for (const ri of rc[list]) {
                 if (busy('cats', [id, list, String(ri.id)])) continue;
@@ -1441,688 +881,24 @@ const pickDone = ({ done, done_by, done_at }) => ({
     done_at: done_at ?? null,
 });
 
-// ---- 留言：每隻貓、每個分頁一個頻道（跨班），面板在 ShiftCommentDrawer。
-// 這裡只留這一班的留言與上一班勾了「重要」的，給 💬 的數字與橘點用（橘點只維持一班） ----
-const comments = ref([]); // 這一班的留言
-const handovers = ref([]); // 上一班勾了「重要」的留言
-const drawerOpen = ref(false);
-const drawerCat = ref(null);
-
-// 收尾分頁 2026-11-12 拿掉了（後台的收尾項目與以前的班的收尾紀錄都留著，只是不再顯示、不再放進新的班）
 const TABS = ['arrive', 'care', 'meal'];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
 const TAB_LABELS = { arrive: '飲食如廁', care: '醫療照護', meal: '備餐' };
 const tabLabel = computed(() => TAB_LABELS[tab.value]);
 
-const inThisTab = (list, catId) =>
-    list.filter((c) => c.cat_id === catId && c.tab === tab.value);
-const commentCount = (catId) => inThisTab(comments.value, catId).length;
-const hasHandover = (catId) => inThisTab(handovers.value, catId).length > 0;
+// 以前的班（2026-11-12 之前）沒有觀察的打勾，照舊看那一班飲食如廁、備餐分頁有沒有拍對應的照片。
+// 值班表的留言、照片 2026-11-12 拿掉了，這裡只讀判斷要的欄位
+const legacyPhotos = ref([]);
+const photosOf = (catId, key) => legacyPhotos.value.filter((p) => p.cat_id === catId && p.tab === key);
 
-// ---- 照片：這一班、這隻貓、這個分頁（觀察、醫療、備餐）的照片。檔案在 Storage，網址由 server 發 ----
-const photos = ref([]); // 這一班的照片（含 url、thumb_url）
-const photoTab = ref('arrive'); // 面板目前是哪個分頁的照片
-// 選好的照片（含上傳中、失敗的）：{ key, file, previewUrl, note, catId, tab, status }
-// status：idle 還沒按上傳 → queued 排隊中 → compressing 壓縮中 → uploading 上傳中 → saving 儲存中 → done／error
-const pendingPhotos = ref([]);
-const BUSY = ['queued', 'compressing', 'uploading', 'saving'];
-
-const photoOpen = ref(false);
-const photoCat = ref(null);
-const photoInput = ref(null);
-const photoPresetKinds = ref([]); // 從「剛到要拍」打開時，新選的照片預先選好的類型
-
-const photosOf = (catId, key) => photos.value.filter((p) => p.cat_id === catId && p.tab === key);
-const photoCount = (catId, key) => photosOf(catId, key).length;
-const drawerPhotos = computed(() =>
-    photoCat.value ? photosOf(photoCat.value.cat_id, photoTab.value) : []
-);
-// 面板目前這隻貓、這個分頁的預覽與上傳狀態
-const drawerPending = computed(() =>
-    photoCat.value
-        ? pendingPhotos.value.filter((p) => p.catId === photoCat.value.cat_id && p.tab === photoTab.value)
-        : []
-);
-const isUploading = computed(() => drawerPending.value.some((p) => BUSY.includes(p.status)));
-const uploadedCount = computed(() => drawerPending.value.filter((p) => p.status === 'done').length);
-const failedCount = computed(() => drawerPending.value.filter((p) => p.status === 'error').length);
-// 這一輪在傳的：排隊、進行中、已完成（沒按上傳的與失敗的不算，重試一張時就只算那一張）
-const uploadBatch = computed(() =>
-    drawerPending.value.filter((p) => p.status === 'done' || BUSY.includes(p.status))
-);
-const uploadPercent = computed(() => {
-    const batch = uploadBatch.value;
-    if (!batch.length) return 0;
-    const sum = batch.reduce((total, p) => total + (p.status === 'done' ? 100 : p.progress), 0);
-    return Math.round(sum / batch.length);
-});
-const STATUS_TEXT = {
-    queued: '排隊中',
-    compressing: '壓縮中',
-    uploading: '上傳中',
-    saving: '儲存中',
-    done: '✓ 完成',
-    error: '上傳失敗',
-};
-// 上傳的人或管理員可以改（類型、描述）與刪除。留言附的照片跟留言一樣，只有留言的本人可以刪
-const canEditPhoto = (photo) => photo.uploaded_by === me.value || isAdmin.value;
-const canDeletePhoto = (photo) => (photo.comment_id ? photo.uploaded_by === me.value : canEditPhoto(photo));
-// 縮圖左上角的類型：先放兩個，其他收成「+N」；展開的照片（id）放在 expandedKinds，點 +N 展開、點 ‹ 收起
-const KINDS_SHOWN = 2;
-const expandedKinds = ref([]);
-const shownKinds = (photo) =>
-    expandedKinds.value.includes(photo.id) ? photo.kinds : photo.kinds.slice(0, KINDS_SHOWN);
-const toggleKinds = (photo) => {
-    expandedKinds.value = expandedKinds.value.includes(photo.id)
-        ? expandedKinds.value.filter((id) => id !== photo.id)
-        : [...expandedKinds.value, photo.id];
-};
-
-
-// keep：從留言頻道切回來時，同一隻貓、同一個分頁、同一班已經載入過，就照原本的樣子（篩選、捲到哪）直接顯示。
-// 這一班的照片本來就即時更新；從卡片打開時才重新往前載，以前的班也是最新的
-let loadedPhotosKey = null;
-function openPhotos(cat, key, { keep = false } = {}) {
-    const photosKey = `${cat.cat_id}-${key}-${formData.value.recordId}`;
-    photoCat.value = cat;
-    photoTab.value = key;
-    photoOpen.value = true;
-    if (keep && loadedPhotosKey === photosKey) return;
-    loadedPhotosKey = photosKey;
-    // 上次有篩選就清掉，清掉時 watch 會重新載入；沒有就直接載入（不要載兩次）
-    if (photoKindFilter.value.length) photoKindFilter.value = [];
-    else openPhotoHistory();
-}
-
-// ---- 類型篩選（可多選）：空陣列 = 全部，有選就看有其中任一類的照片。換篩選就從這一班重新往前找 ----
-const photoKindFilter = ref([]);
-const photoKindList = computed(() => PHOTO_KINDS[photoTab.value] || []);
-const matchesKindFilter = (photo) =>
-    !photoKindFilter.value.length || (photo.kinds || []).some((k) => photoKindFilter.value.includes(k));
-watch(photoKindFilter, () => {
-    if (!photoOpen.value) return;
-    selecting.value = false;
-    selectedIds.value = [];
-    openPhotoHistory();
-});
-
-// ---- 照片牆往前翻：這一班的在 photos（即時更新），前面的班在 photoHistory ----
-const photoHistory = ref([]);
-const historyShifts = ref([]); // 已經往前載入的班（含沒照片的）{ date, shift, id }
-const historyCursor = ref(null); // 已載入最舊的那班 { date, shift }，下次從它往前
-const historyHasMore = ref(false);
-const historyLoading = ref(false);
-const photoListEl = ref(null);
-const FIRST_SHIFTS = 4; // 打開時：這一班加前面 4 班
-const MORE_SHIFTS = 5; // 之後每次往前 5 班
-
-const shiftKeyOf = (date, shift) => `${date}-${shift === 'night' ? 1 : 0}`;
-const shiftLabel = ({ date, shift }) => `${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift]}`;
-
-// 上傳時間：當天傳的只寫時間；之後才補傳的連日期一起寫（跨年再加年份）
-function photoTime(photo, group) {
-    const at = $dayjs(photo.created_at);
-    if (at.format('YYYY-MM-DD') === group.date) return at.format('HH:mm');
-    return at.format(at.year() === $dayjs(group.date).year() ? 'MM/DD HH:mm' : 'YYYY/MM/DD HH:mm');
-}
-
-// 面板裡的照片照班分組，舊的班在上。照片物件都是原本那一份（改描述才會留著）
-// 每一班都有一組（沒照片的班也在，看得出滑到哪一天、也能補傳），舊的在上
-const drawerGroups = computed(() => {
-    if (!photoCat.value) return [];
-    const { date, shift } = channelCurrent.value;
-    const groups = historyShifts.value
-        .map((s) => ({
-            key: shiftKeyOf(s.date, s.shift),
-            date: s.date,
-            shift: s.shift,
-            shiftId: s.id,
-            isCurrent: false,
-            photos: photoHistory.value.filter(
-                (p) =>
-                    p.date === s.date &&
-                    p.shift === s.shift &&
-                    p.cat_id === photoCat.value.cat_id &&
-                    p.tab === photoTab.value &&
-                    matchesKindFilter(p)
-            ),
-        }))
-        .sort((a, b) => a.key.localeCompare(b.key));
-    return [
-        ...groups,
-        {
-            key: shiftKeyOf(date, shift),
-            date,
-            shift,
-            shiftId: formData.value.recordId,
-            isCurrent: true,
-            photos: drawerPhotos.value.filter(matchesKindFilter),
-        },
-    ];
-});
-const drawerAllPhotos = computed(() => drawerGroups.value.flatMap((g) => g.photos));
-
-// 看大圖：只在同一班的照片之間左右換張（照畫面順序）
-const photoViewerIndex = ref(null);
-const photoViewerKey = ref(null); // 點開的是哪一班
-const viewerPhotos = computed(() => {
-    const group = drawerGroups.value.find((g) => g.key === photoViewerKey.value);
-    return (group?.photos || []).map((p) => ({
-        url: p.url,
-        label: shiftLabel(group),
-        meta: `${p.author_name || '未命名'} ${photoTime(p, group)}${p.comment?.edited_at ? '（已編輯）' : ''}`,
-        kinds: p.kinds,
-        text: p.comment_id ? p.comment?.body : p.note,
-        textKind: p.comment_id ? 'comment' : 'note',
-        date: group.date,
-        shift: group.shift,
-        raw: p,
-    }));
-});
-
-function openPhotoViewer(photo) {
-    const group = drawerGroups.value.find((g) => g.photos.some((p) => p.id === photo.id));
-    if (!group) return;
-    photoViewerKey.value = group.key;
-    photoViewerIndex.value = group.photos.findIndex((p) => p.id === photo.id);
-}
-
-function editFromViewer(photo) {
-    photoViewerIndex.value = null;
-    editPhoto(photo);
-}
-
-// ---- 照片庫 ↔ 留言頻道：同一隻貓、同一個分頁，關掉這個、打開那個 ----
-// 選取中、預覽要上傳的照片時不給切（切走會丟掉）
-const canSwitchChannel = computed(() => !selecting.value && !drawerPending.value.length);
-const commentJump = ref(null); // 打開留言頻道後要跳過去的那則 { commentId, date, shift }
-
-// 兩邊是不同的面板：切換時關掉滑動動畫，直接換過去，不會看到一個滑下、一個滑上（一般打開、關閉照舊有動畫）
-const instantDrawers = ref(false);
-function swapDrawers(swap) {
-    instantDrawers.value = true;
-    swap();
-    setTimeout(() => (instantDrawers.value = false), 100);
-}
-
-function switchToComments() {
-    const cat = photoCat.value;
-    swapDrawers(() => {
-        photoOpen.value = false;
-        openComments(cat);
-    });
-}
-
-function switchToPhotos() {
-    const cat = drawerCat.value;
-    swapDrawers(() => {
-        drawerOpen.value = false;
-        openPhotos(cat, tab.value, { keep: true });
-    });
-}
-
-// 留言的照片 → 打開留言頻道、捲到那則
-function jumpToComment(photo) {
-    photoViewerIndex.value = null;
-    commentJump.value = { commentId: photo.raw.comment_id, date: photo.date, shift: photo.shift };
-    switchToComments();
-}
-
-async function scrollPhotosToBottom() {
-    await nextTick();
-    if (photoListEl.value) photoListEl.value.scrollTop = photoListEl.value.scrollHeight;
-}
-
-// 傳好後捲到傳到的那一班：這一班就到最下面；以前的班把那班的分隔線捲到最上面，新照片就在下面
-async function scrollPhotosToShift({ date, shift }) {
-    if (date === channelCurrent.value.date && shift === channelCurrent.value.shift) return scrollPhotosToBottom();
-    await nextTick();
-    const list = photoListEl.value;
-    const divider = list?.querySelector(`[data-shift="${shiftKeyOf(date, shift)}"]`);
-    if (!divider) return;
-    // 傳完預覽收起、照片格重新出現時是在最上面；直接跳過去（慢慢捲會經過頂端、觸發載入更早的班）
-    list.scrollTop += divider.getBoundingClientRect().top - list.getBoundingClientRect().top - 8;
-}
-
-// 往前載入 count 班（沒照片的班也算，畫面會顯示分隔線）
-async function loadPhotoHistory(count) {
-    const from = historyCursor.value || channelCurrent.value;
-    const data = await $fetch('/api/shift/photos/history', {
-        params: {
-            catId: photoCat.value.cat_id,
-            tab: photoTab.value,
-            date: from.date,
-            shift: from.shift,
-            count,
-            ...(photoKindFilter.value.length ? { kinds: photoKindFilter.value.join(',') } : {}),
-        },
-        cache: 'no-store',
-    });
-    photoHistory.value.push(...data.photos.filter((p) => !photoHistory.value.some((h) => h.id === p.id)));
-    historyShifts.value.push(
-        ...data.shifts.filter((s) => !historyShifts.value.some((h) => h.date === s.date && h.shift === s.shift))
-    );
-    historyCursor.value = data.cursor;
-    historyHasMore.value = data.hasMore;
-}
-
-async function openPhotoHistory() {
-    photoHistory.value = [];
-    historyShifts.value = [];
-    historyCursor.value = null;
-    historyHasMore.value = false;
-    historyLoading.value = true;
-    try {
-        await loadPhotoHistory(FIRST_SHIFTS);
-    } catch (e) {
-        console.error('load photo history error:', e);
-    } finally {
-        historyLoading.value = false;
-    }
-    scrollPhotosToBottom();
-}
-
-// 捲到最上面就再往前 5 班，載入後畫面停在原本看的地方
-async function onPhotoScroll() {
-    const el = photoListEl.value;
-    if (!el || el.scrollTop > 60 || historyLoading.value || !historyHasMore.value) return;
-    historyLoading.value = true;
-    const fromBottom = el.scrollHeight - el.scrollTop;
-    try {
-        await loadPhotoHistory(MORE_SHIFTS);
-        await nextTick();
-        el.scrollTop = el.scrollHeight - fromBottom;
-    } catch (e) {
-        console.error('load more photos error:', e);
-    } finally {
-        historyLoading.value = false;
-    }
-}
-
-async function loadPhotos(recordId) {
-    try {
-        photos.value = await $fetch('/api/shift/photos', {
-            params: { shiftId: recordId },
-            cache: 'no-store',
-        });
-    } catch (e) {
-        console.error('loadPhotos error:', e);
-    }
-}
-
-function addPhoto(row) {
-    if (!photos.value.some((p) => p.id === row.id)) photos.value.push(row);
-}
-
-// 選了照片：先放進預覽，讓人每張寫描述，按「上傳」才開始傳
-// 照片要傳到哪一班：null = 正在看的這一班；按以前某班分隔線上的 📷 就是那一班 { shiftId, date, shift }
-const photoTarget = ref(null);
-
-// 還在編輯期限內的班都能補傳（跟頁面的 isDisabled 同一個規則）。
-// 那班還沒有紀錄（沒人打開過）的話，上傳時先建一筆（見 ensureShiftId）
-const canUploadTo = (group) => isEditableDate(group.date);
-
-// 補傳到還沒有紀錄的班：先用 GET /api/shift 建好那一班（跟有人打開那班一樣），同一班只建一次
-const creatingShifts = new Map();
-function ensureShiftId(item) {
-    if (item.shiftId) return Promise.resolve(item.shiftId);
-    const key = shiftKeyOf(item.date, item.shift);
-    if (!creatingShifts.has(key)) {
-        creatingShifts.set(
-            key,
-            $fetch('/api/shift', { params: { date: item.date, shift: item.shift }, cache: 'no-store' })
-                .then((data) => {
-                    const known = historyShifts.value.find((s) => s.date === item.date && s.shift === item.shift);
-                    if (known) known.id = data.recordId;
-                    return data.recordId;
-                })
-                .finally(() => creatingShifts.delete(key))
-        );
-    }
-    return creatingShifts.get(key).then((id) => (item.shiftId = id));
-}
-
-function pickPhotosFor(group) {
-    photoTarget.value = group ? { shiftId: group.shiftId, date: group.date, shift: group.shift } : null;
-    photoInput.value?.click();
-}
-
-// 預覽裡的照片都是要補傳到以前同一班時，標題寫出是哪一班
-const pendingPastLabel = computed(() => {
-    const past = drawerPending.value.filter((p) => p.shiftId !== formData.value.recordId);
-    return past.length && past.length === drawerPending.value.length ? shiftLabel(past[0]) : '';
-});
-
-function onPickPhotos(event) {
-    const files = [...(event.target.files || [])];
-    event.target.value = ''; // 同一張再選一次也會觸發
-    if (!files.length || !photoCat.value) return;
-    const target = photoTarget.value || {
-        shiftId: formData.value.recordId,
-        date: channelCurrent.value.date,
-        shift: channelCurrent.value.shift,
-    };
-    photoTarget.value = null;
-    pendingPhotos.value.push(
-        ...files.map((file) => ({
-            key: `${Date.now()}-${Math.random()}`,
-            file,
-            previewUrl: URL.createObjectURL(file),
-            note: '',
-            kinds: [...photoPresetKinds.value],
-            catId: photoCat.value.cat_id,
-            tab: photoTab.value,
-            ...target,
-            status: 'idle',
-            progress: 0,
-        }))
-    );
-}
-
-function dropPending(items) {
-    const keys = new Set(items.map((p) => p.key));
-    items.forEach((p) => URL.revokeObjectURL(p.previewUrl));
-    pendingPhotos.value = pendingPhotos.value.filter((p) => !keys.has(p.key));
-}
-
-const removePending = (item) => dropPending([item]);
-
-// 「取消」：清掉這個面板還沒傳、或傳失敗的（傳好的已經在照片格裡了）
-const clearPending = () => dropPending(drawerPending.value.filter((p) => !BUSY.includes(p.status)));
-
-// 關掉面板：還沒按上傳的就放棄；正在上傳的會在背景繼續傳完
-watch(photoOpen, (open) => {
-    if (!open && !isUploading.value) clearPending();
-    if (!open) photoPresetKinds.value = [];
-});
-
-const { uploadFile } = usePhotoUpload();
-
-// 一張：壓縮 → 拿一次性上傳網址 → 大圖、縮圖直接傳到 Storage → 記一筆（含描述）。
-// 進度：壓縮 0～10%、大圖 10～85%（照實際傳了多少）、縮圖 85～95%、記錄 95～100%
-async function uploadOne(item, batch) {
-    let shiftId = item.shiftId;
-    const step = (from, to) => (ratio) => {
-        item.progress = Math.round(from + (to - from) * Math.min(1, Math.max(0, ratio)));
-    };
-    try {
-        shiftId = await ensureShiftId(item);
-        item.status = 'compressing';
-        item.progress = 3;
-        const { full, thumb } = await compressPhoto(item.file);
-        item.progress = 10;
-        item.status = 'uploading';
-        const [slot] = await $fetch('/api/shift/photos/upload-url', {
-            method: 'POST',
-            body: { shiftId, catId: item.catId, tab: item.tab, count: 1 },
-        });
-        await uploadFile(slot.path, slot.token, full.blob, step(10, 85));
-        await uploadFile(slot.thumbPath, slot.thumbToken, thumb.blob, step(85, 95));
-        item.status = 'saving';
-        item.progress = 97;
-        const row = await $fetch('/api/shift/photos', {
-            method: 'POST',
-            body: {
-                shiftId,
-                catId: item.catId,
-                tab: item.tab,
-                note: item.note,
-                kinds: [...item.kinds],
-                batch,
-                path: slot.path,
-                thumbPath: slot.thumbPath,
-                width: full.width,
-                height: full.height,
-                size: full.blob.size,
-            },
-        });
-        // 補傳到以前的班：放進往前翻的那份，標上是哪一班
-        if (shiftId === formData.value.recordId) addPhoto(row);
-        else photoHistory.value.push({ ...row, date: item.date, shift: item.shift });
-        broadcastPhotos(shiftId, 'upsert', [row]);
-        item.progress = 100;
-        item.status = 'done';
-    } catch (e) {
-        console.error('upload photo error:', e);
-        item.status = 'error';
-    }
-}
-
-// 一張一張傳。全部成功就回到照片格；有失敗的留在預覽，讓人按「重試」
-async function uploadItems(items) {
-    if (!formData.value.recordId || !items.length) return;
-    // 這一次上傳共用一個 id：留言頻道裡併成一筆「誰上傳了幾張照片」
-    const batch = crypto.randomUUID();
-    items.forEach((p) => {
-        p.status = 'queued';
-        p.progress = 0;
-    });
-    for (const item of items) await uploadOne(item, batch);
-
-    const group = pendingPhotos.value.filter((p) => p.catId === items[0].catId && p.tab === items[0].tab);
-    if (group.every((p) => p.status === 'done')) {
-        dropPending(group);
-        ElMessage.success(`已上傳 ${group.length} 張`);
-        scrollPhotosToShift(items[0]);
-    } else if (group.some((p) => p.status === 'error')) {
-        ElMessage.error('有照片上傳失敗，可以按「重試」');
-    }
-}
-
-const uploadPending = () =>
-    uploadItems(drawerPending.value.filter((p) => p.status === 'idle' || p.status === 'error'));
-const retryUpload = (item) => uploadItems([item]);
-
-// 編輯照片（上傳的人或管理員）：類型與描述在同一個視窗。類型全部取消＝不分類，描述清空＝沒有描述
-const photoEditing = ref(null);
-const photoEditingComment = ref(null); // 留言附的照片：那則留言（顯示內容用）
-const commentDrawer = ref(null);
-const kindDraft = ref([]);
-const noteDraft = ref('');
-const savingPhotoEdit = ref(false);
-
-// comment：留言頻道裡點的會帶那則留言；照片庫裡的照片自己帶著 comment
-function editPhoto(photo, comment = null) {
-    photoEditing.value = photo;
-    photoEditingComment.value = comment || photo.comment || null;
-    // 規則（剩食、貓砂擇一）之前標了兩個的舊照片：先只留第一個，儲存才不會被擋
-    kindDraft.value = fitPhotoKinds(photo.tab, photo.kinds || []);
-    noteDraft.value = photo.note || '';
-}
-
-async function savePhotoEdit() {
-    const photo = photoEditing.value;
-    if (!photo) return;
-    savingPhotoEdit.value = true;
-    try {
-        const res = await $fetch('/api/shift/photos/update', {
-            method: 'POST',
-            body: {
-                id: photo.id,
-                kinds: [...kindDraft.value],
-                ...(photo.comment_id ? {} : { note: noteDraft.value }),
-            },
-        });
-        photo.kinds = res.kinds;
-        photo.note = res.note;
-        // 從留言頻道改的，是留言裡那一份；照片庫自己那份也一起改
-        for (const copy of [...photos.value, ...photoHistory.value].filter((p) => p.id === photo.id && p !== photo)) {
-            copy.kinds = res.kinds;
-            copy.note = res.note;
-        }
-        broadcastPhotos(photo.shift_id, 'upsert', [photo]);
-        photoEditing.value = null;
-    } catch (e) {
-        console.error('savePhotoEdit error:', e);
-        ElMessage.error('儲存失敗，請再試一次');
-    } finally {
-        savingPhotoEdit.value = false;
-    }
-}
-
-// ---- 選取模式：勾多張一次刪 ----
-const selecting = ref(false);
-const selectedIds = ref([]);
-const deleting = ref(false);
-const deletablePhotos = computed(() => drawerAllPhotos.value.filter(canDeletePhoto));
-const allSelected = computed(
-    () => deletablePhotos.value.length > 0 && selectedIds.value.length === deletablePhotos.value.length
-);
-
-function toggleSelectMode() {
-    selecting.value = !selecting.value;
-    selectedIds.value = [];
-}
-
-function toggleSelect(photo) {
-    if (!canDeletePhoto(photo)) return;
-    selectedIds.value = selectedIds.value.includes(photo.id)
-        ? selectedIds.value.filter((id) => id !== photo.id)
-        : [...selectedIds.value, photo.id];
-}
-
-function toggleSelectAll() {
-    selectedIds.value = allSelected.value ? [] : deletablePhotos.value.map((p) => p.id);
-}
-
-// 關掉面板或換一隻貓就離開選取模式
-watch([photoOpen, photoCat, photoTab], () => {
-    selecting.value = false;
-    selectedIds.value = [];
-});
-
-// 刪除照片的確認：問句一行，下面是灰色小字提醒（留言照片、無法復原）。內容只有數字與固定文字，可以放進 html
-const confirmDeleteHtml = (question, hints) =>
-    `${question}${hints
-        .filter(Boolean)
-        .map((hint) => `<span class="swal-hint">${hint}</span>`)
-        .join('')}`;
-
-async function deleteSelected() {
-    const ids = [...selectedIds.value];
-    if (!ids.length) return;
-    const removed = drawerAllPhotos.value.filter((p) => ids.includes(p.id));
-    const fromComments = removed.filter((p) => p.comment_id).length;
-    const { isConfirmed } = await Swal.fire({
-        html: confirmDeleteHtml(`確定要刪除這 ${ids.length} 張照片嗎？`, [
-            fromComments ? `其中 ${fromComments} 張是留言裡的照片，留言裡也會一起拿掉。` : '',
-            '刪除後無法復原。',
-        ]),
-        showCancelButton: true,
-        confirmButtonText: '刪除',
-        cancelButtonText: '取消',
-        confirmButtonColor: '#b33a39',
-    });
-    if (!isConfirmed) return;
-    deleting.value = true;
-    try {
-        const res = await $fetch('/api/shift/photos/delete', { method: 'POST', body: { ids } });
-        photos.value = photos.value.filter((p) => !ids.includes(p.id));
-        photoHistory.value = photoHistory.value.filter((p) => !ids.includes(p.id));
-        for (const shiftId of new Set(removed.map((p) => p.shift_id))) {
-            broadcastPhotos(shiftId, 'delete', removed.filter((p) => p.shift_id === shiftId));
-        }
-        // 留言裡的照片：那些留言少幾張，或整則刪掉了
-        for (const { id, message } of res.comments || []) {
-            syncCommentAfterPhotoDelete(removed.find((p) => p.comment_id === id), id, message);
-        }
-        ElMessage.success(`已刪除 ${ids.length} 張`);
-        selecting.value = false;
-        selectedIds.value = [];
-    } catch (e) {
-        console.error('deleteSelected error:', e);
-        ElMessage.error('刪除失敗，請再試一次');
-    } finally {
-        deleting.value = false;
-    }
-}
-
-// 編輯視窗裡的「刪除這張照片」：確認刪掉後關掉視窗
-async function deleteEditingPhoto() {
-    const photo = photoEditing.value;
-    if (photo && (await deletePhoto(photo))) photoEditing.value = null;
-}
-
-// 回傳有沒有真的刪掉（按取消或失敗是 false）
-async function deletePhoto(photo) {
-    const comment = photo.comment_id ? photoEditingComment.value || photo.comment : null;
-    const { isConfirmed } = await Swal.fire({
-        html: confirmDeleteHtml('確定要刪除這張照片嗎？', [
-            !photo.comment_id
-                ? ''
-                : comment?.body?.trim()
-                  ? '這張是留言裡的照片，刪除後那則留言也不會再有這張。'
-                  : '這張是留言裡的照片，那則留言沒有文字，如果只剩這張，留言會一起刪除。',
-            '刪除後無法復原。',
-        ]),
-        showCancelButton: true,
-        confirmButtonText: '刪除',
-        cancelButtonText: '取消',
-        confirmButtonColor: '#b33a39',
-    });
-    if (!isConfirmed) return false;
-    try {
-        const res = await $fetch('/api/shift/photos/delete', { method: 'POST', body: { id: photo.id } });
-        photos.value = photos.value.filter((p) => p.id !== photo.id);
-        photoHistory.value = photoHistory.value.filter((p) => p.id !== photo.id);
-        broadcastPhotos(photo.shift_id, 'delete', [photo]);
-        for (const { id, message } of res.comments || []) syncCommentAfterPhotoDelete(photo, id, message);
-        return true;
-    } catch (e) {
-        console.error('deletePhoto error:', e);
-        ElMessage.error('刪除失敗，請再試一次');
-        return false;
-    }
-}
-
-// 刪了留言裡的照片：那則留言少一張（message 是刪完的樣子），或整則刪掉了（message 是 null）。
-// 開著的留言頻道直接改、也廣播給開著同一個頻道的人；整則刪掉的話留言數也要扣
-function syncCommentAfterPhotoDelete(photo, id, message) {
-    const payload = message ? { action: 'upsert', message } : { action: 'delete', id };
-    commentDrawer.value?.applyMessage(payload);
-    sendBroadcast(`comments:${photo.cat_id}:${photo.tab}`, 'message', cloneJson(payload));
-    if (!message) {
-        removeComment(id);
-        broadcastShift('comment', { action: 'delete', id }, photo.shift_id);
-    }
-}
-
-// 留言頻道要的「正在看的這一班」（formData.date 是 Date，API 要 YYYY-MM-DD）
-const channelCurrent = computed(() => ({
-    recordId: formData.value.recordId,
-    date: $dayjs(formData.value.date).format('YYYY-MM-DD'),
-    shift: formData.value.shift,
-}));
-
-function openComments(cat) {
-    drawerCat.value = cat;
-    drawerOpen.value = true;
-}
-
-// 這一班的留言（算 💬 的數字）。頻道裡寫到別班的不算
-function addComment(row) {
-    if (row.shift_id !== formData.value.recordId) return;
-    if (!comments.value.some((c) => c.id === row.id)) comments.value.push(row);
-    // 留言附的照片也在照片庫裡
-    if (row.photos?.length) loadPhotos(formData.value.recordId);
-}
-
-function removeComment(id) {
-    comments.value = comments.value.filter((c) => c.id !== id);
-    handovers.value = handovers.value.filter((c) => c.id !== id);
-    // 那則留言附的照片也從照片庫拿掉
-    photos.value = photos.value.filter((p) => p.comment_id !== id);
-    photoHistory.value = photoHistory.value.filter((p) => p.comment_id !== id);
-}
-
-async function loadComments(params) {
-    try {
-        const data = await $fetch('/api/shift/comments', { params, cache: 'no-store' });
-        comments.value = data.current;
-        handovers.value = data.previous;
-    } catch (e) {
-        console.error('loadComments error:', e);
-    }
+async function loadLegacyPhotos(recordId) {
+    const { data, error } = await supabase
+        .from('shift_photos')
+        .select('cat_id, tab, kinds')
+        .eq('shift_id', recordId)
+        .in('tab', ['arrive', 'meal']);
+    if (error) console.error('load legacy photos error:', error);
+    else if (recordId === formData.value.recordId) legacyPhotos.value = data;
 }
 
 // ---- 分頁內容 ----
@@ -2170,9 +946,9 @@ function groupByCategory(list) {
 
 const appliesTo = (task, cat) => !task.location || task.location === cat.location;
 
-// 觀察管理：值班時要拍的照片。剛到的（拍剩食、拍貓砂）在觀察分頁，離開的（拍留餐）在備餐分頁。
-// 貓自己的＋全員／位置的；這一班、那個分頁的照片有對應類型就算拍了
-// label 是膠囊上的字（拍剩食→剩食；其他→說明），note 是另外寫在下面的說明
+// 觀察管理：值班時要做的事。剛到的（拍剩食、拍貓砂）在飲食如廁分頁，離開的（拍留餐）在備餐分頁。
+// 貓自己的＋全員／位置的；打勾記在這隻貓的 observe_done（以前的班沒有勾，看那一班的照片）
+// label 是膠囊上的字（拍剩食→剩食，前面有相機圖示；以前的「其他」是說明），note 是另外寫在下面的說明
 const observeRows = computed(() => {
     const tasks = formData.value.tasks.filter((t) => t.kind === 'observe');
     const map = new Map();
@@ -2190,9 +966,10 @@ const observeRows = computed(() => {
                     key,
                     tab,
                     category: item.category,
+                    id: item.id,
                     label: other ? item.content || '其他' : item.category.replace(/^拍/, ''),
                     note: other ? '' : item.content,
-                    done: isObserveDone(item.category, photosOf(cat.cat_id, tab)),
+                    done: isObserveDone(item.category, photosOf(cat.cat_id, tab), cat.observe_done[item.id]),
                 };
             })
         );
@@ -2200,6 +977,8 @@ const observeRows = computed(() => {
     return map;
 });
 const observeRowsOf = (cat, tab = 'arrive') => (observeRows.value.get(cat.cat_id) || []).filter((r) => r.tab === tab);
+// 飲食如廁分頁：膠囊接在貓名後面；上一班放風的卡片右邊有放風標籤，只有一個膠囊才擠得下
+const observeInline = (cat) => !cat.prev_released || observeRowsOf(cat).length <= 1;
 // ---- 照護項目的附圖（後台飲食、醫療管理加的）：值班表的快照只記項目 id，附圖直接讀項目表，
 // 後台換了照片這裡馬上看得到。key 是「種類:id」，例如 medical:12 ----
 const ITEM_PHOTO_TABLES = { diet: 'diet_items', medical: 'medical_items' };
@@ -2222,15 +1001,14 @@ async function loadItemPhotos() {
     }
 }
 
-// 點膠囊：打開這隻貓那個分頁（觀察或備餐）的照片庫。還沒拍的直接跳出拍照／相簿選單（要在點擊當下觸發），
-// 選好的照片類型預先選好（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）
-const observeInput = ref(null);
-function openObservePhotos(cat, row) {
-    openPhotos(cat, row.tab);
-    const kind = OBSERVE_PHOTO_KIND[row.category];
-    photoPresetKinds.value = kind ? [kind] : [];
-    photoTarget.value = null; // 傳到這一班
-    if (!row.done && !isDisabled.value) observeInput.value?.click();
+// 觀察管理打勾（點膠囊）：記在這隻貓底下的 observe_done[項目 id]，誰、幾點只存不顯示（全員／位置的項目也是每隻貓各勾各的）；取消就存 null
+function toggleObserve(cat, row, checked) {
+    const value = checked ? { done_by: nickname.value || '未命名', done_at: new Date().toISOString() } : null;
+    cat.observe_done = { ...cat.observe_done, [row.id]: value };
+    queue([
+        catBase(cat),
+        { column: 'cats', path: [String(cat.cat_id), 'observe_done', String(row.id)], value },
+    ]);
 }
 
 // 每一項包成 { key, source, item }：item 是原本的物件（隨餐藥打勾要改到它），source 是全員／位置的來源標籤
@@ -2255,16 +1033,14 @@ function saveDietItem(cat, { source, item }) {
 
 // 全員／位置的飲食只併進適用的貓；那個位置現在沒有貓的就不顯示，也不算未完成
 
-// 每個分頁上方：上一班同一個分頁的回報，以及那個分頁沒勾完的項目
+// 回報區最上面：上一班同一個分頁的回報（上一班沒勾完的項目不再列）
 function prevBlock(key) {
-    const { date, shift, reports, unfinished } = prev.value;
+    const { date, shift, reports } = prev.value;
     return {
-        // 標題直接寫是哪一班（例如 10/20 晚班），所在的分頁已經說明了是哪一類
-        title: date ? `${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift]}` : '前班',
-        entriesLabel: '前班回報',
-        countLabel: '人回報',
+        // 標題「前班回報（10/20 晚）」；不顯示幾則
+        title: date ? `前班回報（${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift].slice(0, 1)}）` : '前班回報',
+        countLabel: '',
         entries: entriesOf(reports, key),
-        unfinished: unfinished?.[key] || [],
         // 前班每次打開頁面都收起，展開不記住（不給 storageKey）
         defaultCollapsed: true,
     };
@@ -2370,7 +1146,7 @@ function goTo({ date, shift }) {
     router.push({ path: tabPath(tab.value), query: { date, shift } });
 }
 
-// 編輯期限：照「日期」算，今天加前 N 天（DISABLED_DAYS，預設 2）的早晚班都能改、能補傳照片。
+// 編輯期限：照「日期」算，今天加前 N 天（DISABLED_DAYS，預設 2）的早晚班都能改。
 // 例如今天 10/22：10/20、10/21、10/22 的早晚班都可以，10/19 以前不行
 function isEditableDate(date) {
     const earliest = $dayjs().startOf('day').subtract(config.public.disabledDays || 2, 'day');
@@ -2481,15 +1257,14 @@ async function InitShift() {
     setRaw(data);
     subscribeToShift(data.recordId);
 
-    // 留言、照片要等這一班建立好才查得到，所以放在後面
-    await Promise.all([loadComments(params), loadPhotos(data.recordId)]);
+    legacyPhotos.value = [];
+    loadLegacyPhotos(data.recordId);
 }
 
 // ---- 即時同步（Broadcast，見 composables/useBroadcast.js）----
-// 一班一個私人頻道 shift:<id>，三種訊息：
+// 一班一個私人頻道 shift:<id>：
 //   ops：別人存好的格子（跟 /api/shift/update 一樣的 { column, path, value }），照路徑套上
-//   comment：這一班新增或刪除的留言（💬 的數字與橘點用；留言內容在 ShiftCommentDrawer 自己的頻道）
-//   photo：🗂️ 照片牆新增、修改、刪除的照片
+//   （留言 comment、照片 photo 兩種訊息 2026-11-12 跟著值班表的留言、照片拿掉了）
 const { join: joinBroadcast, send: sendBroadcast } = useBroadcast();
 const shiftChannel = ref(null);
 const shiftTopic = (id) => `shift:${id}`;
@@ -2535,16 +1310,7 @@ function mergeOps(ops) {
 const broadcastShift = (event, payload, shiftId = formData.value.recordId) =>
     sendBroadcast(shiftTopic(shiftId), event, payload, shiftChannel.value);
 
-// 照片庫的照片（新增、改類型或描述、刪除）：補傳到別班就發到那一班的頻道。
-// 留言附的照片跟著留言走（comment 事件），這裡只有改類型時會發
-function broadcastPhotos(shiftId, action, list) {
-    if (!shiftId || !list.length) return;
-    const payload = action === 'delete' ? { action, ids: list.map((p) => p.id) } : { action, photos: list.map(cloneJson) };
-    broadcastShift('photo', payload, shiftId);
-    notifyCats(shiftId, list.map((p) => p.cat_id));
-}
-
-// 貓咪檔案（/cats/[id]）的頻道 cat:<貓>：改到這隻貓的格子或照片就通知一聲（過去的班也是），那邊重抓那一班的日子。
+// 貓咪檔案（/cats/[id]）的頻道 cat:<貓>：改到這隻貓的格子就通知一聲（過去的班也是），那邊重抓那一班的日子。
 // next：改了放風，下一班的「前班放風」也跟著變（server 已經同步），那邊連下一班一起重抓
 function notifyCats(shiftId, catIds, next = false) {
     for (const id of new Set(catIds.filter(Boolean).map(String))) {
@@ -2561,63 +1327,9 @@ function notifyCatsOfOps(shiftId, ops) {
     notifyCats(shiftId, catIds, released);
 }
 
-function applyRemotePhotos({ action, photos: list = [], ids = [] }) {
-    if (action === 'delete') {
-        photos.value = photos.value.filter((p) => !ids.includes(p.id));
-        photoHistory.value = photoHistory.value.filter((p) => !ids.includes(p.id));
-        return;
-    }
-    for (const photo of list) {
-        // 已經有的照片併進去（從留言頻道改類型時傳來的那份沒有 comment，不要蓋掉）
-        if (photo.shift_id === formData.value.recordId) {
-            const i = photos.value.findIndex((p) => p.id === photo.id);
-            if (i >= 0) photos.value.splice(i, 1, { ...photos.value[i], ...photo });
-            else photos.value.push(photo);
-            continue;
-        }
-        // 正在往前翻的那幾班裡的照片也一起更新
-        const shift = historyShifts.value.find((s) => s.id === photo.shift_id);
-        if (!shift) continue;
-        const withShift = { ...photo, date: shift.date, shift: shift.shift };
-        const i = photoHistory.value.findIndex((p) => p.id === photo.id);
-        if (i >= 0) photoHistory.value.splice(i, 1, { ...photoHistory.value[i], ...withShift });
-        else photoHistory.value.push(withShift);
-    }
-}
-
-// 自己在留言頻道新增、刪除留言：更新數字，再告訴其他開著這一班的人
-function onCommentAdded(row) {
-    addComment(row);
-    if (row.shift_id) broadcastShift('comment', { action: 'upsert', comment: cloneJson(row) }, row.shift_id);
-}
-
-function onCommentRemoved(id) {
-    removeComment(id);
-    broadcastShift('comment', { action: 'delete', id });
-}
-
-// 編輯留言可能改了「重要」（影響下一班的橘點）或照片：自己重抓留言數與照片，也叫開著這一班的人重抓
-function onCommentUpdated() {
-    reloadComments();
-    loadPhotos(formData.value.recordId);
-    broadcastShift('comment', { action: 'refresh' });
-}
-
-function reloadComments() {
-    return loadComments({ date: channelCurrent.value.date, shift: channelCurrent.value.shift });
-}
-
-function onRemoteComment({ action, comment, id }) {
-    if (action === 'delete') removeComment(id);
-    else if (action === 'refresh') {
-        reloadComments();
-        loadPhotos(formData.value.recordId);
-    } else addComment(comment);
-}
-
-// 斷線重連、從背景回來：重新抓這一班（合併進畫面，不打斷正在編輯的格子）、留言數、照片
+// 斷線重連、從背景回來：重新抓這一班（合併進畫面，不打斷正在編輯的格子）
 async function resyncShift() {
-    const params = { date: channelCurrent.value.date, shift: channelCurrent.value.shift };
+    const params = { date: $dayjs(formData.value.date).format('YYYY-MM-DD'), shift: formData.value.shift };
     try {
         const data = await $fetch('/api/shift', { params, cache: 'no-store' });
         if (data.recordId !== formData.value.recordId) return;
@@ -2627,7 +1339,6 @@ async function resyncShift() {
     } catch (e) {
         console.error('resync shift error:', e);
     }
-    await Promise.all([reloadComments(), loadPhotos(formData.value.recordId)]);
 }
 
 function subscribeToShift(recordId) {
@@ -2640,17 +1351,14 @@ function subscribeToShift(recordId) {
                 mergeOps(ops);
                 lastUpdatedAt.value = new Date();
             },
-            comment: onRemoteComment,
-            photo: applyRemotePhotos,
         },
         { onResync: resyncShift }
     );
 }
 
-// 「LINE 發送至群組」：這一班、這個分頁的回報＋留言（照貓分組），可以勾選最多 4 張照片一起發。
-// 跟 /regular、/medicine 一樣先跳確認視窗，按「是的」才送。回報、留言、照片都沒有才擋下
-const LINE_PHOTOS_MAX = 4;
-
+// 「LINE 發送至群組」：這一班、這個分頁的回報（一人一段）。
+// 跟 /regular、/medicine 一樣先跳確認視窗，按「發送」才送。沒有人回報就擋下
+// （留言、照片 2026-11-12 拿掉了，不再一起發）
 async function sendTabToLine() {
     const key = tab.value;
     const label = TAB_LABELS[key];
@@ -2661,38 +1369,20 @@ async function sendTabToLine() {
         await saveNow();
 
         const entries = entriesOf(formData.value.reports, key);
-        const preview = await $fetch('/api/shift/line/preview', {
-            params: { shiftId: formData.value.recordId, tab: key },
-            cache: 'no-store',
-        });
-        if (!entries.length && !preview.comments.length && !preview.photos.length) {
-            ElMessage.warning(`這一班還沒有${label}回報或留言`);
+        if (!entries.length) {
+            ElMessage.warning(`這一班還沒有${label}回報`);
             return;
         }
 
         const textSite =
             config.public.deploySite === 'feliformia' ? '' : `[${config.public.deploySite || 'Local'}]\n`;
-        const prefix = textSite;
-
-        const result = await confirmLinePush({
-            label,
-            entries,
-            photos: preview.photos,
-            comments: preview.comments,
-            // 整段實際要發的文字（文字太長會切成好幾則，算還能附幾張照片用）
-            fullText: (text) => prefix + text,
-        });
-        if (!result) return;
+        const text = textSite + buildLineText(label, entries);
+        if (!(await confirmLinePush(text))) return;
 
         try {
             await $fetch('/api/shift/line/push', {
                 method: 'POST',
-                body: {
-                    shiftId: formData.value.recordId,
-                    tab: key,
-                    text: prefix + result.text,
-                    photoIds: result.photoIds,
-                },
+                body: { shiftId: formData.value.recordId, tab: key, text, photoIds: [] },
             });
             // 成功、失敗都用畫面上方的小提示，不用再按 OK
             ElMessage.success('已發送至群組');
@@ -2707,8 +1397,8 @@ async function sendTabToLine() {
     }
 }
 
-// 發到 LINE 的文字：標題、日期班別，再來【回報】（一人一段）與【留言】（照貓分組，順序跟頁面一樣）
-function buildLineText(label, entries, comments) {
+// 發到 LINE 的文字：標題、日期班別，再來【回報】一人一段（「・名字 時間」，內容在下一行縮兩格）
+function buildLineText(label, entries) {
     const d = $dayjs(formData.value.date);
     const lines = [
         `值班記錄｜${label}`,
@@ -2716,182 +1406,27 @@ function buildLineText(label, entries, comments) {
         `日期： ${d.format('YYYY/MM/DD')}（${WEEKDAYS[d.day()]}）`,
         `班別： ${SHIFT_LABELS[formData.value.shift]}`,
         '---------------',
+        '【回報】',
     ];
-    if (entries.length) {
-        // 跟留言同一個格式：「・名字 時間」，內容在下一行縮兩格
-        lines.push('【回報】');
-        for (const e of entries) {
-            lines.push(`・${e.name || '（舊資料）'}${e.at ? ` ${$dayjs(e.at).format('HH:mm')}` : ''}`);
-            lines.push(...e.text.trim().split('\n').map((l) => `  ${l}`));
-        }
-    }
-    if (comments.length) {
-        lines.push(lineCommentsTitle(entries));
-        lineCatGroups(comments).forEach((group, i) => {
-            if (i > 0) lines.push('');
-            lines.push(group.title);
-            for (const c of group.comments) lines.push(lineCommentText(c));
-        });
+    for (const e of entries) {
+        lines.push(`・${e.name || '（舊資料）'}${e.at ? ` ${$dayjs(e.at).format('HH:mm')}` : ''}`);
+        lines.push(...e.text.trim().split('\n').map((l) => `  ${l}`));
     }
     return lines.join('\n');
 }
 
-// 【留言】標題；前面有回報就空一行
-const lineCommentsTitle = (entries) => (entries.length ? '\n【留言】' : '【留言】');
+// 確認視窗：顯示實際要發的文字；超過 LINE 一則 5000 字時提醒會分成幾則。按發送回傳 true、取消回傳 false
+const linePush = ref(null); // { text, chunks, resolve }
 
-// 留言照貓分組，貓的順序跟頁面一樣；每隻貓一段：貓頭＋名字＋分隔線，貓與貓之間空一行
-function lineCatGroups(comments) {
-    const catOrder = formData.value.cats.map((c) => c.cat_id);
-    const rank = (catId) => (catOrder.includes(catId) ? catOrder.indexOf(catId) : 9999);
-    const catIds = [...new Set(comments.map((c) => c.cat_id))].sort((a, b) => rank(a) - rank(b));
-    return catIds.map((catId) => ({
-        catId,
-        title: `🐱 ${catNameOf(catId)} ─────`,
-        comments: comments.filter((c) => c.cat_id === catId),
-    }));
-}
-
-// 一則留言：「・名字 時間 標記」，內容在下一行縮兩格
-function lineCommentText(c) {
-    const tags = [c.for_next ? '★重要' : '', c.photo_count ? `📷${c.photo_count}` : ''].filter(Boolean).join(' ');
-    const lines = [`・${c.author_name || '未命名'} ${$dayjs(c.created_at).format('HH:mm')}${tags ? ` ${tags}` : ''}`];
-    if (c.body) lines.push(...c.body.trim().split('\n').map((l) => `  ${l}`));
-    return lines.join('\n');
-}
-
-// 這段文字發出去會分成幾則、還能附幾張照片（一次推播最多 5 則：文字先佔，剩下的給照片，最多 4 張）
-function lineBudget(fullText) {
-    const chunks = splitText(fullText).length;
-    return { chunks, room: Math.max(0, Math.min(LINE_PHOTOS_MAX, LINE_MESSAGES_MAX - chunks)) };
-}
-
-// 確認視窗（el-dialog，跟「編輯照片」同一種樣子）：上面是要發的文字，留言可以直接在預覽裡點掉（預設全勾，
-// 沒勾的變灰劃線、不會發出去）；下面是這班照片可以勾（預設都不勾）。
-// 文字超過 LINE 一則 5000 字時，提醒會分成幾則，可以再取消幾則留言，或改成直接編輯文字（字數、則數、照片上限即時更新）。
-// 回傳 { text, photoIds }，按取消回傳 null
-const linePush = ref(null); // { label, entries, comments, chosen, editing, text, photos, fullText, selected, resolve }
-
-function confirmLinePush({ label, entries, photos, comments, fullText }) {
-    const ordered = [...photos].sort(
-        (a, b) => Number(b.important) - Number(a.important) || b.created_at.localeCompare(a.created_at)
-    );
+function confirmLinePush(text) {
     return new Promise((resolve) => {
-        linePush.value = {
-            label,
-            entries,
-            comments,
-            chosen: comments.map((c) => c.id), // 預設每則留言都發
-            editing: false, // 改成直接編輯文字後，text 才是要發的內容
-            text: '',
-            photos: ordered,
-            fullText,
-            selected: [], // 預設不附照片，要的自己勾
-            resolve,
-        };
+        linePush.value = { text, chunks: splitText(text).length, resolve };
     });
 }
 
-// 要發的文字：還沒改成直接編輯時，照勾選的留言組出來
-const linePushText = computed(() => {
-    const lp = linePush.value;
-    if (!lp) return '';
-    if (lp.editing) return lp.text;
-    return buildLineText(lp.label, lp.entries, lp.comments.filter((c) => lp.chosen.includes(c.id)));
-});
-
-// 預覽：回報那一段照原樣，留言照貓分組、一則一列可以點掉
-const linePushPreview = computed(() => {
-    const lp = linePush.value;
-    if (!lp) return null;
-    return {
-        head: buildLineText(lp.label, lp.entries, []),
-        commentsTitle: lp.comments.length ? lineCommentsTitle(lp.entries) : '',
-        groups: lineCatGroups(lp.comments).map((g) => ({
-            ...g,
-            comments: g.comments.map((c) => ({ comment: c, text: lineCommentText(c) })),
-        })),
-    };
-});
-
-function toggleLineComment(id) {
-    const lp = linePush.value;
-    lp.chosen = lp.chosen.includes(id) ? lp.chosen.filter((x) => x !== id) : [...lp.chosen, id];
-    // 沒要發的留言，它的照片也拿掉
-    lp.selected = lp.selected.filter((pid) => {
-        const photo = lp.photos.find((p) => p.id === pid);
-        return !photo?.comment_id || lp.chosen.includes(photo.comment_id);
-    });
-}
-
-// 改成直接編輯：從現在勾選組出的文字開始改；回到勾選會丟掉手動改的內容
-function editLinePushText() {
-    const lp = linePush.value;
-    lp.text = linePushText.value;
-    lp.editing = true;
-}
-
-function closeLinePush(result) {
-    const current = linePush.value;
+function closeLinePush(ok) {
+    linePush.value?.resolve(ok);
     linePush.value = null;
-    current?.resolve(result);
-}
-
-const linePushBudget = computed(() => {
-    const lp = linePush.value;
-    if (!lp) return { chunks: 1, room: 0, length: 0 };
-    const full = lp.fullText(linePushText.value, lp.selected.length);
-    return { ...lineBudget(full), length: full.length };
-});
-
-// 文字變長、能附的變少：多勾的從後面拿掉
-watch(
-    () => linePushBudget.value.room,
-    (room) => {
-        if (linePush.value && linePush.value.selected.length > room) {
-            linePush.value.selected = linePush.value.selected.slice(0, room);
-        }
-    }
-);
-
-function toggleLinePhoto(photo) {
-    const lp = linePush.value;
-    if (lp.selected.includes(photo.id)) {
-        lp.selected = lp.selected.filter((id) => id !== photo.id);
-    } else if (lp.selected.length >= linePushBudget.value.room) {
-        ElMessage.warning(`最多只能附 ${linePushBudget.value.room} 張`);
-    } else {
-        lp.selected = [...lp.selected, photo.id];
-    }
-}
-
-const catNameOf = (catId) => formData.value.cats.find((c) => c.cat_id === catId)?.name || '（已刪除的貓）';
-
-// 確認視窗裡的照片分兩區：留言附的（照留言分組，留言照時間）、照片牆的（照時間）
-const linePushGroups = computed(() => {
-    const lp = linePush.value;
-    if (!lp) return { comments: [], wall: [] };
-    const byTime = (a, b) => a.created_at.localeCompare(b.created_at);
-    const comments = lp.comments
-        .filter((comment) => lp.chosen.includes(comment.id))
-        .map((comment) => ({ comment, photos: lp.photos.filter((p) => p.comment_id === comment.id).sort(byTime) }))
-        .filter((g) => g.photos.length)
-        .sort((a, b) => byTime(a.comment, b.comment));
-    return { comments, wall: lp.photos.filter((p) => !p.comment_id).sort(byTime) };
-});
-
-function sendLinePush() {
-    const lp = linePush.value;
-    const text = linePushText.value.trim();
-    if (!text) {
-        ElMessage.warning('內容不能是空的');
-        return;
-    }
-    if (!lp.editing && !lp.entries.length && !lp.chosen.length && !lp.selected.length) {
-        ElMessage.warning('沒有要發送的回報、留言或照片');
-        return;
-    }
-    // 照顯示的順序發
-    closeLinePush({ text, photoIds: lp.photos.filter((p) => lp.selected.includes(p.id)).map((p) => p.id) });
 }
 
 // 頁面離開前警告
@@ -2988,20 +1523,6 @@ watch(
         border-radius: 6px;
         background: #fff;
         text-align: left;
-
-        .mr-head {
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-            padding: 9px 10px;
-            border-bottom: 1px solid #eee;
-
-            .mr-title {
-                font-size: 14px;
-                font-weight: 500;
-                color: #4a4542;
-            }
-        }
 
         // 輸入框在卡片裡不要自己的框線；全域把 textarea 設成至少 100px，這裡交給 autosize
         :deep(.el-textarea__inner) {
@@ -3270,11 +1791,11 @@ watch(
         border-top-color: #d8d4d1;
     }
 
-    // 標題列：貓名是貼頂的分頁標籤（高 34px），💬、🗂️、拍照膠囊、右邊的放風都跟它垂直置中；下面留 10px 再接內容
+    // 標題列：貓名是貼頂的分頁標籤（高 34px），右邊的放風跟它垂直置中；下面留 10px 再接內容
     padding-top: 44px;
 
     // 貓名 14px，行高經實測補償，見 pages/medicine.vue。
-    // 不用 overflow: hidden 裁圓角（觀察分頁的滑桿標籤會超出右邊被切掉），改成標籤自己配合卡片的圓角（6px 減掉 1px 邊框）
+    // 不用 overflow: hidden 裁圓角（飲食如廁分頁的滑桿標籤會超出右邊被切掉），改成標籤自己配合卡片的圓角（6px 減掉 1px 邊框）
     // 點貓名到貓咪檔案（/cats/[id]）：蓋掉全域 a 的底線、紅字、下邊距
     .name {
         height: 34px;
@@ -3287,7 +1808,7 @@ watch(
         border-bottom-right-radius: 8px;
     }
 
-    // 觀察分頁滑桿最右邊的「吃光」會超出滑桿半個字寬，右邊留跟 /regular 一樣的 25px
+    // 飲食如廁分頁滑桿最右邊的「吃光」會超出滑桿半個字寬，右邊留跟 /regular 一樣的 25px
     &.intake-card {
         padding-right: 25px;
     }
@@ -3343,9 +1864,14 @@ watch(
     }
 
     // 收起時只剩標題列那一行（貓名標籤的高度）
+    // 卡片高 = 標籤 34px ＋ 上下外框 2px，標籤才不會凸出下框；只有一行時標籤左下角跟著卡片的圓角
     &.compact {
-        min-height: 34px;
+        min-height: 36px;
         padding-top: 0;
+
+        &:not(:has(.observe-row)) .name {
+            border-bottom-left-radius: 5px;
+        }
     }
 
     .released-badge {
@@ -3671,11 +2197,10 @@ watch(
     }
 }
 
-// ---- 留言 ----
-// 貓名標籤原本是 absolute 定位在卡片左上角；包一層讓 💬 能接在名字後面
+// ---- 觀察管理（拍剩食、拍貓砂、拍留餐）----
 // 觀察管理的膠囊（剛到要拍、離開要拍）：前面一個圖示（沒拍是相機、拍了是勾），
 // 沒拍的淡紅色（還沒做，跟沒勾的框同一個顏色）、拍了藍色。
-// 在貓名那列 🗂️ 後面時跟貓名標籤、💬、🗂️ 垂直置中（標題列 align-items: center）
+// 點了就打勾、再點取消（2026-11-12 起拿掉照片）。在貓名那列時跟貓名標籤垂直置中（標題列 align-items: center）
 .observe-chip {
     display: inline-flex;
     flex-shrink: 0;
@@ -3692,8 +2217,6 @@ watch(
     color: #c0504d;
     font-size: 12px;
     line-height: 20px;
-
-
     white-space: nowrap;
     cursor: pointer;
 
@@ -3702,6 +2225,11 @@ watch(
         background: #eef5f9;
         color: #4a85a8;
     }
+
+    // 超過編輯期限的班：看得到勾了沒，不能改
+    &:disabled {
+        cursor: default;
+    }
 }
 
 // 有寫說明的：名字那列下面一行一個（拍剩食：看罐罐剩多少）
@@ -3709,9 +2237,11 @@ watch(
     width: 100%;
     margin: 0 0 8px 10px;
 
-    // 收起的卡片（上一班放風）沒有上方留白，自己避開貓名那一列
+    // 收起的卡片（上一班放風）沒有上方留白，自己避開貓名那一列（標籤高 34px，下面留 10px，跟一般卡片一樣）；
+    // 下面接卡片的 10px 內距，上下留白才對稱
     .compact > & {
-        margin-top: 40px;
+        margin-top: 44px;
+        margin-bottom: 0;
     }
 
     .observe-chips {
@@ -3719,6 +2249,10 @@ watch(
         flex-wrap: wrap;
         gap: 6px;
         margin-bottom: 4px;
+
+        &:last-child {
+            margin-bottom: 0;
+        }
     }
 
     .observe-note {
@@ -3729,7 +2263,7 @@ watch(
     }
 }
 
-// 標題列：貓名標籤貼左上角，💬、🗂️、拍照膠囊跟它垂直置中
+// 標題列：貓名標籤貼左上角
 .record_item .name-wrap {
     position: absolute;
     top: 0;
@@ -3743,436 +2277,9 @@ watch(
     }
 }
 
-// 不要外框：只有 💬 和數字。全域 button 樣式（width 100%、邊框、底色、padding）每一項都要蓋回來
-// 圖示放大，按鈕跟名字標籤一樣高（26px，不然標籤會被擠下來、上面露出白條）；
-// 手指可點的範圍用 ::after 往上下再撐 8px，實際約 36×42
-.comment-btn {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 3px;
-    width: auto;
-    min-width: 36px;
-    height: 26px;
-    padding: 0 6px;
-    border: none;
-    background: none;
-    color: #999;
-    font-size: 19px;
-    line-height: 26px;
-    cursor: pointer;
-
-    span {
-        font-size: 14px;
-    }
-
-    &::after {
-        content: '';
-        position: absolute;
-        inset: -8px -2px;
-    }
-
-    &.has {
-        color: #6da2c2;
-        font-weight: 500;
-    }
-
-    // 上一班有交代
-    .handover-dot {
-        position: absolute;
-        top: 0;
-        right: 0;
-        width: 8px;
-        height: 8px;
-        border: 1.5px solid #fff;
-        border-radius: 50%;
-        background: #e6a23c;
-    }
-}
-
-:deep(.comment-drawer) {
-    border-radius: 14px 14px 0 0;
-
-    .el-drawer__body {
-        display: flex;
-        flex-direction: column;
-        padding: 0;
-    }
-}
-
-// ---- 照片面板 ----
-// 標題列右邊那一組（選取、全選、退出、留言／照片），整組靠右，✕ 跟在後面
-.cd-actions {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-left: auto;
-}
-
-.cd-head .cd-actions + .cd-close {
-    margin-left: 2px;
-}
-
-// 標題列的文字按鈕（選取、全選、退出）。全域 button 樣式要蓋回來
-.cd-link {
-    width: auto;
-    padding: 0 4px;
-    border: none;
-    background: none;
-    color: #3f7ea3;
-    font-size: 14px;
-    cursor: pointer;
-}
-
-// 選取模式的縮圖：可點選，右上角圓圈打勾
-.pd-selectable {
-    position: relative;
-    padding: 0;
-    border: 2px solid transparent;
-    cursor: pointer;
-
-    img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .pd-check {
-        position: absolute;
-        top: 6px;
-        right: 6px;
-        width: 24px;
-        height: 24px;
-        border: 2px solid #fff;
-        border-radius: 50%;
-        background: rgba(0, 0, 0, 0.25);
-        color: transparent;
-        font-size: 14px;
-        line-height: 20px;
-        text-align: center;
-    }
-
-    &.selected {
-        border-color: #6da2c2;
-
-        .pd-check {
-            background: #6da2c2;
-            color: #fff;
-        }
-    }
-
-    // 別人傳的（不是管理員）不能選
-    &.locked {
-        cursor: default;
-        opacity: 0.4;
-
-        .pd-check {
-            display: none;
-        }
-    }
-}
-
-.pd-danger {
-    background: #b33a39 !important;
-}
-
-.pd-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
-    padding-top: 10px;
-}
-
-.pd-item {
-    position: relative;
-    min-width: 0;
-}
-
-.pd-thumb {
-    display: block;
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: 6px;
-    background: #f0eeec;
-    overflow: hidden;
-}
-
-// 點了看大圖的縮圖（button）：全域 button 樣式要蓋回來
-.pd-open {
-    height: auto;
-    margin: 0;
-    padding: 0;
-    border: none;
-    cursor: pointer;
-
-    img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-}
-
-.pd-uploading {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 12px;
-    color: #8e8783;
-}
-
-// 誰、幾點在左（太長就 …），「留言」標籤固定在最右邊
-.pd-meta {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    margin-top: 3px;
-    font-size: 11px;
-    color: #8e8783;
-
-    .pd-who {
-        flex: 1;
-        min-width: 0;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-}
-
-// 全域 button 有 width: 100%、邊框、底色、padding，這裡每一項都要蓋回來
-// 縮圖右上角的編輯鈕（圓形、半透明黑底白色筆）。全域 button 樣式要蓋回來
-.pd-edit {
-    position: absolute;
-    top: 4px;
-    right: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 26px;
-    height: 26px;
-    margin: 0;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.5);
-    color: #fff;
-    font-size: 14px;
-    cursor: pointer;
-}
-
-// 留言附的照片：誰、幾點那一列最右邊的淡藍小標籤「留言」
-.pd-from-comment {
-    flex-shrink: 0;
-    padding: 0 5px;
-    border-radius: 3px;
-    background: #eef5f9;
-    color: #4a85a8;
-    font-size: 11px;
-    line-height: 16px;
-}
-
-.pd-file {
-    display: none;
-}
-
-.pd-note {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    margin-top: 2px;
-    font-size: 12px;
-    line-height: 1.4;
-    color: #222;
-    overflow-wrap: anywhere;
-}
-
-// 全域 button 有 width: 100%、邊框、底色、padding，這裡蓋回來
-// 縮圖左上角的類型膠囊（實心藍底白字）：類型一排（多了換行），「+N／‹」在下一行、深一點。
-// 右上角留給編輯鈕，膠囊跟它同高（26px）、同一條頂線。膠囊本身不擋點縮圖看大圖，只有 +N／‹ 按得到
-.pd-kinds {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 4px;
-    max-width: calc(100% - 42px);
-    pointer-events: none;
-
-    .pd-kinds-row {
-        display: flex;
-        flex-wrap: wrap;
-        gap: 4px;
-    }
-
-    span,
-    .pd-kinds-toggle {
-        padding: 0 10px;
-        border-radius: 13px;
-        background: #6da2c2;
-        color: #fff;
-        font-size: 13px;
-        line-height: 26px;
-        white-space: nowrap;
-
-        // 剛到要拍的那組（剩食、貓砂）是暖橘
-        &.observe {
-            background: #e08a3c;
-        }
-    }
-
-    // 全域 button 有 width: 100%、邊框，這裡蓋回來
-    .pd-kinds-toggle {
-        width: auto;
-        height: auto;
-        margin: 0;
-        border: none;
-        background: #3f7ea3;
-        font-weight: 500;
-        pointer-events: auto;
-        cursor: pointer;
-    }
-
-    // 展開：蓋住整張縮圖的半透明面板，「‹」在最前面，類型並排、太多可以捲；點面板任何地方收起
-    &.open {
-        top: 0;
-        left: 0;
-        z-index: 3;
-        width: 100%;
-        max-width: none;
-        aspect-ratio: 1;
-        padding: 4px;
-        box-sizing: border-box;
-        border-radius: 6px;
-        background: rgba(0, 0, 0, 0.6);
-        overflow-y: auto;
-        pointer-events: auto;
-        cursor: pointer;
-
-        .pd-kinds-toggle {
-            order: -1;
-        }
-    }
-}
-
-// 上傳前的預覽：每張照片滿版、描述在正下方。全域 button 樣式要蓋回來
-.pp-item {
-    padding: 10px 0 14px;
-
-    & + .pp-item {
-        border-top: 1px solid #f2f0ee;
-    }
-}
-
-.pp-stage {
-    position: relative;
-    border-radius: 8px;
-    background: #f4f3f2;
-    overflow: hidden;
-}
-
-.pp-image {
-    display: block;
-    width: 100%;
-    height: min(38vh, 280px);
-}
-
-.pp-remove {
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 30px;
-    height: 30px;
-    padding: 0;
-    border: none;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-    font-size: 15px;
-    line-height: 30px;
-    cursor: pointer;
-}
-
-// 上傳狀態：蓋在照片上
-.pp-status {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: rgba(0, 0, 0, 0.45);
-    color: #fff;
-    font-size: 15px;
-    pointer-events: none;
-
-    &.queued {
-        background: rgba(255, 255, 255, 0.6);
-        color: #657181;
-    }
-
-    &.done {
-        background: rgba(0, 0, 0, 0.2);
-        font-weight: 500;
-    }
-
-    &.error {
-        background: rgba(179, 58, 57, 0.6);
-        pointer-events: auto;
-    }
-}
-
-// 進行中：實際的進度（百分比跟著上傳的位元組數走）
-.pp-bar {
-    width: 70%;
-    height: 6px;
-    border-radius: 3px;
-    background: rgba(255, 255, 255, 0.35);
-    overflow: hidden;
-
-    i {
-        display: block;
-        height: 100%;
-        border-radius: 3px;
-        background: #fff;
-        transition: width 0.2s linear;
-    }
-}
-
-.pp-status b {
-    margin-left: 4px;
-    font-weight: 500;
-    font-variant-numeric: tabular-nums;
-}
-
-.pp-retry {
-    width: auto;
-    height: 30px;
-    padding: 0 16px;
-    border: none;
-    border-radius: 15px;
-    background: #fff;
-    color: #b33a39;
-    font-size: 14px;
-    cursor: pointer;
-}
-
-// 上傳前選類型：一排膠囊，選中的實心
-.pp-kinds {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    margin: 8px 0;
-
-}
-
 // ---- LINE 發送確認視窗 ----
 .lp-text {
-    max-height: 40vh;
+    max-height: 50vh;
     overflow-y: auto;
     padding: 10px 12px;
     border-radius: 8px;
@@ -4185,89 +2292,6 @@ watch(
     overflow-wrap: anywhere;
 }
 
-// 預覽裡的一則留言：左邊勾選框，沒勾的變灰劃線
-.lp-pick {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    width: 100%;
-    height: auto;
-    margin: 2px 0;
-    padding: 4px 0;
-    border: none;
-    background: none;
-    color: inherit;
-    font: inherit;
-    line-height: inherit;
-    text-align: left;
-    cursor: pointer;
-
-    .lp-check {
-        display: flex;
-        flex-shrink: 0;
-        align-items: center;
-        justify-content: center;
-        width: 18px;
-        height: 18px;
-        margin-top: 2px;
-        border: 1.5px solid #6da2c2;
-        border-radius: 4px;
-        background: #6da2c2;
-        box-sizing: border-box;
-        color: #fff;
-        font-size: 12px;
-        line-height: 1;
-    }
-
-    .lp-pick-text {
-        flex: 1;
-        min-width: 0;
-        white-space: pre-wrap;
-    }
-
-    &.off {
-        .lp-check {
-            background: #fff;
-        }
-
-        .lp-pick-text {
-            color: #b5b0ac;
-            text-decoration: line-through;
-        }
-    }
-}
-
-.lp-cat-gap {
-    margin-top: 1.55em;
-}
-
-.lp-hint {
-    margin-bottom: 6px;
-    font-size: 12px;
-    color: #8e8783;
-    text-align: left;
-}
-
-// 提示裡的文字按鈕
-.lp-link {
-    width: auto;
-    height: auto;
-    margin: 0;
-    padding: 0;
-    border: none;
-    background: none;
-    color: #6da2c2;
-    font: inherit;
-    text-decoration: underline;
-    cursor: pointer;
-}
-
-.lp-back {
-    display: block;
-    margin-top: 6px;
-    font-size: 12px;
-}
-
 .lp-warn {
     margin-bottom: 8px;
     padding: 8px 10px;
@@ -4277,271 +2301,6 @@ watch(
     font-size: 13px;
     line-height: 1.5;
     text-align: left;
-}
-
-.lp-textarea :deep(.el-textarea__inner) {
-    font-size: 14px;
-    line-height: 1.5;
-}
-
-// 「附上照片」：上面一條分隔線跟文字分開，標題＋已選張數，下面一行提示可以點照片勾選
-.lp-section {
-    margin: 18px 0 4px;
-    padding-top: 14px;
-    border-top: 1px solid #e5e2df;
-    text-align: left;
-
-    .lp-section-title {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        font-size: 15px;
-        font-weight: 500;
-        color: #4a4542;
-    }
-
-    .lp-count {
-        padding: 0 8px;
-        border-radius: 10px;
-        background: #eef4f8;
-        color: #3f7ea3;
-        font-size: 12px;
-        line-height: 20px;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .lp-section-hint {
-        margin-top: 2px;
-        font-size: 12px;
-        color: #8e8783;
-    }
-}
-
-.lp-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 10px 6px;
-    text-align: left;
-}
-
-.lp-cell {
-    min-width: 0;
-}
-
-// 照片：勾了是藍框＋右上角 ✓
-.lp-photo {
-    position: relative;
-    display: block;
-    width: 100%;
-    height: auto;
-    aspect-ratio: 1;
-    margin: 0;
-    padding: 0;
-    border: none;
-    border-radius: 6px;
-    overflow: hidden;
-    cursor: pointer;
-
-    img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .lp-mark {
-        position: absolute;
-        top: 4px;
-        right: 4px;
-        width: 22px;
-        height: 22px;
-        border: 2px solid #fff;
-        border-radius: 50%;
-        background: rgba(0, 0, 0, 0.25);
-        box-sizing: border-box;
-        color: #fff;
-        font-size: 13px;
-        line-height: 18px;
-        text-align: center;
-    }
-
-    &.on {
-        outline: 3px solid #6da2c2;
-        outline-offset: -3px;
-
-        .lp-mark {
-            background: #6da2c2;
-        }
-    }
-
-    &:disabled {
-        cursor: default;
-        opacity: 0.5;
-    }
-
-    .lp-important {
-        position: absolute;
-        bottom: 3px;
-        left: 3px;
-        padding: 0 4px;
-        border-radius: 3px;
-        background: #fde9cc;
-        color: #b36b00;
-        font-size: 10px;
-    }
-}
-
-// 兩區的小標題（留言的照片、照片牆）
-.lp-sub {
-    margin: 12px 0 6px;
-    font-size: 13px;
-    color: #4a4542;
-    text-align: left;
-}
-
-// 一則留言一塊：灰底卡片，上面是貓、誰、幾點、說了什麼，下面是照片
-.lp-comment {
-    margin-bottom: 8px;
-    padding: 10px;
-    border-radius: 8px;
-    background: #f7f6f5;
-    text-align: left;
-
-    .lp-comment-head {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        font-size: 12px;
-        color: #8e8783;
-
-        b {
-            font-weight: 500;
-            color: #4a4542;
-        }
-    }
-
-    .lp-comment-body {
-        margin: 2px 0 8px;
-        font-size: 14px;
-        line-height: 1.45;
-        color: #222;
-        white-space: pre-line;
-        overflow-wrap: anywhere;
-    }
-}
-
-.lp-important-tag {
-    padding: 0 5px;
-    border-radius: 3px;
-    background: #fde9cc;
-    color: #b36b00;
-    font-size: 11px;
-}
-
-// 照片牆的每張：哪隻貓・誰傳的、類型標籤、描述
-.lp-wall-who {
-    margin-top: 4px;
-    font-size: 11px;
-    line-height: 1.35;
-    color: #8e8783;
-
-    b {
-        font-weight: 500;
-        color: #4a4542;
-    }
-}
-
-.lp-wall-kinds {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 3px;
-    margin-top: 3px;
-
-    span {
-        padding: 0 5px;
-        border-radius: 3px;
-        background: #eef4f8;
-        color: #3f7ea3;
-        font-size: 10px;
-        line-height: 16px;
-    }
-}
-
-.lp-wall-note {
-    display: -webkit-box;
-    margin-top: 2px;
-    overflow: hidden;
-    font-size: 12px;
-    line-height: 1.35;
-    color: #222;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-}
-
-// 編輯照片視窗裡的「刪除這張照片」：紅字，放在描述下面
-.pe-delete {
-    width: auto;
-    height: auto;
-    margin: 12px 0 0;
-    padding: 0;
-    border: none;
-    background: none;
-    color: #b33a39;
-    font-size: 14px;
-    cursor: pointer;
-
-    &:disabled {
-        opacity: 0.5;
-    }
-}
-
-// 編輯照片視窗裡的小標題（類型、描述）
-// 留言照片的刪除按鈕下面：提醒這是留言裡的照片
-.pe-hint {
-    margin-top: 4px;
-    font-size: 12px;
-    line-height: 1.5;
-    color: #8e8783;
-    text-align: center;
-}
-
-// 留言照片：描述的位置顯示那則留言（唯讀；沒有文字時是空白的框，高度照一行字）
-.pe-comment {
-    min-height: 37px;
-    box-sizing: border-box;
-    max-height: 120px;
-    overflow-y: auto;
-    padding: 8px 10px;
-    border-radius: 6px;
-    background: #f7f6f5;
-    color: #333;
-    font-size: 14px;
-    line-height: 1.5;
-    text-align: left;
-    white-space: pre-line;
-    overflow-wrap: anywhere;
-}
-
-.pe-label {
-    margin: 4px 0 2px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #8e8783;
-    text-align: left;
-}
-
-// 全域把 textarea 設成至少 100px，這裡照 autosize
-.pe-note :deep(.el-textarea__inner) {
-    min-height: 0 !important;
-}
-
-.pp-note {
-    margin-top: 8px;
-
-    :deep(.el-textarea__inner) {
-        min-height: 56px !important;
-        font-size: 15px;
-    }
 }
 
 .pd-confirm {
@@ -4562,175 +2321,13 @@ watch(
 
     .pd-add {
         flex: 1;
-    }
-}
-
-.pd-add {
-    width: 100%;
-    height: 42px;
-    border: none;
-    border-radius: 8px;
-    background: #6da2c2;
-    color: #fff;
-    font-size: 15px;
-    cursor: pointer;
-
-    &:disabled {
-        cursor: default;
-        opacity: 0.5;
-    }
-}
-
-.cd-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 14px 16px 10px;
-    border-bottom: 1px solid #eee;
-
-    .cd-title {
-        font-size: 16px;
-        font-weight: 500;
-    }
-
-    .cd-tab {
-        font-size: 13px;
-        color: #6da2c2;
-    }
-
-    .cd-close {
-        width: auto;
-        margin-left: auto;
-        padding: 0 4px;
+        height: 42px;
         border: none;
-        background: none;
-        color: #999;
-        font-size: 16px;
+        border-radius: 8px;
+        background: #6da2c2;
+        color: #fff;
+        font-size: 15px;
         cursor: pointer;
-    }
-}
-
-// 上傳中的整體進度（標題列下面那條）
-.pu-progress {
-    padding: 10px 16px 12px;
-    border-bottom: 1px solid #eee;
-    background: #fafafa;
-
-    .pu-text {
-        display: flex;
-        justify-content: space-between;
-        margin-bottom: 6px;
-        font-size: 13px;
-        color: #4a4542;
-
-        b {
-            font-weight: 500;
-            color: #6da2c2;
-            font-variant-numeric: tabular-nums;
-        }
-    }
-
-    .pu-bar {
-        height: 6px;
-        border-radius: 3px;
-        background: #eceae8;
-        overflow: hidden;
-
-        i {
-            display: block;
-            height: 100%;
-            border-radius: 3px;
-            background: #6da2c2;
-            transition: width 0.2s linear;
-        }
-    }
-}
-
-// 照片牆：班與班之間的分隔線（跟留言頻道同一個樣子），這一班是藍色
-.pd-divider {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin: 16px 0 10px;
-    font-size: 12px;
-    color: #8e8783;
-
-    &::before,
-    &::after {
-        content: '';
-        flex: 1;
-        border-top: 1px solid #e5e2df;
-    }
-
-    &.current {
-        color: #3f7ea3;
-    }
-}
-
-// 照片庫上方的類型篩選（膠囊在 components/PhotoKindPicker.vue）
-.pd-filter {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 5px;
-    padding: 8px 16px;
-    border-bottom: 1px solid #eee;
-}
-
-// 以前那班分隔線上的 📷：補傳照片到那一班
-.pd-divider-add {
-    width: auto;
-    height: auto;
-    margin: 0 0 0 -4px;
-    padding: 0 2px;
-    border: none;
-    background: none;
-    font-size: 15px;
-    line-height: 1;
-    cursor: pointer;
-}
-
-// 沒照片的班：分隔線下一行淡淡的小字（跟留言頻道一樣）
-.pd-none {
-    margin: -4px 0 6px;
-    font-size: 12px;
-    color: #c4bfbb;
-    text-align: center;
-}
-
-.pd-hint {
-    padding: 8px 0 0;
-    font-size: 12px;
-    color: #aaa;
-    text-align: center;
-}
-
-.cd-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 16px 8px;
-    text-align: left;
-}
-
-.cd-section {
-    margin-top: 10px;
-    font-size: 13px;
-    font-weight: 500;
-    color: #8e8783;
-}
-
-.cd-empty {
-    padding: 14px 0;
-    font-size: 14px;
-    color: #aaa;
-}
-
-.cd-input {
-    padding: 10px 16px 16px;
-    border-top: 1px solid #eee;
-
-    // 全域把 textarea 設成至少 100px，這裡一行起跳
-    :deep(.el-textarea__inner) {
-        min-height: 40px !important;
     }
 }
 </style>
@@ -4744,17 +2341,6 @@ watch(
     .el-dialog__body {
         max-height: 70vh;
         overflow-y: auto;
-    }
-}
-
-/* 編輯照片的視窗：el-dialog 會 teleport 到 body，scoped 選不到 dialog 本身，這塊不加 scoped */
-.photo-edit-dialog {
-    max-width: 400px;
-    border-radius: 12px;
-
-    .el-dialog__body {
-        padding-top: 4px;
-        padding-bottom: 4px;
     }
 }
 </style>

@@ -69,11 +69,8 @@
 
                 <!-- ========== 日常：一班一段，新的在前，往下滑載入更早的 ========== -->
                 <div v-show="view === 'timeline'">
-                    <!-- 別人新留言進來、但那一班不在畫面上：頂端提示，點了捲過去 -->
-                    <button v-if="newComments.length" type="button" class="tl-new-pill" @click="goToNewComment">
-                        <Icon icon="mdi:arrow-up" width="15" />{{ newComments.length }} 則新留言
-                    </button>
-                    <!-- 篩選：左邊日期鈕（點開有快選與自訂日期），右邊篩選鈕（點開列出內容，與留言、照片要看哪些分頁，可複選） -->
+                    <!-- 篩選：左邊日期鈕（點開有快選與自訂日期），右邊篩選鈕（點開列出內容：值班、未完成，可複選）。
+                         留言、照片 2026-11-12 跟著值班表拿掉了 -->
                     <div class="tl-filters">
                         <div class="tl-filter-row">
                             <span class="tl-date-btn" :class="{ on: hasRange, open: dateOpen }">
@@ -113,21 +110,6 @@
                                         @click="toggleShow(k.key)"
                                     >
                                         <Icon :icon="k.icon" width="14" />{{ k.label }}
-                                    </button>
-                                </div>
-                            </div>
-                            <div>
-                                <div class="tl-panel-label">留言與照片</div>
-                                <div class="tl-quick">
-                                    <button
-                                        v-for="key in FILTER_TABS"
-                                        :key="key"
-                                        type="button"
-                                        class="tl-tab-chip"
-                                        :class="[key, { on: tabsOn[key] }]"
-                                        @click="toggleTab(key)"
-                                    >
-                                        {{ TAB_LABELS[key] }}
                                     </button>
                                 </div>
                             </div>
@@ -172,7 +154,7 @@
                     </div>
 
                     <section v-for="entry in visibleEntries" :key="entry.shift_id" class="tl-entry">
-                        <!-- 一班分三區，各有小標：值班、留言、照片。留言、照片沒有也顯示小標（留言 0），篩選關掉的才不出現 -->
+                        <!-- 一班一區：值班（飲食如廁、放風、未完成）。留言、照片 2026-11-12 拿掉了 -->
                         <div class="tl-card">
                             <!-- 卡片頭（淡底色）：日期、班別（早班太陽、晚班月亮）、進行中；點了到值班記錄表的那一班 -->
                             <NuxtLink :to="`/shift?date=${entry.date}&shift=${entry.shift}`" class="tl-shift">
@@ -226,101 +208,6 @@
                                                     row.tag
                                                 }}</span>{{ row.content }}
                                             </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- 留言：照分頁分組（觀察、醫療、備餐、收尾），左邊是分頁標籤 -->
-                                <div v-if="show.comments" class="tl-sec">
-                                    <div class="tl-sec-title">
-                                        <Icon icon="mdi:message-text-outline" width="15" />留言 {{ entry.comments.length }}
-                                    </div>
-                                    <div v-for="group in byTab(entry.comments)" :key="group.tab" class="tl-group">
-                                        <div class="tl-group-head">
-                                            <span class="tl-tab" :class="group.tab">{{ TAB_LABELS[group.tab] }}</span>
-                                        </div>
-                                        <div class="tl-group-body">
-                                            <!-- 跟留言頻道一樣：頭像、名字、時間，下面是有尾巴的氣泡；勾了「重要」的是橘色氣泡 -->
-                                            <div
-                                                v-for="message in group.items"
-                                                :key="message.id"
-                                                class="tl-comment"
-                                                :class="{ important: message.for_next, flash: flashIds.includes(message.id) }"
-                                                :data-comment-id="message.id"
-                                            >
-                                                <span
-                                                    class="tl-author-avatar"
-                                                    :style="message.author_avatar ? null : authorAvatarStyle(message.author_name)"
-                                                >
-                                                    <img v-if="message.author_avatar" :src="avatarUrl(message.author_avatar)" alt="" />
-                                                    <template v-else>{{ authorInitial(message.author_name) }}</template>
-                                                </span>
-                                                <div class="tl-comment-main">
-                                                    <div class="tl-comment-meta">
-                                                        <b>{{ message.author_name || '未命名' }}</b>
-                                                        <span>{{ timeOf(message.created_at, entry.date) }}</span>
-                                                        <span v-if="message.for_next" class="tl-important">重要</span>
-                                                        <span v-if="message.edited_at && !message.body">已編輯</span>
-                                                    </div>
-                                                    <div v-if="message.body" class="tl-line">
-                                                        <div class="tl-bubble">{{ message.body }}</div>
-                                                        <span v-if="message.edited_at" class="tl-edited">已編輯</span>
-                                                    </div>
-                                                    <!-- 附的照片：小縮圖（同留言頻道），點了看大圖 -->
-                                                    <div v-if="message.photos.length" class="tl-comment-photos">
-                                                        <button
-                                                            v-for="(photo, i) in message.photos"
-                                                            :key="photo.id"
-                                                            type="button"
-                                                            class="tl-comment-photo"
-                                                            aria-label="看大圖"
-                                                            @click="openCommentPhotos(entry, message, i)"
-                                                        >
-                                                            <img :src="photo.thumb_url" alt="" loading="lazy" />
-                                                            <span
-                                                                v-for="kind in (photo.kinds || []).filter(isObserveKind)"
-                                                                :key="kind"
-                                                                class="tl-comment-photo-kind"
-                                                                >{{ kind }}</span
-                                                            >
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <!-- 照片：照片庫的（直接上傳的與留言附的），照分頁分組。留言附的右下角一個小泡泡 -->
-                                <div v-if="show.photos" class="tl-sec">
-                                    <div class="tl-sec-title">
-                                        <Icon icon="mdi:image-outline" width="15" />照片 {{ entry.photos.length }}
-                                    </div>
-                                    <div v-for="group in byTab(entry.photos)" :key="group.tab" class="tl-group">
-                                        <div class="tl-group-head">
-                                            <span class="tl-tab" :class="group.tab">{{ TAB_LABELS[group.tab] }}</span>
-                                        </div>
-                                        <div class="tl-group-body tl-photos">
-                                            <button
-                                                v-for="(photo, i) in group.items"
-                                                :key="photo.id"
-                                                type="button"
-                                                class="tl-thumb"
-                                                @click="openPhotos(entry, group.items, i)"
-                                            >
-                                                <img :src="photo.thumb_url" alt="" loading="lazy" />
-                                                <span
-                                                    v-if="photo.kinds?.length"
-                                                    class="tl-thumb-kind"
-                                                    :class="{ observe: isObserveKind(photo.kinds[0]) }"
-                                                >
-                                                    {{ photo.kinds[0]
-                                                    }}<template v-if="photo.kinds.length > 1"> +{{ photo.kinds.length - 1 }}</template>
-                                                </span>
-                                                <span v-if="photo.comment_id" class="tl-thumb-comment" aria-label="留言附的照片">
-                                                    <Icon icon="mdi:message-text" width="11" />
-                                                </span>
-                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -553,7 +440,7 @@
 </template>
 
 <script setup>
-// 新版貓咪檔案（cat_profiles）：頁首＋日常（每一班分三區：值班〔飲食如廁、放風、未完成〕、四個分頁的留言、照片）＋小檔案。
+// 新版貓咪檔案（cat_profiles）：頁首＋日常（每一班：值班〔飲食如廁、放風、未完成〕）＋小檔案。
 // 志工都能看；管理員的「編輯」在這頁打開編輯視窗（components/CatProfileDialog.vue），醫療紀錄也是管理員新增、編輯
 import { Fragment, h } from 'vue';
 import { Icon } from '@iconify/vue';
@@ -570,7 +457,6 @@ import {
     isHealthFilterEmpty,
     matchHealthFilter,
 } from '~/composables/healthKinds';
-import { isObserveKind } from '~/composables/photoKinds';
 
 // 網址：/cats/<id> 是日常，/cats/<id>/profile 是小檔案。
 // key 只看貓：兩個分頁之間切換是同一個頁面，不重新載入
@@ -596,8 +482,6 @@ const TAB_LABELS = { arrive: '飲食如廁', care: '醫療照護', meal: '備餐
 const SHOW_KINDS = [
     { key: 'duty', label: '值班', icon: 'mdi:clipboard-check-outline' },
     { key: 'unfinished', label: '未完成', icon: 'mdi:alert-circle-outline' },
-    { key: 'comments', label: '留言', icon: 'mdi:message-text-outline' },
-    { key: 'photos', label: '照片', icon: 'mdi:image-outline' },
 ];
 const WEEKDAYS = '日一二三四五六';
 
@@ -648,11 +532,6 @@ const dateLabel = (date) => {
     const d = $dayjs(date);
     const year = d.year() === $dayjs().year() ? '' : `${d.year()}/`;
     return `${year}${d.format('MM/DD')}（${WEEKDAYS[d.day()]}）`;
-};
-// 當班的只寫時間；之後才補的連日期一起寫
-const timeOf = (at, date) => {
-    const t = $dayjs(at);
-    return t.format(t.format('YYYY-MM-DD') === date ? 'HH:mm' : 'MM/DD HH:mm');
 };
 
 const editing = ref(false);
@@ -716,7 +595,7 @@ function clearRange() {
     dateOpen.value = false;
 }
 const isFuture = (d) => $dayjs(d).isAfter($dayjs(), 'day');
-const show = reactive({ duty: true, unfinished: true, comments: true, photos: true });
+const show = reactive({ duty: true, unfinished: true });
 const sentinel = ref(null);
 let generation = 0; // 改了日期就重來，舊的請求回來不要用
 
@@ -726,17 +605,8 @@ function toggleShow(key) {
     show[key] = !show[key];
 }
 
-// 留言與照片要看哪些分頁（觀察、醫療、備餐）：一樣至少留一個。
-// 收尾不列：只有指定給貓的收尾事項才有留言，很少；有的話一直顯示、不受這裡影響
-const FILTER_TABS = ['arrive', 'care', 'meal'];
-const tabsOn = reactive(Object.fromEntries(FILTER_TABS.map((tab) => [tab, true])));
-const tabShown = (tab) => tabsOn[tab] ?? true;
-function toggleTab(key) {
-    if (tabsOn[key] && Object.values(tabsOn).filter(Boolean).length === 1) return;
-    tabsOn[key] = !tabsOn[key];
-}
 // 有任何一項關掉：篩選鈕變淡藍底、多一個小點
-const filtered = computed(() => [...Object.values(show), ...Object.values(tabsOn)].some((on) => !on));
+const filtered = computed(() => Object.values(show).some((on) => !on));
 
 // 日期與篩選的面板一次只開一個
 const filterOpen = ref(false);
@@ -746,18 +616,10 @@ function togglePanel(which) {
     filterOpen.value = which === 'filter' && opening;
 }
 
-// 照篩選留下要顯示的
-// 一串留言或照片照分頁分組，分頁照值班表的順序；沒有的分頁不出現
-const byTab = (list) =>
-    Object.keys(TAB_LABELS)
-        .map((tab) => ({ tab, items: list.filter((x) => x.tab === tab) }))
-        .filter((g) => g.items.length);
-
-// 分頁篩選只管留言與照片；值班區照內容的「值班」「未完成」兩個開關
+// 照篩選留下要顯示的：「值班」管飲食如廁與放風，「未完成」管未完成那塊，兩個分開開關
 const visibleEntries = computed(() =>
     entries.value
         .map((e) => {
-            // 值班區：「值班」管飲食如廁與放風，「未完成」管未完成那塊，兩個分開開關
             const duty = show.duty && e.in_shift;
             const unfinished = show.unfinished && e.in_shift ? e.unfinished : [];
             return {
@@ -765,13 +627,10 @@ const visibleEntries = computed(() =>
                 showIntake: duty,
                 unfinished,
                 showDuty: duty || unfinished.length > 0,
-                comments: show.comments ? e.comments.filter((m) => tabShown(m.tab)) : [],
-                photos: show.photos ? e.photos.filter((p) => tabShown(p.tab)) : [],
             };
         })
-        // 留言、照片的小標沒有也顯示（留言 0），所以班都留著；只有整張卡什麼區都沒有才拿掉
-        // （例：只開值班，但這班值班表上沒有這隻貓）
-        .filter((e) => e.showDuty || show.comments || show.photos)
+        // 整張卡什麼都沒有就拿掉（例：只開未完成，這班都做完了）
+        .filter((e) => e.showDuty)
 );
 
 async function loadMore() {
@@ -831,7 +690,6 @@ function restoreFilters() {
         for (const k of keys) target[k] = values[k] !== false;
     };
     restore(show, saved.show);
-    restore(tabsOn, saved.tabs);
 }
 
 function saveFilters() {
@@ -839,13 +697,12 @@ function saveFilters() {
     storage.set(FILTER_KEY, {
         ...(quick ? { quick } : { from: range.from, to: range.to }),
         show: { ...show },
-        tabs: { ...tabsOn },
     });
 }
 
 // 要在下面的 watch 之前還原，才不會多重載一次
 restoreFilters();
-watch([() => range.from, () => range.to, show, tabsOn], saveFilters, { deep: true });
+watch([() => range.from, () => range.to, show], saveFilters, { deep: true });
 
 function resetTimeline() {
     generation += 1;
@@ -859,7 +716,7 @@ function resetTimeline() {
 
 watch(() => [range.from, range.to], resetTimeline);
 // 篩選變了，畫面可能變短
-watch([show, tabsOn], () => nextTick(fillViewport));
+watch(show, () => nextTick(fillViewport), { deep: true });
 watch(view, () => nextTick(fillViewport));
 
 let observer = null;
@@ -872,12 +729,12 @@ watch(sentinel, (el) => {
 onBeforeUnmount(() => observer?.disconnect());
 
 // ---- 即時（Broadcast，見 composables/useBroadcast.js）----
-// 留言：這隻貓四個分頁的留言頻道 comments:<貓>:<分頁>（留言板新增、編輯、刪除都會發）。
-// 值班與照片：進行中的班（今天的，最多兩班）的頻道 shift:<id>（打勾、登記、放風、照片庫）；
-// 過去的班改到這隻貓的格子或照片，值班表會發到這隻貓的頻道 cat:<貓>。
-// 收到就把那一天重抓（只抓一天，留言、照片、未完成一起對上）；斷線重連、從背景回來超過 30 秒就從頭重載
+// 進行中的班（今天的，最多兩班）的頻道 shift:<id>（打勾、登記、放風）；
+// 過去的班改到這隻貓的格子，值班表會發到這隻貓的頻道 cat:<貓>。
+// 收到就把那一天重抓（只抓一天，值班、未完成一起對上）；斷線重連、從背景回來超過 30 秒就從頭重載。
+// （留言頻道 comments:<貓>:<分頁> 2026-11-12 跟著值班表的留言拿掉了）
 const { join: joinBroadcast } = useBroadcast();
-const commentChannels = [];
+let catChannel = null;
 const shiftChannels = new Map(); // shift_id → 頻道
 
 const entryOrder = (e) => `${e.date}-${e.shift === 'night' ? 1 : 0}`;
@@ -900,21 +757,6 @@ async function refreshDate(date) {
 }
 
 const dateOfShift = (shiftId) => entries.value.find((e) => e.shift_id === shiftId)?.date;
-const hasComment = (id) => entries.value.some((e) => e.comments.some((m) => m.id === id));
-
-async function onRemoteMessage({ action, message, id }) {
-    if (action === 'delete') {
-        const entry = entries.value.find((e) => e.comments.some((m) => m.id === id));
-        if (entry) await refreshDate(entry.date);
-        newComments.value = newComments.value.filter((x) => x !== id);
-        return;
-    }
-    if (!message?.date) return;
-    const isNew = !hasComment(message.id);
-    await refreshDate(message.date);
-    if (isNew && hasComment(message.id)) announceComment(message.id);
-}
-
 // cat:<貓> 的通知：那一班的日子重抓；改了放風的話，下一班（畫面上排在它前面那班）的「前班放風」也變了，一起重抓
 function onCatChanged({ shiftId, next }) {
     const i = entries.value.findIndex((e) => e.shift_id === shiftId);
@@ -924,13 +766,8 @@ function onCatChanged({ shiftId, next }) {
     dates.forEach(refreshDate);
 }
 
-function joinCommentChannels() {
-    for (const tab of Object.keys(TAB_LABELS)) {
-        commentChannels.push(
-            joinBroadcast(`comments:${catId.value}:${tab}`, { message: onRemoteMessage }, { onResync: resetTimeline })
-        );
-    }
-    commentChannels.push(joinBroadcast(`cat:${catId.value}`, { changed: onCatChanged }));
+function joinCatChannel() {
+    catChannel = joinBroadcast(`cat:${catId.value}`, { changed: onCatChanged }, { onResync: resetTimeline });
 }
 
 // 進行中的班一變（例如晚班開了），頻道跟著換
@@ -948,64 +785,17 @@ watch(ongoingIds, (ids) => {
             const date = dateOfShift(id);
             if (date) refreshDate(date);
         };
-        shiftChannels.set(id, joinBroadcast(`shift:${id}`, { ops: refresh, comment: refresh, photo: refresh }));
+        shiftChannels.set(id, joinBroadcast(`shift:${id}`, { ops: refresh }));
     }
 });
 
 onBeforeUnmount(() => {
-    commentChannels.forEach((c) => c.leave());
+    catChannel?.leave();
     shiftChannels.forEach((c) => c.leave());
 });
 
-// ---- 新留言提示：看得到就閃一下；不在畫面上就累積到頂端的「↑ N 則新留言」 ----
-const flashIds = ref([]);
-const newComments = ref([]); // 還沒看到的新留言 id，新的在前
-
-const commentEl = (id) => document.querySelector(`[data-comment-id="${id}"]`);
-function inView(el) {
-    const rect = el.getBoundingClientRect();
-    return rect.top >= 0 && rect.bottom <= window.innerHeight;
-}
-
-function flash(id) {
-    flashIds.value = [...flashIds.value, id];
-    setTimeout(() => (flashIds.value = flashIds.value.filter((x) => x !== id)), 2000);
-}
-
-async function announceComment(id) {
-    await nextTick();
-    const el = commentEl(id);
-    if (!el) return; // 被篩選藏起來了
-    if (view.value === 'timeline' && inView(el)) flash(id);
-    else newComments.value = [id, ...newComments.value.filter((x) => x !== id)];
-}
-
-function goToNewComment() {
-    const id = newComments.value[0];
-    newComments.value = [];
-    const el = id && commentEl(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    // 等捲得差不多再閃，到的時候才看得到
-    setTimeout(() => flash(id), 400);
-}
-
-// 自己捲到了：從提示裡拿掉、閃一下
-function checkSeen() {
-    if (!newComments.value.length) return;
-    const seen = newComments.value.filter((id) => {
-        const el = commentEl(id);
-        return !el || inView(el);
-    });
-    if (!seen.length) return;
-    newComments.value = newComments.value.filter((id) => !seen.includes(id));
-    seen.forEach((id) => commentEl(id) && flash(id));
-}
-onMounted(() => window.addEventListener('scroll', checkSeen, { passive: true }));
-onBeforeUnmount(() => window.removeEventListener('scroll', checkSeen));
-
-// ---- 看大圖：照片區的照片，或一則留言附的照片，左右換 ----
-// viewer：{ entry, photos, comment（從留言打開的才有：那則留言；照片區的留言照片帶在 photo.comment） }
+// ---- 看大圖：頭像、醫療紀錄的照片，左右換 ----
+// viewer：{ avatar: true } 或 { health: 那筆醫療紀錄 }
 const viewer = ref(null);
 const viewerIndex = ref(null);
 const viewerPhotos = computed(() => {
@@ -1025,15 +815,7 @@ const viewerPhotos = computed(() => {
             textKind: 'note',
         }));
     }
-    const { entry, photos, comment } = viewer.value;
-    return photos.map((p) => ({
-        url: p.url,
-        label: `${$dayjs(entry.date).format('MM/DD')} ${SHIFT_LABELS[entry.shift]}・${TAB_LABELS[p.tab]}`,
-        meta: `${p.author_name || '未命名'} ${timeOf(p.created_at, entry.date)}${(comment || p.comment)?.edited_at ? '（已編輯）' : ''}`,
-        kinds: p.kinds,
-        text: p.comment_id ? (comment || p.comment)?.body : p.note,
-        textKind: p.comment_id ? 'comment' : 'note',
-    }));
+    return [];
 });
 
 function openAvatar() {
@@ -1043,17 +825,6 @@ function openAvatar() {
 
 function openHealthPhotos(record, index) {
     viewer.value = { health: record };
-    viewerIndex.value = index;
-}
-
-// 照片區：同一個分頁的照片左右換。留言附的顯示那則留言
-function openPhotos(entry, photos, index) {
-    viewer.value = { entry, photos };
-    viewerIndex.value = index;
-}
-
-function openCommentPhotos(entry, message, index) {
-    viewer.value = { entry, photos: message.photos, comment: message };
     viewerIndex.value = index;
 }
 
@@ -1231,7 +1002,7 @@ onMounted(async () => {
     if (!cat.value) return;
     loadMore();
     loadHealth();
-    joinCommentChannels();
+    joinCatChannel();
 });
 </script>
 
@@ -1494,35 +1265,6 @@ button.cp-avatar {
     font-size: 12px;
 }
 
-// 分頁按鈕：開著的用分頁自己的顏色（跟下面的分頁標籤一樣），關掉的白底灰字
-.tl-tab-chip {
-    width: auto;
-    padding: 4px 12px;
-    border: 1px solid #e4e0dd;
-    border-radius: 999px;
-    background: #fff;
-    color: #b0a9a4;
-    font-size: 13px;
-
-    &.on.arrive {
-        border-color: #b9d0ea;
-        background: #e8f0f8;
-        color: #3f6a99;
-    }
-
-    &.on.care {
-        border-color: #d3c4ea;
-        background: #efe9f7;
-        color: #6a4a99;
-    }
-
-    &.on.meal {
-        border-color: #bcdcc5;
-        background: #e9f3ec;
-        color: #4f8a5e;
-    }
-}
-
 .tl-kind {
     display: inline-flex;
     align-items: center;
@@ -1677,7 +1419,7 @@ button.cp-avatar {
     padding: 12px;
 }
 
-// 一區一個小標（值班、留言、照片），區與區之間一條細線
+// 一區一個小標（值班），區與區之間一條細線
 .tl-sec + .tl-sec {
     padding-top: 12px;
     border-top: 1px solid #f0edea;
@@ -1828,269 +1570,6 @@ button.cp-avatar {
     &.meal {
         background: #e9f3ec;
         color: #4f8a5e;
-    }
-}
-
-// 留言：跟留言頻道（components/ShiftCommentDrawer.vue）同一個樣子
-.tl-comment {
-    display: flex;
-    align-items: flex-start;
-    gap: 8px;
-    margin: 0 -6px;
-    padding: 2px 6px;
-    border-radius: 8px;
-    transition: background-color 0.4s;
-
-    // 別人剛留的：底色閃一下（同留言頻道跳到留言）
-    &.flash {
-        background: #e6f0f6;
-    }
-}
-
-// 頂端的「↑ N 則新留言」：固定在畫面上方中間（header 不是固定的，捲下去就不在了，所以貼著畫面頂）
-.tl-new-pill {
-    position: fixed;
-    top: 12px;
-    left: 50%;
-    z-index: 20;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    width: auto;
-    padding: 6px 14px;
-    border: none;
-    border-radius: 999px;
-    background: #657181;
-    color: #fff;
-    font-size: 13px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-    transform: translateX(-50%);
-}
-
-.tl-author-avatar {
-    display: flex;
-    flex-shrink: 0;
-    align-items: center;
-    justify-content: center;
-    width: 30px;
-    height: 30px;
-    border-radius: 50%;
-    overflow: hidden;
-    font-size: 13px;
-    font-weight: 500;
-
-    img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-}
-
-.tl-comment-main {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-width: 0;
-    flex: 1;
-}
-
-.tl-comment-meta {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 6px;
-    margin: 0 2px 4px;
-    color: #999;
-    font-size: 12px;
-
-    b {
-        color: #4a4542;
-        font-size: 13px;
-        font-weight: 500;
-    }
-}
-
-.tl-important {
-    padding: 0 5px;
-    border-radius: 3px;
-    background: #fdf0dc;
-    color: #b36b00;
-}
-
-// 氣泡＋旁邊的「已編輯」（貼著氣泡底部）
-.tl-line {
-    display: flex;
-    align-items: flex-end;
-    gap: 6px;
-    max-width: 100%;
-    padding-left: 6px; // 留給尾巴
-}
-
-.tl-edited {
-    flex-shrink: 0;
-    color: #aaa;
-    font-size: 11px;
-}
-
-.tl-bubble {
-    --bubble-bg: #f0eeec;
-    position: relative;
-    min-width: 0;
-    max-width: 100%;
-    padding: 7px 12px;
-    border-radius: 16px;
-    background: var(--bubble-bg);
-    color: #222;
-    font-size: 14px;
-    line-height: 1.45;
-    white-space: pre-line;
-    overflow-wrap: anywhere;
-
-    .important & {
-        --bubble-bg: #fde9cc;
-    }
-
-    // 尾巴：氣泡左上方往左上翹的小勾（同留言頻道）
-    &::before {
-        content: '';
-        position: absolute;
-        top: 3px;
-        left: -8px;
-        width: 14px;
-        height: 16px;
-        background: var(--bubble-bg);
-        -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 16'%3E%3Cpath d='M0 0C2.5 3.2 7.5 4.8 14 4.8V16C6.5 16 1.8 9.5 0 0Z'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
-        mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 14 16'%3E%3Cpath d='M0 0C2.5 3.2 7.5 4.8 14 4.8V16C6.5 16 1.8 9.5 0 0Z'/%3E%3C/svg%3E") no-repeat center / 100% 100%;
-    }
-}
-
-// 留言附的照片：小縮圖排在氣泡下面（同留言頻道，小一點）
-.tl-comment-photos {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 4px;
-    margin-top: 6px;
-    padding-left: 6px; // 跟氣泡對齊
-
-    .tl-comment-meta + & {
-        margin-top: 0;
-    }
-}
-
-.tl-comment-photo {
-    position: relative;
-    width: 48px;
-    height: 48px;
-    padding: 0;
-    border: none;
-    border-radius: 6px;
-    background: #f2f0ee;
-    overflow: hidden;
-
-    img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-}
-
-// 剩食、貓砂、留餐：左上角暖橘膠囊（同留言頻道）
-.tl-comment-photo-kind {
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    padding: 0 4px;
-    border-radius: 8px;
-    background: #e08a3c;
-    color: #fff;
-    font-size: 11px;
-    line-height: 16px;
-}
-
-// 留言、照片照分頁分組：每組上面一行分頁色標籤，後面拉一條細線；內容全寬
-.tl-group {
-    & + .tl-group {
-        margin-top: 4px;
-    }
-}
-
-.tl-group-head {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-bottom: 8px;
-
-    &::after {
-        content: '';
-        flex: 1;
-        border-top: 1px solid #ece8e5;
-    }
-}
-
-.tl-group-body {
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.tl-photos {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 4px;
-}
-
-// 留言附的照片：右下角一個小泡泡
-.tl-thumb-comment {
-    position: absolute;
-    right: 4px;
-    bottom: 4px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: rgba(0, 0, 0, 0.55);
-    color: #fff;
-}
-
-.tl-thumb {
-    position: relative;
-    width: 100%;
-    padding: 0;
-    border: none;
-    border-radius: 6px;
-    overflow: hidden;
-    background: #f0eeec;
-    aspect-ratio: 1;
-
-    img {
-        display: block;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-}
-
-// 縮圖左上角：第一個類型（跟照片庫同色：觀察要拍的暖橘、其他藍）
-.tl-thumb-kind {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    max-width: calc(100% - 8px);
-    padding: 0 6px;
-    border-radius: 999px;
-    background: #6da2c2;
-    color: #fff;
-    font-size: 11px;
-    line-height: 18px;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-
-    &.observe {
-        background: #e08a3c;
     }
 }
 

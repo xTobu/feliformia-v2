@@ -1,11 +1,9 @@
 import { supabase } from '~/server/utils/supabase'
 import { requireUser } from '~/server/utils/auth'
 import { todayInTaipei, unfinishedOf } from '~/server/utils/shift'
-import { COMMENT_COLUMNS, toMessages } from '~/server/utils/comments'
-import { LIBRARY_COLUMNS, withComment, withSignedUrls } from '~/server/utils/photos'
 
 const DAYS = 7 // 一次往前 7 天（14 班）
-// 收尾分頁 2026-11-12 拿掉了：以前的班的收尾項目、收尾分頁的留言與照片都不回傳
+// 收尾分頁 2026-11-12 拿掉了：以前的班的收尾項目不回傳
 const TABS = ['arrive', 'care', 'meal']
 
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '')
@@ -35,9 +33,8 @@ function catUnfinished(catId, snapshot, tasks, photos) {
 // 每一段：
 //   值班：這隻貓的飲食如廁（intake）、前班放風（prev_released）、這班放風（released）、未完成（unfinished）；
 //         值班表那班沒有這隻貓就沒有這些（in_shift: false）。還在進行的班標 ongoing，未完成照樣列
-//   comments：飲食如廁、醫療照護、備餐三個分頁的留言（帶 tab，附的照片在 photos 裡）
-//   photos：照片庫的，直接上傳的與留言附的都有（留言附的帶 comment：那則留言）
-// 這隻貓沒出現、也沒留言照片的班不回傳。cursor：這一批最舊的那天，下次從它往前；hasMore：更早還有沒有班
+// 值班表的留言、照片 2026-11-12 拿掉了，這裡也不再回傳（資料都還在 shift_comments、shift_photos）。
+// 這隻貓沒出現的班不回傳。cursor：這一批最舊的那天，下次從它往前；hasMore：更早還有沒有班
 export default defineEventHandler(async (event) => {
     await requireUser(event)
 
@@ -74,20 +71,14 @@ export default defineEventHandler(async (event) => {
 
     let olderQuery = supabase.from('shifts').select('id').lt('date', start).limit(1)
     if (from) olderQuery = olderQuery.gte('date', from)
-    const [comments, photos, older] = await Promise.all([
+    // 以前的班（還沒有觀察打勾）的觀察管理，看那一班飲食如廁、備餐分頁拍了沒
+    const [photos, older] = await Promise.all([
         ids.length
-            ? supabase.from('shift_comments').select(COMMENT_COLUMNS).eq('cat_id', cat).in('shift_id', ids).in('tab', TABS).order('created_at')
-            : { data: [] },
-        ids.length
-            ? supabase.from('shift_photos').select(LIBRARY_COLUMNS).eq('cat_id', cat).in('shift_id', ids).in('tab', TABS).order('created_at')
+            ? supabase.from('shift_photos').select('shift_id, cat_id, tab, kinds').eq('cat_id', cat).in('shift_id', ids).in('tab', ['arrive', 'meal'])
             : { data: [] },
         olderQuery,
     ])
     const allPhotos = check(photos)
-    const [messages, signed] = await Promise.all([
-        toMessages(check(comments)),
-        withSignedUrls(allPhotos.map(withComment)),
-    ])
     const hasMore = check(older).length > 0
 
     // 還在進行的班：今天的晚班；今天的早班在晚班還沒開之前
@@ -106,15 +97,13 @@ export default defineEventHandler(async (event) => {
                 intake: snapshot?.intake ?? null,
                 prev_released: !!snapshot?.prev_released,
                 released: !!snapshot?.released,
-                // 觀察管理拍了沒要看這一班的照片（直接上傳的與留言附的都算）。進行中的班也列（還剩哪些事）
+                // 觀察管理：勾了沒（以前的班看照片拍了沒）。進行中的班也列（還剩哪些事）
                 unfinished: snapshot
                     ? catUnfinished(cat, snapshot, r.tasks, allPhotos.filter((p) => p.shift_id === r.id))
                     : [],
-                comments: messages.filter((m) => m.shift_id === r.id),
-                photos: signed.filter((p) => p.shift_id === r.id),
             }
         })
-        .filter((e) => e.in_shift || e.comments.length || e.photos.length)
+        .filter((e) => e.in_shift)
 
     return { entries, cursor: hasMore ? start : null, hasMore }
 })

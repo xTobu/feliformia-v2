@@ -310,11 +310,12 @@ function hasRecord(cat) {
     const intakeChanged =
         !!cat.intake &&
         Object.keys(defaults).some((key) => (cat.intake[key] ?? null) !== defaults[key])
-    return !!cat.released || anyDone(cat.medical) || anyDone(cat.diet) || intakeChanged
+    const anyTicked = Object.values(cat.observe_done || {}).some(Boolean)
+    return !!cat.released || anyDone(cat.medical) || anyDone(cat.diet) || anyTicked || intakeChanged
 }
 
 // 當天的班載入時，用後台現在的設定重建一份，再把這班已經填的資料併回去：
-// 觀察照舊；放風有人按過就照舊，沒人按過就照「放風」飲食項目重算；上一班放風照上一班現在的記錄；醫療、收尾、隨餐藥照 id 保留「完成」；其他飲食一律用最新的；
+// 觀察照舊、觀察的打勾照舊；放風有人按過就照舊，沒人按過就照「放風」飲食項目重算；上一班放風照上一班現在的記錄；醫療、收尾、隨餐藥照 id 保留「完成」；其他飲食一律用最新的；
 // 這班建立後才領養或刪除的貓，有填過資料就留著。
 // 不寫回資料庫（放風、上一班放風例外，見 persistReleased）：之後打勾時，前端只送那一格，shift_apply 會補上缺的層
 export async function syncWithSettings(record) {
@@ -332,6 +333,8 @@ export async function syncWithSettings(record) {
                   ...(old.released_set ? { released_set: true } : {}),
                   medical: mergeItems(cat.medical, old.medical),
                   diet: mergeItems(cat.diet, old.diet),
+                  // 觀察管理的打勾（拍剩食、拍貓砂、拍留餐）：{ 項目 id: { done_by, done_at } }
+                  ...(old.observe_done ? { observe_done: old.observe_done } : {}),
               }
             : cat
     }
@@ -390,7 +393,8 @@ const PLACE_ORDER = ['貓屋', '客廳', '房間', '倉庫', '隔離區']
 const placeRank = (location) => (!location ? 0 : 1 + PLACE_ORDER.indexOf(location))
 const bySort = (a, b) => (a.sort ?? MAX) - (b.sort ?? MAX)
 
-// photos：那一班觀察、備餐分頁的照片（cat_id、tab、kinds），用來判斷觀察管理的項目拍了沒
+// photos：那一班飲食如廁、備餐分頁的照片（cat_id、tab、kinds）。觀察管理的項目 2026-11-12 起改成打勾
+// （cat.observe_done），以前的班沒有勾，照舊看照片拍了沒
 export function unfinishedOf(record, photos = []) {
     const cats = Object.values(record?.cats || {}).sort(bySort)
     const tasks = Object.entries(record?.tasks || {}).map(([key, t]) => ({ key, ...t }))
@@ -418,8 +422,8 @@ export function unfinishedOf(record, photos = []) {
     const isMealMed = (i) => i.category === MEAL_MED
     const dietRow = (i) => ({ content: i.content })
 
-    // 觀察管理：貓自己的，加上全員／位置的（併進適用的每一隻貓）；那個分頁沒拍對應的照片就算沒完成。
-    // 剛到的列在觀察分頁，離開的（拍留餐）列在備餐分頁
+    // 觀察管理：貓自己的，加上全員／位置的（併進適用的每一隻貓，每隻各勾各的）；沒勾、也沒拍對應的照片就算沒完成。
+    // 剛到的列在飲食如廁分頁，離開的（拍留餐）列在備餐分頁
     const observeTasks = tasks.filter((t) => t.kind === 'observe')
     const observeUndone = (tab) => cats.flatMap((cat) => {
         const catPhotos = photos.filter((p) => p.cat_id === cat.cat_id && (p.tab ?? 'arrive') === tab)
@@ -427,7 +431,7 @@ export function unfinishedOf(record, photos = []) {
             ...Object.values(cat.observe || {}).sort(bySort),
             ...observeTasks.filter((t) => !t.location || t.location === cat.location).sort(bySort),
         ]
-            .filter((i) => observeTabOf(i.category) === tab && !isObserveDone(i.category, catPhotos))
+            .filter((i) => observeTabOf(i.category) === tab && !isObserveDone(i.category, catPhotos, cat.observe_done?.[i.id]))
             // 有說明就寫說明、類別當小標籤；沒說明就直接寫類別（「拍貓砂」）
             .map((i) => ({
                 key: `observe:${cat.cat_id}:${i.id}`,

@@ -55,7 +55,7 @@ const props = defineProps({
     unfinished: { type: Array, default: () => [] },
     // 回報卡片上方的小標題（前班區塊用「前班○○回報」）；空字串就不顯示
     entriesLabel: { type: String, default: '' },
-    // 標題列人數後面的字：「2 人」或「2 人回報」
+    // 標題列人數後面的字：「2 人」或「2 人回報」；空字串就不顯示人數
     countLabel: { type: String, default: '人' },
     // 收起狀態存在這台裝置的 key；沒給就不記
     storageKey: { type: String, default: '' },
@@ -81,7 +81,7 @@ function toggle() {
 
 const countText = computed(() =>
     [
-        props.entries.length ? `${props.entries.length} ${props.countLabel}` : '',
+        props.entries.length && props.countLabel ? `${props.entries.length} ${props.countLabel}` : '',
         props.unfinished.length ? `${props.unfinished.length} 項未完成` : '',
     ]
         .filter(Boolean)

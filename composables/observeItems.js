@@ -1,8 +1,10 @@
 // 觀察管理（observe_items）：值班時要拍照的事，分兩組：
 //   剛到（觀察分頁）：拍剩食、拍貓砂——看上一班留下的飯吃了多少、貓砂
 //   離開（備餐分頁）：拍留餐——這一班留給下一班的飯
-// 不用打勾：這一班、這隻貓、那個分頁的照片有對應類型就算完成（直接上傳的、留言附的都算）。
-// 前端（卡片、分頁數字）與 server（前班未完成）都用這份判斷
+// 2026-11-12 起改成打勾（值班表的留言、照片拿掉了）：勾的記在那一班、那隻貓的 cats[id].observe_done[項目 id]
+// = { done_by, done_at }，全員／位置的項目也是每隻貓各勾各的。
+// 以前的班沒有勾：那一班、這隻貓、那個分頁的照片有對應類型就算完成（直接上傳的、留言附的都算）。
+// 前端（卡片）與 server（前班未完成、貓咪檔案的未完成）都用這份判斷
 export const OBSERVE_GROUPS = [
     { label: '剛到', tab: 'arrive', categories: ['拍剩食', '拍貓砂'] },
     { label: '離開', tab: 'meal', categories: ['拍留餐'] },
@@ -19,8 +21,9 @@ export const observeTabOf = (category) => OBSERVE_GROUPS.find((g) => g.categorie
 // 以前的「其他」類別（已經拿掉，舊的班快照裡可能還有）：膠囊上寫說明、有任何一張照片就算
 export const isObserveOther = (category) => category.endsWith('其他');
 
-// photos：這一班、這隻貓、那個分頁的照片（照片庫裡的，含留言附的）
-export function isObserveDone(category, photos) {
+// photos：那一班、這隻貓、那個分頁的照片（照片庫裡的，含留言附的）；ticked：observe_done 裡這一項
+export function isObserveDone(category, photos = [], ticked = null) {
+    if (ticked) return true;
     const kind = OBSERVE_PHOTO_KIND[category];
     return kind ? photos.some((p) => (p.kinds || []).includes(kind)) : photos.length > 0;
 }
