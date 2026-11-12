@@ -1405,9 +1405,18 @@ async function sendTabToLine() {
             return;
         }
 
+        // 值班志工（排班投票）查不到也照樣發，第二行就只寫班別
+        const { names = [] } = await $fetch('/api/shift/roster', {
+            params: { date: $dayjs(formData.value.date).format('YYYY-MM-DD'), shift: formData.value.shift },
+            cache: 'no-store',
+        }).catch((e) => {
+            console.error('load roster error:', e);
+            return {};
+        });
+
         const textSite =
             config.public.deploySite === 'feliformia' ? '' : `[${config.public.deploySite || 'Local'}]\n`;
-        const text = textSite + buildLineText(label, report);
+        const text = textSite + buildLineText(label, report, names);
         if (!(await confirmLinePush(text))) return;
 
         try {
@@ -1428,16 +1437,19 @@ async function sendTabToLine() {
     }
 }
 
-// 發到 LINE 的文字：標題、日期班別，再來【回報】（共編的那一段，不寫名字與時間）
-function buildLineText(label, report) {
+// LINE 訊息的分隔線：短線（5 個字），比長虛線省字數，分區還是看得出來
+const LINE_DIVIDER = '─────';
+
+// 發到 LINE 的文字：標題、日期、「班別・值班志工」，再來回報內容（共編的那一段，不寫名字與時間，也不寫【回報】）
+function buildLineText(label, report, names = []) {
     const d = $dayjs(formData.value.date);
+    const shiftLabel = SHIFT_LABELS[formData.value.shift];
     const lines = [
         `值班記錄｜${label}`,
-        '---------------',
-        `日期： ${d.format('YYYY/MM/DD')}（${WEEKDAYS[d.day()]}）`,
-        `班別： ${SHIFT_LABELS[formData.value.shift]}`,
-        '---------------',
-        '【回報】',
+        LINE_DIVIDER,
+        `${d.format('YYYY/MM/DD')}（${WEEKDAYS[d.day()]}）`,
+        names.length ? `${shiftLabel}・${names.join('、')}` : shiftLabel,
+        LINE_DIVIDER,
         report,
     ];
     return lines.join('\n');
