@@ -1405,7 +1405,7 @@ async function sendTabToLine() {
             return;
         }
 
-        // 值班志工（排班投票）查不到也照樣發，第二行就只寫班別
+        // 值班志工（排班投票）查不到也照樣發，那一行寫「無人值班」
         const { names = [] } = await $fetch('/api/shift/roster', {
             params: { date: $dayjs(formData.value.date).format('YYYY-MM-DD'), shift: formData.value.shift },
             cache: 'no-store',
@@ -1448,7 +1448,8 @@ function buildLineText(label, report, names = []) {
         `值班記錄｜${label}`,
         LINE_DIVIDER,
         `${d.format('YYYY/MM/DD')}（${WEEKDAYS[d.day()]}）`,
-        names.length ? `${shiftLabel}・${names.join('、')}` : shiftLabel,
+        // 沒人排班寫「無人值班」（跟行事曆同一個說法）
+        `${shiftLabel}・${names.length ? names.join('、') : '無人值班'}`,
         LINE_DIVIDER,
         report,
     ];
