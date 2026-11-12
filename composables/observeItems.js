@@ -4,7 +4,7 @@
 // 2026-11-12 起改成打勾（值班表的留言、照片拿掉了）：勾的記在那一班、那隻貓的 cats[id].observe_done[項目 id]
 // = { done_by, done_at }，全員／位置的項目也是每隻貓各勾各的。
 // 以前的班沒有勾：那一班、這隻貓、那個分頁的照片有對應類型就算完成（直接上傳的、留言附的都算）。
-// 前端（卡片）與 server（前班未完成、貓咪檔案的未完成）都用這份判斷
+// 前端（膠囊）與 server（/api/shift/previous 的前班未完成）都用這份判斷
 export const OBSERVE_GROUPS = [
     { label: '剛到', tab: 'arrive', categories: ['拍剩食', '拍貓砂'] },
     { label: '離開', tab: 'meal', categories: ['拍留餐'] },

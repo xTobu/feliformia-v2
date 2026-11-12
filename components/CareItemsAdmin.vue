@@ -64,22 +64,21 @@
                             ghost-class="ghost"
                             @end="onDragEnd"
                         >
-                            <!-- 一項一列：標題、下面一行小字（類別、說明、期間），右邊編輯／刪除小圖示（班別看所在的分區）。
+                            <!-- 一項一列，一行一種資訊：類別 → 標題（事項、內容）→ 原因或說明 → 期間；右邊附圖、編輯／刪除小圖示（班別看所在的分區）。
                                  （vuedraggable 的 #item 只能有一個根元素，註解放在外面） -->
                             <template #item="{ element: item }">
                                 <div class="cat-item" :class="{ ended: periodStatus(item) === 'ended' }">
                                     <span class="drag-handle item-handle">⋮⋮</span>
                                     <div class="cat-item-body">
+                                        <div v-if="itemCategory(item)" class="item-category">{{ itemCategory(item) }}</div>
                                         <div class="item-main">{{ itemTitle(item) }}</div>
-                                        <div
-                                            v-if="itemMeta(item) || ['ended', 'upcoming'].includes(periodStatus(item))"
-                                            class="item-meta"
-                                        >
-                                            <span v-if="periodStatus(item) === 'ended'" class="status ended">已結束</span>
+                                        <div v-if="itemNote(item)" class="item-note">{{ itemNote(item) }}</div>
+                                        <div v-if="item.start_date || item.end_date" class="item-period">
+                                            <Icon icon="mdi:calendar-blank-outline" width="13" />{{ periodLabel(item) }}
+                                            <span v-if="periodStatus(item) === 'ended'" class="status ended">· 已結束</span>
                                             <span v-else-if="periodStatus(item) === 'upcoming'" class="status upcoming"
-                                                >未開始</span
+                                                >· 未開始</span
                                             >
-                                            {{ itemMeta(item) }}
                                         </div>
                                     </div>
                                     <!-- 附圖：放在文字右邊、編輯左邊，只顯示第一張（多張角落標 +N），點了看大圖 -->
@@ -501,21 +500,18 @@ function sectionsOf(list) {
 
 const groupCount = (group) => group.sections.reduce((sum, section) => sum + section.items.length, 0);
 
-// 每一項的標題與下面那行小字
+// 每一項的標題
 function itemTitle(item) {
     if (props.titleIsCategory) return item.category;
     return item[props.mainField.key] || item.category || '';
 }
 
-function itemMeta(item) {
-    const parts = [
-        !props.titleIsCategory && props.categories.length > 1 ? item.category : '',
-        props.titleIsCategory ? item[props.mainField.key] : '',
-        props.reasonField ? item[props.reasonField.key] : '',
-        item.start_date || item.end_date ? periodLabel(item) : '',
-    ];
-    return parts.filter(Boolean).join(' · ');
-}
+// 標題上面的類別（只有一個類別、或標題就是類別的不另外寫）
+const itemCategory = (item) => (!props.titleIsCategory && props.categories.length > 1 ? item.category : '');
+
+// 標題下面一行：醫療的原因；觀察管理（標題是類別）的說明
+const itemNote = (item) =>
+    props.titleIsCategory ? item[props.mainField.key] || '' : props.reasonField ? item[props.reasonField.key] || '' : '';
 
 // 拖拉結束後，照畫面順序（貓 → 項目）重編 sort_order，只更新有變的
 async function onDragEnd() {
@@ -883,14 +879,36 @@ onMounted(loadAll);
         white-space: pre-line;
     }
 
-    // 補充：類別、說明或原因、班別、期間（#767676 在白底剛好 4.5:1，手機上看得清）
-    .item-meta {
+    // 類別：標題上面一行藍色小字（同值班表的類別色）
+    .item-category {
+        font-size: 12px;
+        color: #6da2c2;
+        line-height: 1.4;
+    }
+
+    // 原因、說明：標題下面一行灰字（#767676 在白底剛好 4.5:1，手機上看得清）
+    .item-note {
+        font-size: 13px;
+        color: #767676;
+        line-height: 1.4;
+        white-space: pre-line;
+    }
+
+    // 期間：自己一行，前面日曆圖示；已結束、未開始接在後面
+    .item-period {
         font-size: 12px;
         color: #767676;
         line-height: 1.4;
 
+        svg {
+            margin-right: 3px;
+            vertical-align: -2px;
+        }
+
+        // 「· 已結束」整段一起換行，不從字中間斷開
         .status {
-            margin-right: 4px;
+            margin-left: 2px;
+            white-space: nowrap;
 
             &.ended {
                 color: #aaa;

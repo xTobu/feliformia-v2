@@ -93,12 +93,9 @@
                                 }}
                             </button>
                         </div>
-                        <!-- 名字那列下面：上一班放風、要拍兩個以上的膠囊；有寫說明的一行小字 -->
-                        <div
-                            v-if="(!observeInline(cat) && observeRowsOf(cat).length) || observeRowsOf(cat).some((r) => r.note)"
-                            class="observe-row"
-                        >
-                            <div v-if="!observeInline(cat)" class="observe-chips">
+                        <!-- 名字那列下面：上一班放風、要拍兩個以上的膠囊（後台寫的說明不顯示） -->
+                        <div v-if="!observeInline(cat) && observeRowsOf(cat).length" class="observe-row">
+                            <div class="observe-chips">
                                 <button
                                     v-for="row in observeRowsOf(cat)"
                                     :key="row.key"
@@ -111,9 +108,6 @@
                                 >
                                     <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
                                 </button>
-                            </div>
-                            <div v-for="row in observeRowsOf(cat).filter((r) => r.note)" :key="`${row.key}-note`" class="observe-note">
-                                {{ row.label }}：{{ row.note }}
                             </div>
                         </div>
                         <div v-if="showIntake(cat)" class="detail intake">
@@ -236,7 +230,7 @@
                                 <div
                                     v-for="(item, index) in entry.items"
                                     :key="item.id"
-                                    class="d_flex item-row"
+                                    class="d_flex item-row med-row"
                                     :class="{ divided: index > 0 }"
                                 >
                                     <p class="f_blue">{{ item.category || '事項' }}</p>
@@ -258,8 +252,7 @@
                                                     stampDone(item);
                                                     saveCatItem(entry.cat, 'medical', item);
                                                 "
-                                                ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
-                                            >
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -281,7 +274,7 @@
                                 <div
                                     v-for="(item, index) in group.items"
                                     :key="item.key"
-                                    class="d_flex item-row"
+                                    class="d_flex item-row med-row"
                                     :class="{ divided: index > 0 }"
                                 >
                                     <p class="f_blue">{{ item.category || '事項' }}</p>
@@ -300,8 +293,7 @@
                                                     stampDone(item);
                                                     saveTask(item);
                                                 "
-                                                ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
-                                            >
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -351,15 +343,9 @@
                         >
                             {{ entry.cat.released ? '✓ 放風' : '放風' }}
                         </button>
-                        <!-- 名字那列下面：離開要拍兩個以上的膠囊；有寫說明的一行小字 -->
-                        <div
-                            v-if="
-                                observeRowsOf(entry.cat, 'meal').length > 1 ||
-                                observeRowsOf(entry.cat, 'meal').some((r) => r.note)
-                            "
-                            class="observe-row"
-                        >
-                            <div v-if="observeRowsOf(entry.cat, 'meal').length > 1" class="observe-chips">
+                        <!-- 名字那列下面：離開要拍兩個以上的膠囊（後台寫的說明不顯示） -->
+                        <div v-if="observeRowsOf(entry.cat, 'meal').length > 1" class="observe-row">
+                            <div class="observe-chips">
                                 <button
                                     v-for="row in observeRowsOf(entry.cat, 'meal')"
                                     :key="row.key"
@@ -372,13 +358,6 @@
                                 >
                                     <Icon :icon="row.done ? 'mdi:check' : 'mdi:camera-outline'" width="13" />{{ row.label }}
                                 </button>
-                            </div>
-                            <div
-                                v-for="row in observeRowsOf(entry.cat, 'meal').filter((r) => r.note)"
-                                :key="`${row.key}-note`"
-                                class="observe-note"
-                            >
-                                {{ row.label }}：{{ row.note }}
                             </div>
                         </div>
                         <div class="detail">
@@ -398,7 +377,7 @@
                                         <div v-for="(it, n) in row.items" :key="it.key" class="diet-item">
                                             <div class="diet-line">
                                                 <span v-if="row.items.length > 1" class="diet-no">{{ n + 1 }}.</span>
-                                                <span class="diet-text">{{ it.item.content }}</span>
+                                                <span class="diet-text">{{ it.text }}</span>
                                                 <span v-if="it.source" class="source-chip">{{
                                                     it.source
                                                 }}</span>
@@ -411,10 +390,9 @@
                                                         stampDone(it.item);
                                                         saveDietItem(entry.cat, it);
                                                     "
-                                                    ><span v-if="it.item.done && it.item.done_by" class="done-by">{{ doneLabel(it.item) }}</span></el-checkbox
-                                                >
+                                                />
                                             </div>
-                                            <CareItemPhotos :paths="itemPhotos('diet', it.item)" :label="it.item.content" />
+                                            <CareItemPhotos :paths="itemPhotos(it.kind, it.item)" :label="it.text" />
                                             <div v-if="it.item.end_date" class="diet-note">
                                                 至 {{ $dayjs(it.item.end_date).format('MM/DD') }}
                                             </div>
@@ -778,14 +756,10 @@ function toggleReleased(cat) {
     ]);
 }
 
-// 打勾時記下誰（登入者的暱稱）、幾點；取消就清掉
+// 打勾時記下誰（登入者的暱稱）、幾點；取消就清掉。2026-11-12 起畫面不顯示，只存著
 function stampDone(item) {
     item.done_by = item.done ? nickname.value || '未命名' : null;
     item.done_at = item.done ? new Date().toISOString() : null;
-}
-
-function doneLabel(item) {
-    return `${item.done_by} ${$dayjs(item.done_at).format('HH:mm')}`;
 }
 
 function saveCatItem(cat, list, item) {
@@ -914,8 +888,8 @@ function groupTasks(filter) {
     return [...map.values()].sort((a, b) => placeRank(a.location) - placeRank(b.location));
 }
 
-// 醫療分頁：醫療管理的所有項目（醫療、餵藥、外用），每一項左邊標類別。
-// 拌進飯裡的藥是飲食管理的「隨餐藥」，在備餐分頁
+// 醫療照護分頁：醫療管理的所有項目（醫療、餵藥、外用、隨餐藥），每一項左邊標類別。
+// 隨餐藥（拌進飯裡）備餐分頁也列，兩邊是同一個物件，勾哪邊都一樣
 const medicalSections = computed(() =>
     [{ tab: 'care', match: () => true, empty: '這一班沒有醫療事項' }].map(({ tab, match, empty }) => ({
         tab,
@@ -928,6 +902,8 @@ const medicalSections = computed(() =>
 );
 
 // 備餐：全員的飲食併進每隻貓，位置的併進那個位置的貓。只有隨餐藥要打勾，其他只看。
+// 隨餐藥 2026-11-12 起是醫療管理的項目（kind: medical，跟醫療照護分頁共用同一個物件，打勾連動）；
+// 以前的班快照裡還有飲食的隨餐藥（kind: diet），照舊列
 // 同類別排在一起：乾乾 → 罐罐 → 隨餐藥 → 補充品 → 放風 → 其他；同類別裡自己的在前、全員／位置的在後（sort 是穩定的）
 const DIET_ORDER = { 乾乾: 0, 罐罐: 1, 隨餐藥: 2, 補充品: 3, 放風: 4, 其他: 5 };
 const isMealMed = (item) => item.category === '隨餐藥';
@@ -948,7 +924,7 @@ const appliesTo = (task, cat) => !task.location || task.location === cat.locatio
 
 // 觀察管理：值班時要做的事。剛到的（拍剩食、拍貓砂）在飲食如廁分頁，離開的（拍留餐）在備餐分頁。
 // 貓自己的＋全員／位置的；打勾記在這隻貓的 observe_done（以前的班沒有勾，看那一班的照片）
-// label 是膠囊上的字（拍剩食→剩食，前面有相機圖示；以前的「其他」是說明），note 是另外寫在下面的說明
+// label 是膠囊上的字（拍剩食→剩食，前面有相機圖示；以前的「其他」是說明）。後台寫的說明值班表不顯示
 const observeRows = computed(() => {
     const tasks = formData.value.tasks.filter((t) => t.kind === 'observe');
     const map = new Map();
@@ -968,7 +944,6 @@ const observeRows = computed(() => {
                     category: item.category,
                     id: item.id,
                     label: other ? item.content || '其他' : item.category.replace(/^拍/, ''),
-                    note: other ? '' : item.content,
                     done: isObserveDone(item.category, photosOf(cat.cat_id, tab), cat.observe_done[item.id]),
                 };
             })
@@ -1011,24 +986,34 @@ function toggleObserve(cat, row, checked) {
     ]);
 }
 
-// 每一項包成 { key, source, item }：item 是原本的物件（隨餐藥打勾要改到它），source 是全員／位置的來源標籤
+// 每一項包成 { key, kind, source, item, text }：item 是原本的物件（隨餐藥打勾要改到它），kind 是 diet／medical，
+// source 是全員／位置的來源標籤，text 是顯示的字（飲食的內容、醫療的事項）
 const leaveCats = computed(() => {
     const dietTasks = formData.value.tasks.filter((t) => t.kind === 'diet');
+    const medTasks = formData.value.tasks.filter((t) => t.kind === 'medical' && isMealMed(t));
+    const wrap = (kind, item, source, key) => ({
+        key,
+        kind,
+        source,
+        item,
+        category: item.category,
+        text: kind === 'medical' ? item.treatment : item.content,
+    });
     return formData.value.cats.map((cat) => {
         const items = [
-            ...cat.diet.map((d) => ({ key: `diet-${d.id}`, source: null, item: d, category: d.category })),
-            ...dietTasks
-                .filter((t) => appliesTo(t, cat))
-                .map((t) => ({ key: t.key, source: placeName(t.location), item: t, category: t.category })),
+            ...cat.diet.map((d) => wrap('diet', d, null, `diet-${d.id}`)),
+            ...cat.medical.filter(isMealMed).map((m) => wrap('medical', m, null, `medical-${m.id}`)),
+            ...dietTasks.filter((t) => appliesTo(t, cat)).map((t) => wrap('diet', t, placeName(t.location), t.key)),
+            ...medTasks.filter((t) => appliesTo(t, cat)).map((t) => wrap('medical', t, placeName(t.location), t.key)),
         ].sort(byDietOrder);
         return { cat, dietRows: groupByCategory(items) };
     });
 });
 
-// 隨餐藥打勾：貓自己的存在那隻貓底下；全員／位置的是整班一份
-function saveDietItem(cat, { source, item }) {
+// 隨餐藥打勾：貓自己的存在那隻貓底下（醫療的在 medical、以前的在 diet）；全員／位置的是整班一份
+function saveDietItem(cat, { kind, source, item }) {
     if (source) saveTask(item);
-    else saveCatItem(cat, 'diet', item);
+    else saveCatItem(cat, kind, item);
 }
 
 // 全員／位置的飲食只併進適用的貓；那個位置現在沒有貓的就不顯示，也不算未完成
@@ -1814,7 +1799,7 @@ watch(
     }
 
 
-    // 打勾的事項（醫療、隨餐藥、收尾）：沒勾的框淡紅色（還沒做）；勾了框下面淺灰小字寫誰、幾點（補充資訊，不加 ✓）
+    // 打勾的事項（醫療、隨餐藥）：沒勾的框淡紅色（還沒做）。誰、幾點勾的只存不顯示（2026-11-12 起）
     // 框在卡片最右邊，字比框寬：跟框靠右對齊，才不會超出卡片
     .task-check {
         display: inline-flex;
@@ -1900,8 +1885,9 @@ watch(
         color: #222;
     }
 
-    // 備餐的類別有三個字（隨餐藥、補充品），左邊的類別欄從 40px 放寬，不然會斷行
-    .detail > .d_flex.diet-row {
+    // 備餐、醫療照護的類別有三個字（隨餐藥、補充品），左邊的類別欄從 40px 放寬，不然會斷行
+    .detail > .d_flex.diet-row,
+    .detail > .d_flex.med-row {
         > p {
             width: 50px;
             white-space: nowrap;
@@ -2232,7 +2218,7 @@ watch(
     }
 }
 
-// 有寫說明的：名字那列下面一行一個（拍剩食：看罐罐剩多少）
+// 名字那列放不下的膠囊，改放下一行
 .observe-row {
     width: 100%;
     margin: 0 0 8px 10px;
@@ -2248,18 +2234,6 @@ watch(
         display: flex;
         flex-wrap: wrap;
         gap: 6px;
-        margin-bottom: 4px;
-
-        &:last-child {
-            margin-bottom: 0;
-        }
-    }
-
-    .observe-note {
-        font-size: 12px;
-        color: #8e8783;
-        line-height: 1.4;
-        text-align: left;
     }
 }
 

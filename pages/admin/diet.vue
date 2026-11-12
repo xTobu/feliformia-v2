@@ -3,7 +3,7 @@
         <CareItemsAdmin
             title="飲食管理"
             table="diet_items"
-            :categories="['乾乾', '罐罐', '隨餐藥', '補充品', '放風', '其他']"
+            :categories="['乾乾', '罐罐', '補充品', '放風', '其他']"
             :main-field="{
                 key: 'content',
                 label: '內容',
@@ -17,8 +17,8 @@
 </template>
 
 <script setup>
-// 飲食管理（diet_items）。值班記錄表的備餐分頁只看、不打勾；
-// 只有「隨餐藥」（拌進飯裡、放碗就可以走）要打勾。
+// 飲食管理（diet_items）。值班記錄表的備餐分頁只看、不打勾。
+// 「隨餐藥」2026-11-12 搬到醫療管理（備餐分頁照樣列，跟醫療照護分頁連動打勾）。
 // 「放風」是長期固定放風：期間內新開的班，備餐的放風按鈕預設打開（志工可以手動關掉）
 definePageMeta({
     middleware: 'admin',

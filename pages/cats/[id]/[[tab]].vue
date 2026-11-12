@@ -69,12 +69,12 @@
 
                 <!-- ========== 日常：一班一段，新的在前，往下滑載入更早的 ========== -->
                 <div v-show="view === 'timeline'">
-                    <!-- 篩選：左邊日期鈕（點開有快選與自訂日期），右邊篩選鈕（點開列出內容：值班、未完成，可複選）。
-                         留言、照片 2026-11-12 跟著值班表拿掉了 -->
+                    <!-- 日期鈕（點開有快選與自訂日期）。
+                         原本右邊還有篩選鈕（值班、未完成、留言、照片），2026-11-12 留言照片與未完成都拿掉了，只剩值班，篩選也拿掉 -->
                     <div class="tl-filters">
                         <div class="tl-filter-row">
                             <span class="tl-date-btn" :class="{ on: hasRange, open: dateOpen }">
-                                <button type="button" class="tl-date-main" @click="togglePanel('date')">
+                                <button type="button" class="tl-date-main" @click="dateOpen = !dateOpen">
                                     <Icon v-if="!hasRange" icon="mdi:calendar-blank-outline" width="14" />{{ rangeLabel }}
                                 </button>
                                 <button
@@ -87,32 +87,6 @@
                                     <Icon icon="mdi:close" width="13" />
                                 </button>
                             </span>
-                            <button
-                                type="button"
-                                class="tl-filter-btn"
-                                :class="{ on: filtered, open: filterOpen }"
-                                @click="togglePanel('filter')"
-                            >
-                                <Icon icon="mdi:tune-variant" width="14" />篩選
-                                <span v-if="filtered" class="tl-filter-dot" aria-label="有篩選"></span>
-                            </button>
-                        </div>
-                        <div v-if="filterOpen" class="tl-date-panel">
-                            <div>
-                                <div class="tl-panel-label">內容</div>
-                                <div class="tl-quick">
-                                    <button
-                                        v-for="k in SHOW_KINDS"
-                                        :key="k.key"
-                                        type="button"
-                                        class="tl-kind"
-                                        :class="{ on: show[k.key] }"
-                                        @click="toggleShow(k.key)"
-                                    >
-                                        <Icon :icon="k.icon" width="14" />{{ k.label }}
-                                    </button>
-                                </div>
-                            </div>
                         </div>
                         <div v-if="dateOpen" class="tl-date-panel">
                             <div class="tl-quick">
@@ -169,45 +143,30 @@
                                 <Icon icon="mdi:chevron-right" width="18" class="tl-shift-go" />
                             </NuxtLink>
                             <div class="tl-card-body">
-                                <!-- 值班：觀察分頁的飲食如廁（上一班放風的不用登記）、這班放風、各分頁的未完成 -->
-                                <div v-if="entry.showDuty" class="tl-sec">
+                                <!-- 值班：飲食如廁分頁的飲食如廁（上一班放風的不用登記）、這班放風。
+                                     未完成 2026-11-12 拿掉了（貓咪檔案不用看） -->
+                                <div class="tl-sec">
                                     <div class="tl-sec-title">
                                         <Icon icon="mdi:clipboard-check-outline" width="15" />值班
                                         <!-- 前班放風：剛到時貓已經在外面（上一班離開時放的）；本班放風：這班走的時候放出來。
-                                             開著「值班」就兩個都顯示：有放綠底、沒放灰色虛線框 -->
-                                        <template v-if="entry.showIntake">
-                                            <span class="tl-flag" :class="{ off: !entry.prev_released }">前班放風</span>
-                                            <span class="tl-flag" :class="{ off: !entry.released }">本班放風</span>
-                                        </template>
+                                             兩個都顯示：有放綠底、沒放灰色虛線框 -->
+                                        <span class="tl-flag" :class="{ off: !entry.prev_released }">前班放風</span>
+                                        <span class="tl-flag" :class="{ off: !entry.released }">本班放風</span>
                                     </div>
                                     <!-- 飲食如廁：有人登記就顯示四格（乾乾、罐罐、尿、便，位置固定）；前班放風時值班表的登記區
                                          預設收起，但還是可以填。沒登記的：前班放風寫「不用登記」，其他寫「沒有登記」 -->
-                                    <template v-if="entry.showIntake">
-                                        <div v-if="!isIntakeTouched(entry.intake)" class="tl-intake tl-muted">
-                                            {{ entry.prev_released ? '不用登記' : '沒有登記' }}
-                                        </div>
-                                        <div v-else class="tl-cells">
-                                            <div
-                                                v-for="c in intakeCells(entry.intake)"
-                                                :key="c.label"
-                                                class="tl-cell"
-                                                :class="{ warn: c.warn }"
-                                            >
-                                                <span class="tl-cell-label">{{ c.label }}</span>
-                                                <span class="tl-cell-value" :class="{ empty: c.empty }">{{ c.value }}</span>
-                                            </div>
-                                        </div>
-                                    </template>
-                                    <div v-if="entry.unfinished.length" class="tl-missing">
-                                        <div class="tl-missing-title">未完成 {{ entry.unfinished.length }} 項</div>
-                                        <div v-for="row in entry.unfinished" :key="row.key" class="tl-missing-row">
-                                            <span class="tl-tab" :class="row.tab">{{ TAB_LABELS[row.tab] }}</span>
-                                            <span>
-                                                <!-- 類別跟分頁同名（醫療）就不重複寫 -->
-                                                <span v-if="row.tag && row.tag !== TAB_LABELS[row.tab]" class="tl-missing-tag">{{
-                                                    row.tag
-                                                }}</span>{{ row.content }}
-                                            </span>
+                                    <div v-if="!isIntakeTouched(entry.intake)" class="tl-intake tl-muted">
+                                        {{ entry.prev_released ? '不用登記' : '沒有登記' }}
+                                    </div>
+                                    <div v-else class="tl-cells">
+                                        <div
+                                            v-for="c in intakeCells(entry.intake)"
+                                            :key="c.label"
+                                            class="tl-cell"
+                                            :class="{ warn: c.warn }"
+                                        >
+                                            <span class="tl-cell-label">{{ c.label }}</span>
+                                            <span class="tl-cell-value" :class="{ empty: c.empty }">{{ c.value }}</span>
                                         </div>
                                     </div>
                                 </div>
@@ -477,12 +436,6 @@ const VIEW_TABS = [
     { key: 'profile', label: '小檔案' },
 ];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
-// 收尾分頁 2026-11-12 拿掉了（時間軸 API 也不再回傳收尾的資料）
-const TAB_LABELS = { arrive: '飲食如廁', care: '醫療照護', meal: '備餐' };
-const SHOW_KINDS = [
-    { key: 'duty', label: '值班', icon: 'mdi:clipboard-check-outline' },
-    { key: 'unfinished', label: '未完成', icon: 'mdi:alert-circle-outline' },
-];
 const WEEKDAYS = '日一二三四五六';
 
 const catId = computed(() => Number(route.params.id));
@@ -595,43 +548,12 @@ function clearRange() {
     dateOpen.value = false;
 }
 const isFuture = (d) => $dayjs(d).isAfter($dayjs(), 'day');
-const show = reactive({ duty: true, unfinished: true });
 const sentinel = ref(null);
 let generation = 0; // 改了日期就重來，舊的請求回來不要用
 
-// 至少留一種
-function toggleShow(key) {
-    if (show[key] && Object.values(show).filter(Boolean).length === 1) return;
-    show[key] = !show[key];
-}
 
-// 有任何一項關掉：篩選鈕變淡藍底、多一個小點
-const filtered = computed(() => Object.values(show).some((on) => !on));
-
-// 日期與篩選的面板一次只開一個
-const filterOpen = ref(false);
-function togglePanel(which) {
-    const opening = which === 'date' ? !dateOpen.value : !filterOpen.value;
-    dateOpen.value = which === 'date' && opening;
-    filterOpen.value = which === 'filter' && opening;
-}
-
-// 照篩選留下要顯示的：「值班」管飲食如廁與放風，「未完成」管未完成那塊，兩個分開開關
-const visibleEntries = computed(() =>
-    entries.value
-        .map((e) => {
-            const duty = show.duty && e.in_shift;
-            const unfinished = show.unfinished && e.in_shift ? e.unfinished : [];
-            return {
-                ...e,
-                showIntake: duty,
-                unfinished,
-                showDuty: duty || unfinished.length > 0,
-            };
-        })
-        // 整張卡什麼都沒有就拿掉（例：只開未完成，這班都做完了）
-        .filter((e) => e.showDuty)
-);
+// 時間軸 API 只回傳值班表上有這隻貓的班
+const visibleEntries = computed(() => entries.value.filter((e) => e.in_shift));
 
 async function loadMore() {
     if (loadingMore.value || !hasMore.value) return;
@@ -662,14 +584,14 @@ async function loadMore() {
     }
 }
 
-// 載完畫面還沒滿（或這一批的班都被篩掉了），底部那行還看得到就再往前載
+// 載完畫面還沒滿，底部那行還看得到就再往前載
 function fillViewport() {
     const el = sentinel.value;
     if (!el || !hasMore.value || loadError.value || view.value !== 'timeline') return;
     if (el.getBoundingClientRect().top < window.innerHeight + 200) loadMore();
 }
 
-// ---- 篩選與日期記在這台裝置（localStorage），每隻貓共用 ----
+// ---- 日期記在這台裝置（localStorage），每隻貓共用 ----
 // 快選（近 N 天）記成天數，下次打開照當天重算；自訂的起訖記原本的日期
 const storage = useLocalStorage();
 const FILTER_KEY = 'cat_profile_filters';
@@ -683,26 +605,18 @@ function restoreFilters() {
         if (isDay(saved.from)) range.from = saved.from;
         if (isDay(saved.to) && (!range.from || saved.to >= range.from)) range.to = saved.to;
     }
-    // 開關：至少留一個開著（存壞了就用預設全開）
-    const restore = (target, values) => {
-        const keys = Object.keys(target);
-        if (!values || !keys.some((k) => values[k] !== false)) return;
-        for (const k of keys) target[k] = values[k] !== false;
-    };
-    restore(show, saved.show);
 }
 
 function saveFilters() {
     const quick = QUICK_RANGES.find((q) => q.days && quickActive(q.days))?.days;
     storage.set(FILTER_KEY, {
         ...(quick ? { quick } : { from: range.from, to: range.to }),
-        show: { ...show },
     });
 }
 
 // 要在下面的 watch 之前還原，才不會多重載一次
 restoreFilters();
-watch([() => range.from, () => range.to, show], saveFilters, { deep: true });
+watch([() => range.from, () => range.to], saveFilters);
 
 function resetTimeline() {
     generation += 1;
@@ -715,8 +629,6 @@ function resetTimeline() {
 }
 
 watch(() => [range.from, range.to], resetTimeline);
-// 篩選變了，畫面可能變短
-watch(show, () => nextTick(fillViewport), { deep: true });
 watch(view, () => nextTick(fillViewport));
 
 let observer = null;
@@ -1223,48 +1135,6 @@ button.cp-avatar {
     gap: 6px;
 }
 
-// 篩選鈕（靠右）：樣子跟日期鈕一樣；有篩選時淡藍底、右上一個小點
-.tl-filter-btn {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    width: auto;
-    padding: 4px 10px;
-    border: 1px solid #d8d4d1;
-    border-radius: 999px;
-    background: #fff;
-    color: #4a4542;
-    font-size: 13px;
-
-    &.on,
-    &.open {
-        border-color: #657181;
-    }
-
-    &.on {
-        background: #eef1f5;
-    }
-}
-
-.tl-filter-dot {
-    position: absolute;
-    top: -2px;
-    right: -2px;
-    width: 8px;
-    height: 8px;
-    border: 2px solid #fff;
-    border-radius: 50%;
-    background: #e08a3c;
-    box-sizing: content-box;
-}
-
-.tl-panel-label {
-    margin-bottom: 6px;
-    color: #8a7f78;
-    font-size: 12px;
-}
-
 .tl-kind {
     display: inline-flex;
     align-items: center;
@@ -1517,59 +1387,6 @@ button.cp-avatar {
         border: 1px dashed #e4e0dd;
         background: #fff;
         color: #c9c3be;
-    }
-}
-
-// 未完成：淡橘底（提醒，跟沒便等異常的紅色分開），一項一行，前面標是哪個分頁
-.tl-missing {
-    padding: 8px 10px;
-    border-radius: 8px;
-    background: #fdf3e6;
-    font-size: 13px;
-}
-
-.tl-missing-title {
-    margin-bottom: 4px;
-    color: #b8650f;
-    font-weight: 600;
-}
-
-.tl-missing-row {
-    display: flex;
-    align-items: baseline;
-    gap: 6px;
-
-    & + .tl-missing-row {
-        margin-top: 3px;
-    }
-}
-
-.tl-missing-tag {
-    margin-right: 4px;
-    color: #8a7f78;
-}
-
-// 分頁標籤：跟值班表分頁同一套顏色
-.tl-tab {
-    padding: 0 6px;
-    border-radius: 4px;
-    font-size: 11px;
-    line-height: 18px;
-
-    &.arrive {
-        background: #e8f0f8;
-        color: #3f6a99;
-    }
-
-    // 醫療用紫色：不跟未完成的橘、異常的紅撞色
-    &.care {
-        background: #efe9f7;
-        color: #6a4a99;
-    }
-
-    &.meal {
-        background: #e9f3ec;
-        color: #4f8a5e;
     }
 }
 

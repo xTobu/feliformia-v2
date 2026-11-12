@@ -3,7 +3,7 @@
         <CareItemsAdmin
             title="醫療管理"
             table="medical_items"
-            :categories="['醫療', '餵藥', '外用']"
+            :categories="['醫療', '餵藥', '外用', '隨餐藥']"
             :main-field="{
                 key: 'treatment',
                 label: '事項',
@@ -19,8 +19,8 @@
 </template>
 
 <script setup>
-// 醫療管理（medical_items）：醫療、餵藥（親手讓牠吃下去）、外用（擦、點、噴）。
-// 值班記錄表都在醫療分頁，要打勾。拌進飯裡的藥歸飲食管理的「隨餐藥」
+// 醫療管理（medical_items）：醫療、餵藥（親手讓牠吃下去）、外用（擦、點、噴）、隨餐藥（拌進飯裡、放碗就可以走）。
+// 值班記錄表都在醫療照護分頁，要打勾。隨餐藥 2026-11-12 從飲食管理搬過來：備餐分頁也列，勾的是同一項（兩邊連動）
 definePageMeta({
     middleware: 'admin',
     ssr: false,

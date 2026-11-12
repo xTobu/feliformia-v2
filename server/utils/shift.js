@@ -7,7 +7,9 @@ import { isObserveDone, observeTabOf } from '~/composables/observeItems'
 // cats:  { "<cat_id>": { cat_id, name, location, sort, intake, released, prev_released,
 //                        medical: { "<id>": { id, category, treatment, reason, end_date, sort, done, done_by, done_at } },
 //                        diet:    { "<id>": { id, category, content, end_date, sort[, done, done_by, done_at] } } } }
-//        飲食只看不勾，只有「隨餐藥」要打勾（多 done / done_by / done_at）
+//        飲食只看不勾。「隨餐藥」要打勾：2026-11-12 起是醫療管理的類別（在 medical，醫療照護、備餐兩個分頁都列、共用同一筆）；
+//        以前的班快照裡的隨餐藥在 diet（多 done / done_by / done_at）
+//        observe_done: { "<observe item id>": { done_by, done_at } | null }  觀察管理的打勾
 // tasks: { "medical:<id>" | "diet:<id>": { kind, id, location, ...同上 }  不屬於單一貓咪的項目（location 空 = 全員）
 //          "required:<id>": { kind, id, cat_id, location, content, end_date, sort, done, done_by, done_at } }
 //          收尾：對象可以是某隻貓、全員（都空）、貓屋或某個位置，整班勾一次。
@@ -119,7 +121,8 @@ export function isValidShiftQuery(date, shift) {
     return /^\d{4}-\d{2}-\d{2}$/.test(date || '') && ['morning', 'night'].includes(shift)
 }
 
-// 飲食裡要打勾的類別：拌進飯裡的藥，放碗就可以走
+// 拌進飯裡的藥，放碗就可以走。2026-11-12 起是醫療管理的類別；飲食管理已經不能選，
+// 這裡留著給以前的班快照裡飲食的隨餐藥（要打勾）
 export const MEAL_MED = '隨餐藥'
 
 // 飲食裡的長期固定放風：期間內新開的班，放風預設打開
@@ -444,7 +447,8 @@ export function unfinishedOf(record, photos = []) {
     return {
         arrive: observeUndone('arrive'),
         care: [...fromCats('medical', () => true, medicalRow), ...fromTasks('medical', () => true, medicalRow)],
-        // 全員／位置的隨餐藥：那個位置當時沒有貓就不算（備餐分頁也不會顯示）
+        // 隨餐藥 2026-11-12 起是醫療項目，算在 care（備餐分頁也列，但不重複算）。下面是以前的班飲食的隨餐藥：
+        // 全員／位置的那個位置當時沒有貓就不算（備餐分頁也不會顯示）
         meal: [
             ...fromCats('diet', isMealMed, dietRow),
             ...fromTasks('diet', (t) => isMealMed(t) && cats.some((c) => !t.location || t.location === c.location), dietRow),
