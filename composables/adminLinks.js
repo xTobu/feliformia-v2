@@ -18,7 +18,7 @@ export const ADMIN_SECTIONS = [
             { to: '/admin/observe', icon: '📷', title: '觀察管理', desc: '剛到要拍的剩食、貓砂，離開要拍的留餐' },
             { to: '/admin/medical', icon: '💊', title: '醫療管理', desc: '吃藥、醫療與其他照護事項' },
             { to: '/admin/diet', icon: '🍚', title: '飲食管理', desc: '乾乾、罐罐、補充與其他飲食' },
-            { to: '/admin/required', icon: '✅', title: '值班收尾管理', desc: '每一班離開前一定要勾完的事' },
+            // 值班收尾管理（/admin/required）2026-11-12 收起來了：值班表拿掉收尾分頁，頁面與設定留著，之後要恢復再加回來
         ],
     },
 ];

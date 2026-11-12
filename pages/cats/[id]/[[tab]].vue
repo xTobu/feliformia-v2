@@ -591,7 +591,8 @@ const VIEW_TABS = [
     { key: 'profile', label: '小檔案' },
 ];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
-const TAB_LABELS = { arrive: '觀察', care: '醫療', meal: '備餐', required: '收尾' };
+// 收尾分頁 2026-11-12 拿掉了（時間軸 API 也不再回傳收尾的資料）
+const TAB_LABELS = { arrive: '飲食如廁', care: '醫療照護', meal: '備餐' };
 const SHOW_KINDS = [
     { key: 'duty', label: '值班', icon: 'mdi:clipboard-check-outline' },
     { key: 'unfinished', label: '未完成', icon: 'mdi:alert-circle-outline' },
@@ -1827,11 +1828,6 @@ button.cp-avatar {
     &.meal {
         background: #e9f3ec;
         color: #4f8a5e;
-    }
-
-    &.required {
-        background: #efedeb;
-        color: #6f6762;
     }
 }
 

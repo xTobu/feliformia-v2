@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
         // { 分頁: { user_id: { name, text, at } } }
         reports: data.reports || {},
         released: [...(await releasedCatIds({ ...prev, cats: data.cats }))],
-        // { arrive, care, meal, required }：各分頁沒勾完（觀察是沒拍）的項目，見 unfinishedOf
+        // { arrive, care, meal }：各分頁沒勾完（觀察是沒拍）的項目，見 unfinishedOf
         unfinished: unfinishedOf(data, photos),
     }
 })

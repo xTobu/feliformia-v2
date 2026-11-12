@@ -10,7 +10,8 @@ import { isObserveDone, observeTabOf } from '~/composables/observeItems'
 //        飲食只看不勾，只有「隨餐藥」要打勾（多 done / done_by / done_at）
 // tasks: { "medical:<id>" | "diet:<id>": { kind, id, location, ...同上 }  不屬於單一貓咪的項目（location 空 = 全員）
 //          "required:<id>": { kind, id, cat_id, location, content, end_date, sort, done, done_by, done_at } }
-//          收尾：對象可以是某隻貓、全員（都空）、貓屋或某個位置，不管哪一種都是整班勾一次
+//          收尾：對象可以是某隻貓、全員（都空）、貓屋或某個位置，整班勾一次。
+//          2026-11-12 收尾分頁拿掉了：新的班不再放收尾，以前的班留著的不顯示、不算未完成
 // done_by / done_at：誰（暱稱）、幾點勾的
 // prev_released：上一班離開時放風了（貓沒關籠，這班吃多少、排泄看不出來，觀察不用登記）。
 //                記在這一班自己身上，之後回頭看也知道為什麼沒有觀察紀錄
@@ -196,17 +197,17 @@ async function previousReleased(date, shift) {
     return row ? releasedCatIds(row) : new Set()
 }
 
-// 這一班的快照：未領養的貓（照貓咪管理的順序）＋這一班、在期間內的飲食、醫療、收尾、觀察
+// 這一班的快照：未領養的貓（照貓咪管理的順序）＋這一班、在期間內的飲食、醫療、觀察。
+// 收尾（required_items）2026-11-12 起不再放進新的班：值班表的收尾分頁拿掉了，後台設定與以前的班的紀錄留著
 export async function buildSnapshot(date, shift) {
     const forShift = (table) =>
         supabase.from(table).select().or(`shift.eq.both,shift.eq.${shift}`).order('sort_order')
 
-    const [[cats, diet, medical, required, observe], prevReleased] = await Promise.all([
+    const [[cats, diet, medical, observe], prevReleased] = await Promise.all([
         Promise.all([
             supabase.from('cat_profiles').select('id, name, location, adopted, sort_order'),
             forShift('diet_items'),
             forShift('medical_items'),
-            forShift('required_items'),
             forShift('observe_items'),
         ]).then((results) => results.map(check)),
         previousReleased(date, shift),
@@ -220,15 +221,6 @@ export async function buildSnapshot(date, shift) {
             category: i.category,
             treatment: i.treatment,
             reason: i.reason || null,
-            end_date: i.end_date || null,
-            sort: i.sort_order ?? MAX,
-            done: false,
-            done_by: null,
-            done_at: null,
-        }),
-        required: (i) => ({
-            id: i.id,
-            content: i.content,
             end_date: i.end_date || null,
             sort: i.sort_order ?? MAX,
             done: false,
@@ -254,7 +246,6 @@ export async function buildSnapshot(date, shift) {
     }
     const lists = {
         medical: medical.filter(inPeriod),
-        required: required.filter(inPeriod),
         diet: diet.filter(inPeriod),
         observe: observe.filter(inPeriod),
     }
@@ -291,17 +282,6 @@ export async function buildSnapshot(date, shift) {
             tasks[`${kind}:${i.id}`] = { kind, location: i.location || null, ...toItem[kind](i) }
         }
     }
-    // 收尾：指定的貓已領養或刪掉就不列
-    const activeCatIds = new Set(cats.filter((c) => !c.adopted).map((c) => c.id))
-    for (const i of lists.required.filter((i) => !i.cat_id || activeCatIds.has(i.cat_id))) {
-        tasks[`required:${i.id}`] = {
-            kind: 'required',
-            cat_id: i.cat_id || null,
-            location: i.location || null,
-            ...toItem.required(i),
-        }
-    }
-
     return { cats: snapshotCats, tasks }
 }
 
@@ -403,7 +383,7 @@ export async function persistReleased(stored, synced) {
 }
 
 // 一班裡還沒勾的項目，給下一班看（/api/shift/previous）。只看那一班的快照，跟後台現在的設定無關。
-// { arrive: [...], care: [...], meal: [...], required: [...] }，每一項 { key, target, content, tag }：
+// { arrive: [...], care: [...], meal: [...] }，每一項 { key, target, content, tag }（收尾分頁拿掉了，以前的班的收尾不算）：
 //   target 是對象（貓名、全員、貓屋或位置），畫面上當小標籤；tag 是類別（醫療分頁才有）
 // 順序：貓在前（照那一班的貓順序），全員 → 貓屋 → 位置在後
 const PLACE_ORDER = ['貓屋', '客廳', '房間', '倉庫', '隔離區']
@@ -437,8 +417,6 @@ export function unfinishedOf(record, photos = []) {
     const medicalRow = (i) => ({ content: i.treatment, tag: i.category })
     const isMealMed = (i) => i.category === MEAL_MED
     const dietRow = (i) => ({ content: i.content })
-    const requiredCats = (t) => t.cat_id
-    const requiredRow = (t) => ({ content: t.content })
 
     // 觀察管理：貓自己的，加上全員／位置的（併進適用的每一隻貓）；那個分頁沒拍對應的照片就算沒完成。
     // 剛到的列在觀察分頁，離開的（拍留餐）列在備餐分頁
@@ -467,16 +445,6 @@ export function unfinishedOf(record, photos = []) {
             ...fromCats('diet', isMealMed, dietRow),
             ...fromTasks('diet', (t) => isMealMed(t) && cats.some((c) => !t.location || t.location === c.location), dietRow),
             ...observeUndone('meal'),
-        ],
-        // 收尾：指定貓的跟著貓的順序排在前面，其他照全員 → 貓屋 → 位置
-        required: [
-            ...cats.flatMap((cat) =>
-                tasks
-                    .filter((t) => t.kind === 'required' && undone(t) && t.cat_id === cat.cat_id)
-                    .sort(bySort)
-                    .map((t) => ({ key: t.key, target: cat.name, ...requiredRow(t) }))
-            ),
-            ...fromTasks('required', (t) => !requiredCats(t), requiredRow),
         ],
     }
 }

@@ -517,109 +517,6 @@
 
                 </div>
 
-                <!-- ========== 收尾：這一班離開前一定要勾完的清單（備餐右邊）。
-                     對象可以是某隻貓、全員、貓屋或某個位置，每一項都是整班勾一次 ========== -->
-                <div v-show="tab === 'required'" class="W100">
-                    <ShiftReportBlock v-bind="prevBlock('required')" />
-
-                    <div v-if="requiredCats.length && requiredGroups.length" class="section-title">
-                        貓咪
-                    </div>
-                    <div
-                        v-for="entry in requiredCats"
-                        :key="entry.cat.cat_id"
-                        class="d_flex record_item required-card"
-                    >
-                        <div class="name-wrap">
-                            <NuxtLink :to="`/cats/${entry.cat.cat_id}`" class="name">{{ entry.cat.name }}</NuxtLink>
-                            <!-- 這個分頁、這隻貓的留言。橘點：上一班有交代 -->
-                            <button
-                                type="button"
-                                class="comment-btn"
-                                :class="{ has: commentCount(entry.cat.cat_id) }"
-                                :aria-label="`${entry.cat.name}的留言`"
-                                @click="openComments(entry.cat)"
-                            >
-                                💬<span v-if="commentCount(entry.cat.cat_id)">{{
-                                    commentCount(entry.cat.cat_id)
-                                }}</span>
-                                <i v-if="hasHandover(entry.cat.cat_id)" class="handover-dot"></i>
-                            </button>
-                        </div>
-                        <div class="detail">
-                            <div
-                                v-for="(item, index) in entry.items"
-                                :key="item.key"
-                                class="d_flex item-row"
-                                :class="{ divided: index > 0 }"
-                            >
-                                <div class="d_flex">
-                                    <div class="txt">
-                                        <font class="treatment">{{ item.content }}</font>
-                                        <CareItemPhotos :paths="itemPhotos('required', item)" :label="item.content" />
-                                    </div>
-                                    <div class="done">
-                                        <el-checkbox
-                                            class="task-check"
-                                            v-model="item.done"
-                                            :disabled="isDisabled"
-                                            @change="
-                                                stampDone(item);
-                                                saveTask(item);
-                                            "
-                                            ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
-                                        >
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div v-if="requiredCats.length && requiredGroups.length" class="section-title later">
-                        全員與位置
-                    </div>
-                    <!-- 全員 → 貓屋 → 位置 -->
-                    <div
-                        v-for="group in requiredGroups"
-                        :key="group.name"
-                        class="d_flex record_item required-card"
-                    >
-                        <div class="name">{{ group.name }}</div>
-                        <div class="detail">
-                            <div
-                                v-for="(item, index) in group.items"
-                                :key="item.key"
-                                class="d_flex item-row"
-                                :class="{ divided: index > 0 }"
-                            >
-                                <div class="d_flex">
-                                    <div class="txt">
-                                        <font class="treatment">{{ item.content }}</font>
-                                        <CareItemPhotos :paths="itemPhotos('required', item)" :label="item.content" />
-                                    </div>
-                                    <div class="done">
-                                        <el-checkbox
-                                            class="task-check"
-                                            v-model="item.done"
-                                            :disabled="isDisabled"
-                                            @change="
-                                                stampDone(item);
-                                                saveTask(item);
-                                            "
-                                            ><span v-if="item.done && item.done_by" class="done-by">{{ doneLabel(item) }}</span></el-checkbox
-                                        >
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <el-empty
-                        v-if="requiredCats.length === 0 && requiredGroups.length === 0"
-                        description="這一班沒有收尾項目"
-                    />
-                </div>
-
                 <!-- ========== 回報：每個分頁、每個人各一段（用登入身分）。下一班在同一個分頁上方看得到 ========== -->
                 <div class="W100 mb20 report">
                     <!-- 跟上面的貓咪、項目分開：小標題＋細線 -->
@@ -1284,7 +1181,7 @@ import { Icon } from '@iconify/vue';
 import { debounce } from 'lodash-es';
 import Swal from 'sweetalert2';
 
-// 網址：分頁在路徑（觀察 /shift、醫療 /shift/care、備餐 /shift/meal、收尾 /shift/required），
+// 網址：分頁在路徑（飲食如廁 /shift、醫療照護 /shift/care、備餐 /shift/meal；收尾 /shift/required 已拿掉，會導回 /shift），
 // 哪一班在 query（?date=&shift=）。key 固定：換分頁、換班都是同一個頁面，不重新掛載
 definePageMeta({
     middleware: 'auth',
@@ -1318,7 +1215,7 @@ const formData = ref({
     date: new Date(),
     shift: '',
     cats: [], // [{ cat_id, name, location, sort, intake, released, medical: [], diet: [], observe: [] }]
-    tasks: [], // [{ key, kind, id, location, ... }]，kind：medical / diet / required（收尾）
+    tasks: [], // [{ key, kind, id, location, ... }]，kind：medical / diet / observe（以前的班可能還有 required 收尾，不顯示）
     reports: {}, // { 分頁: { user_id: { name, text, at } } }：每個分頁、每個人一段
 });
 
@@ -1551,9 +1448,10 @@ const handovers = ref([]); // 上一班勾了「重要」的留言
 const drawerOpen = ref(false);
 const drawerCat = ref(null);
 
-const TABS = ['arrive', 'care', 'meal', 'required'];
+// 收尾分頁 2026-11-12 拿掉了（後台的收尾項目與以前的班的收尾紀錄都留著，只是不再顯示、不再放進新的班）
+const TABS = ['arrive', 'care', 'meal'];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
-const TAB_LABELS = { arrive: '觀察', care: '醫療', meal: '備餐', required: '收尾' };
+const TAB_LABELS = { arrive: '飲食如廁', care: '醫療照護', meal: '備餐' };
 const tabLabel = computed(() => TAB_LABELS[tab.value]);
 
 const inThisTab = (list, catId) =>
@@ -2302,9 +2200,9 @@ const observeRows = computed(() => {
     return map;
 });
 const observeRowsOf = (cat, tab = 'arrive') => (observeRows.value.get(cat.cat_id) || []).filter((r) => r.tab === tab);
-// ---- 照護項目的附圖（後台飲食、醫療、收尾管理加的）：值班表的快照只記項目 id，附圖直接讀項目表，
+// ---- 照護項目的附圖（後台飲食、醫療管理加的）：值班表的快照只記項目 id，附圖直接讀項目表，
 // 後台換了照片這裡馬上看得到。key 是「種類:id」，例如 medical:12 ----
-const ITEM_PHOTO_TABLES = { diet: 'diet_items', medical: 'medical_items', required: 'required_items' };
+const ITEM_PHOTO_TABLES = { diet: 'diet_items', medical: 'medical_items' };
 const careItemPhotos = ref({});
 const itemPhotos = (kind, item) => careItemPhotos.value[`${kind}:${item.id}`] || [];
 
@@ -2356,14 +2254,6 @@ function saveDietItem(cat, { source, item }) {
 }
 
 // 全員／位置的飲食只併進適用的貓；那個位置現在沒有貓的就不顯示，也不算未完成
-// 收尾分頁：有收尾項目的貓（照貓的順序），以及全員、貓屋、位置的（groupTasks 照 placeRank 排）
-const requiredItems = computed(() => formData.value.tasks.filter((t) => t.kind === 'required'));
-const requiredCats = computed(() =>
-    formData.value.cats
-        .map((cat) => ({ cat, items: requiredItems.value.filter((t) => t.cat_id === cat.cat_id) }))
-        .filter((entry) => entry.items.length > 0)
-);
-const requiredGroups = computed(() => groupTasks((t) => t.kind === 'required' && !t.cat_id));
 
 // 每個分頁上方：上一班同一個分頁的回報，以及那個分頁沒勾完的項目
 function prevBlock(key) {
@@ -2385,48 +2275,20 @@ const othersEntries = computed(() =>
     entriesOf(formData.value.reports, tab.value).filter((r) => r.key !== me.value)
 );
 
-// 分頁上的數字：還沒打勾的項目數
+// 分頁上的紅色數字：只有醫療分頁顯示（醫療一定要做完），其他分頁不顯示
 const tabList = computed(() => {
     const undone = (list) => list.filter((i) => !i.done).length;
-    const sectionUndone = (tab) => {
-        const section = medicalSections.value.find((s) => s.tab === tab);
-        return (
-            section.cats.reduce((sum, e) => sum + undone(e.items), 0) +
-            section.taskGroups.reduce((sum, g) => sum + undone(g.items), 0)
-        );
-    };
+    const care = medicalSections.value.find((s) => s.tab === 'care');
     return [
-        // 觀察：剛到要拍、還沒拍的照片
+        { value: 'arrive', label: TAB_LABELS.arrive },
         {
-            value: 'arrive',
-            label: '觀察',
-            remaining: formData.value.cats.reduce((sum, c) => sum + undone(observeRowsOf(c)), 0),
-        },
-        { value: 'care', label: '醫療', remaining: sectionUndone('care') },
-        {
-            value: 'meal',
-            label: '備餐',
-            // 隨餐藥要打勾（全員／位置的整班一份，只算一次）＋離開要拍、還沒拍的照片
+            value: 'care',
+            label: TAB_LABELS.care,
             remaining:
-                formData.value.cats.reduce((sum, c) => sum + undone(observeRowsOf(c, 'meal')), 0) +
-                formData.value.cats.reduce((sum, c) => sum + undone(c.diet.filter(isMealMed)), 0) +
-                undone(
-                    formData.value.tasks.filter(
-                        (t) =>
-                            t.kind === 'diet' &&
-                            isMealMed(t) &&
-                            formData.value.cats.some((cat) => appliesTo(t, cat))
-                    )
-                ),
+                care.cats.reduce((sum, e) => sum + undone(e.items), 0) +
+                care.taskGroups.reduce((sum, g) => sum + undone(g.items), 0),
         },
-        {
-            value: 'required',
-            label: '收尾',
-            // 只算畫面上看得到的（貓已經不在這班的不算）
-            remaining:
-                requiredCats.value.reduce((sum, e) => sum + undone(e.items), 0) +
-                requiredGroups.value.reduce((sum, g) => sum + undone(g.items), 0),
-        },
+        { value: 'meal', label: TAB_LABELS.meal },
     ];
 });
 
@@ -2572,6 +2434,8 @@ function InitFromQuery() {
         ? 'morning'
         : 'night';
     tab.value = tabOfPath(route.params.tab);
+    // 收尾分頁拿掉了：舊網址 /shift/required 換成飲食如廁
+    if (route.params.tab === 'required') router.replace({ path: tabPath('arrive'), query: route.query });
     // 舊連結把分頁放在 ?tab=（還有更舊的 meds：吃藥分頁已併進醫療；leave：備餐改叫 meal）：換成路徑
     if (queryTab) {
         const wanted = { meds: 'care', leave: 'meal' }[queryTab] || queryTab;
@@ -3452,11 +3316,6 @@ watch(
             border-color: #e9a3a3;
             background: #fdf0f0;
         }
-    }
-
-    // 收尾清單沒有左邊的類別欄，文字從頭開始
-    &.required-card .detail > .item-row > .d_flex {
-        width: 100%;
     }
 
     // 上一班放風：標籤與「仍要登記」在卡片右上角，跟貓名標籤垂直置中（34px 高的標籤裡，26px 往下 4px）

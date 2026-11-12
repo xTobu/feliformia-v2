@@ -5,7 +5,8 @@ import { COMMENT_COLUMNS, toMessages } from '~/server/utils/comments'
 import { LIBRARY_COLUMNS, withComment, withSignedUrls } from '~/server/utils/photos'
 
 const DAYS = 7 // 一次往前 7 天（14 班）
-const TABS = ['arrive', 'care', 'meal', 'required']
+// 收尾分頁 2026-11-12 拿掉了：以前的班的收尾項目、收尾分頁的留言與照片都不回傳
+const TABS = ['arrive', 'care', 'meal']
 
 const isDate = (v) => /^\d{4}-\d{2}-\d{2}$/.test(v || '')
 function addDays(date, days) {
@@ -20,15 +21,10 @@ function check(result) {
 }
 
 // 這一班、這隻貓自己的未完成（規則同值班表的「前班未完成」，unfinishedOf）：
-// 醫療、隨餐藥、觀察管理（全員／位置的觀察項目也算在每隻貓身上）、對象是這隻貓的收尾。
-// 全員／位置的醫療、隨餐藥、收尾不是這隻貓的事，不算
+// 醫療、隨餐藥、觀察管理（全員／位置的觀察項目也算在每隻貓身上）。
+// 全員／位置的醫療、隨餐藥不是這隻貓的事，不算
 function catUnfinished(catId, snapshot, tasks, photos) {
-    const ownRequired = new Set(
-        Object.entries(tasks || {})
-            .filter(([, t]) => t.kind === 'required' && t.cat_id === catId)
-            .map(([key]) => key)
-    )
-    const own = (row) => row.key.includes(`:${catId}:`) || ownRequired.has(row.key)
+    const own = (row) => row.key.includes(`:${catId}:`)
     const all = unfinishedOf({ cats: { [catId]: snapshot }, tasks }, photos)
     return TABS.flatMap((tab) => (all[tab] || []).filter(own).map(({ key, content, tag }) => ({ key, tab, content, tag })))
 }
@@ -39,7 +35,7 @@ function catUnfinished(catId, snapshot, tasks, photos) {
 // 每一段：
 //   值班：這隻貓的飲食如廁（intake）、前班放風（prev_released）、這班放風（released）、未完成（unfinished）；
 //         值班表那班沒有這隻貓就沒有這些（in_shift: false）。還在進行的班標 ongoing，未完成照樣列
-//   comments：四個分頁的留言（帶 tab，附的照片在 photos 裡）
+//   comments：飲食如廁、醫療照護、備餐三個分頁的留言（帶 tab，附的照片在 photos 裡）
 //   photos：照片庫的，直接上傳的與留言附的都有（留言附的帶 comment：那則留言）
 // 這隻貓沒出現、也沒留言照片的班不回傳。cursor：這一批最舊的那天，下次從它往前；hasMore：更早還有沒有班
 export default defineEventHandler(async (event) => {
@@ -80,10 +76,10 @@ export default defineEventHandler(async (event) => {
     if (from) olderQuery = olderQuery.gte('date', from)
     const [comments, photos, older] = await Promise.all([
         ids.length
-            ? supabase.from('shift_comments').select(COMMENT_COLUMNS).eq('cat_id', cat).in('shift_id', ids).order('created_at')
+            ? supabase.from('shift_comments').select(COMMENT_COLUMNS).eq('cat_id', cat).in('shift_id', ids).in('tab', TABS).order('created_at')
             : { data: [] },
         ids.length
-            ? supabase.from('shift_photos').select(LIBRARY_COLUMNS).eq('cat_id', cat).in('shift_id', ids).order('created_at')
+            ? supabase.from('shift_photos').select(LIBRARY_COLUMNS).eq('cat_id', cat).in('shift_id', ids).in('tab', TABS).order('created_at')
             : { data: [] },
         olderQuery,
     ])

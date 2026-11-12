@@ -5,7 +5,8 @@ import { nextShiftOf } from '~/server/utils/shift'
 // 局部更新：前端只送改動的那幾格，由資料庫的 shift_apply 一次套用（同一班會排隊，不會互蓋）。
 // ops 格式見 supabase/migrations/*_care_system.sql
 const COLUMNS = ['cats', 'tasks', 'reports']
-const TABS = ['arrive', 'care', 'meal', 'required']
+// 收尾分頁 2026-11-12 拿掉了，不再收收尾的回報
+const TABS = ['arrive', 'care', 'meal']
 const MAX_REPORT_LENGTH = 5000
 
 export default defineEventHandler(async (event) => {
