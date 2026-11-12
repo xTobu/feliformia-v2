@@ -161,7 +161,7 @@ votes.data
 | `observe_items` | `/admin/observe` | 觀察管理：值班時要做的事，分兩組——剛到（拍剩食／拍貓砂，飲食如廁分頁）、離開（拍留餐、放風，備餐分頁）。**放風**＝長期固定放風（2026-11-12 從飲食搬過來）：不放進班的快照、不是膠囊；期間內的班，沒人按過放風的貓 `released` 照它打開（見下方「shifts 的快照與局部更新」）。`content` 是說明（選填，只在後台看，值班表不顯示）。**2026-11-12 起打勾**（值班表的留言、照片拿掉了）：膠囊樣子不變（沒勾紅色相機、勾了藍色 ✓），點了就勾、再點取消；記下誰、幾點但畫面不顯示，存在那一班 `shifts.cats.<貓>.observe_done.<項目 id>` = `{ done_by, done_at }`（取消是 `null`），全員／位置的項目每隻貓各勾各的；沒勾算未完成。以前的班沒有勾，照舊看那一班、這隻貓、那個分頁的照片有沒有對應類型（拍剩食→剩食、拍貓砂→貓砂、拍留餐→留餐）。規則在 `composables/observeItems.js`（`isObserveDone`），前端與 server 共用 |
 | `cat_health_records` | `/cats/[id]` 小檔案 | 醫療紀錄：類型 `kind` 單選——看診 visit／急診 emergency／回診 revisit／貓屋處理 house（資料庫有 check）；項目 `items` 可多選——預設 血檢、結紮、預防針、快篩、晶片、洗牙、拔牙、驅蟲、除蚤、吐血、血便、傷口（醫院做的在前、症狀在最後），或志工按「＋ 其他」自己加的標籤（存那幾個字，加過的之後所有貓都會出現在選項裡，`/api/cats/health/items`）；清單在 `composables/healthKinds.js`。每筆至少一個項目（列表上項目就是標題，例如「血檢、結紮」）。另有 `date`、`note`（描述）、陪同者 `companions`（名字陣列：有效志工名單列成膠囊點選，名單上沒有的按「＋ 其他」打字加入）、最後編輯者 `updated_by`／`updated_by_name`（新增時就是建立的人，照片的增減也算編輯）。所有登入的人可讀，新增、修改、刪除只有管理員，走 `server/api/cats/health*`（service key，沒有寫入 policy）。小檔案的驅蟲、預防針卡片算有勾那個項目的紀錄（次數與日期），結紮卡有勾結紮的紀錄就顯示已結紮與日期（沒有才看 `cat_profiles.neutered`）；卡片上的日期點了會捲到那筆紀錄，管理員按驅蟲、預防針卡片右上的「＋」新增一筆（預先帶好那個項目：驅蟲是貓屋處理，預防針是看診）。入住日、估計年齡、外觀、結紮卡片管理員點了打開編輯貓咪 |
 | `cat_health_photos` | `/cats/[id]` 小檔案 | 醫療紀錄的照片（一筆最多 10 張），`uploader_name` 是上傳者當下的暱稱（看大圖時顯示）。檔案在 Storage 私人 bucket `cat-health`（`<貓 id>/` 底下），上傳與看圖同值班照片（server 發一次性上傳網址／有時效網址，手機先壓縮）；刪紀錄或拿掉照片時 API 連檔案一起刪 |
-| `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁、每個人各自的回報 |
+| `shifts` | `/shift` | 值班記錄，一班一筆（unique date + shift）。`reports` 是每個分頁一段大家共編的回報（以前的班是一人一段） |
 | `profiles.avatar_path` | `/settings` | 志工頭像（`avatars` bucket，公開）。另外留原圖 `avatar_source_path`（最長邊 1600px）與框的範圍 `avatar_crop`（`{ left, top, width, height }`，原圖上的像素），點頭像可以重新調整位置、點相機換照片（貓的頭像同一套）。上傳走 `/api/avatar/upload-url` → 直傳 Storage → `/api/avatar/save`（換頭像會刪舊檔）；留言頻道會顯示 |
 | `shift_comments` | （2026-11-12 停用） | **值班表的留言 2026-11-12 拿掉了**：畫面上沒有 💬、貓咪檔案也不顯示，表與資料都留著，API（`server/api/shift/comments*`）與 `components/ShiftCommentDrawer.vue` 也還在，要恢復把畫面接回去。以下是當時的設計——留言頻道：一隻貓、一個分頁一個頻道，跨班往上看（`/api/shift/comments/channel`，班與班之間有分隔線）。可以附照片、只附照片時 `body` 是空字串。作者本人可以編輯（`edited_at`，顯示「已編輯」）與刪除（附的照片連 Storage 檔一起刪）。可以搜尋（`/api/shift/comments/search`，這個頻道所有的班）。`for_next` 是「重要」：整則橘底；下一班的 💬 旁有橘點（只維持一班） |
 | `shift_photos` | （2026-11-12 停用） | **值班表的照片 2026-11-12 拿掉了**：畫面上沒有 🗂️、貓咪檔案也不顯示、LINE 發送不附照片；表、Storage 檔案與 API（`server/api/shift/photos/*`、`line/preview`）都留著。現在只讀 `cat_id, tab, kinds` 判斷以前的班觀察管理拍了沒。以下是當時的設計——每隻貓、每個分頁的照片。檔案在 Storage 私人 bucket `shift-photos`，永久保留；`note` 是描述，`kinds` 是類型（選填、可多選，照片庫上方可以篩選；觀察 剩食／貓砂｜嘔吐／血跡／毛髮皮膚／其他（剩食、貓砂是「剛到要拍」那兩種，畫面上自成一組），醫療 傷口／皮膚／眼耳口鼻／治療／用藥／其他，備餐 留餐｜乾乾／罐罐／加藥／其他（留餐是「離開要拍」的那種），清單在 `composables/photoKinds.js`）。🗂️ 照片庫 = 這隻貓、這個分頁的所有照片：`comment_id` 空的是直接上傳的，有值的是留言附的（縮圖標 💬，看大圖顯示那則留言、可以跳過去；只能改類型，描述與刪除跟著留言）。照班分組往上看：打開時這一班加前 4 班，往上再 5 班（`/api/shift/photos/history`）。留言頻道標題列的「留言／照片」切換到照片庫。`upload_batch` 是同一次上傳共用的 id：留言頻道裡把直接上傳的照片顯示成「誰上傳了幾張照片到照片庫」，一次上傳一筆（沒有 id 的舊照片一張一筆） |
@@ -196,11 +196,13 @@ votes.data
 
 醫療、隨餐藥、收尾、觀察管理打勾時都記下 `done_by`（登入者暱稱）與 `done_at`，2026-11-12 起畫面上都不顯示（以前是「✓ 阿明 21:40」），只存著；觀察管理的存在 `cats.<貓>.observe_done`（見 `observe_items`）。
 值班記錄表的分頁是 飲食如廁、醫療照護、備餐（`arrive` / `care` / `meal`；2026-11-12 起，原本叫觀察、醫療），記在網址路徑：飲食如廁是 `/shift`，其他是 `/shift/care`、`/shift/meal`（`pages/shift/[[tab]].vue`）；哪一班在 `?date=&shift=`。分頁上的紅色未完成數字只有醫療照護有。收尾分頁（`required`）2026-11-12 拿掉了，舊網址 `/shift/required` 會導回 `/shift`。舊連結的 `?tab=`（含更舊的 meds、leave）會自動換成路徑。
-`reports` 是 `{ 分頁: { user_id: { name, text, at } } }`：每個分頁、每個人各一段，用登入身分（沒有「填表志工」）。
-每個人只能改自己那一段，名字與時間由 server 填（`server/api/shift/update.post.js`）。
-下一班在**同一個分頁**的回報區、寫自己的回報上面看到上一班的回報（`components/ShiftReportBlock.vue`，標題是「前班回報（11/12 早）」，預設收起）。
+`reports` 2026-11-12 起是 `{ 分頁: { _shared: { name, text, at } } }`：飲食如廁、醫療照護每個分頁一段，大家共編（跟舊版 /regular 一樣；備餐沒有回報，以前的備餐回報資料留著不顯示），
+整段送出、後存的蓋過先存的；`name`、`at` 是最後編輯者與時間，由 server 填（`server/api/shift/update.post.js`，只收 `[分頁, '_shared']` 這個路徑），畫面不顯示。
+有人在打字時，在這一班的頻道發 `typing`，其他人輸入框上面顯示「○○ 正在編輯…」（離開輸入框發 stop，6 秒沒收到也會消失），只是提示、不鎖輸入框。
+以前一人一段的 `{ user_id: { name, text, at } }`（更早的舊格式在 `legacy`）留著不動：還沒有 `_shared` 的分頁，畫面照時間合併成一段顯示（兩段以上每段前面寫名字），有人改了才存成 `_shared`。
+下一班在**同一個分頁**的回報區、回報輸入框上面看到上一班的回報（`components/ShiftReportBlock.vue`，標題是「前班回報（11/12 早）」，預設收起，不寫名字與時間）。
 上一班沒勾完的項目 2026-11-12 起不在值班表上列了；`/api/shift/previous` 還是會算（`unfinishedOf`：飲食如廁的觀察管理、醫療照護的醫療／餵藥／外用／隨餐藥、備餐的拍留餐與以前的班飲食的隨餐藥）。貓咪檔案也不顯示未完成。
-每個分頁的「LINE 發送至群組」只發那個分頁、這一班所有人的回報（標作者），不合在一起；先跳確認視窗看要發的文字，超過 5000 字會分成幾則。舊格式的回報放在 `legacy` 底下，顯示為「（舊資料）」。
+每個分頁的「LINE 發送至群組」只發那個分頁、這一班共編的那段回報（不寫作者），不合在一起；先跳確認視窗看要發的文字，超過 5000 字會分成幾則。
 
 **照片**（2026-11-12 拿掉了，以下是當時的設計）：觀察、醫療、備餐分頁貓名旁的 🗂️ 打開下方面板（各分頁的照片分開）。選好照片先預覽、每張可寫描述再上傳；上傳後描述可在縮圖下修改（`/api/shift/photos/update`）。手機上傳前自動壓縮（`composables/useImageCompress.js`：
 大圖最長邊 1600px 約 300KB、縮圖 400px），用 server 發的一次性上傳網址直接傳到 Storage（不經過 Vercel 的 4.5MB 上限），
@@ -221,7 +223,7 @@ votes.data
 
 | 頻道 | 事件 | 誰在聽 |
 |---|---|---|
-| `shift:<shifts.id>` | `ops`（`/api/shift/update` 回傳處理過的 ops）。原本還有 `comment`、`photo`，2026-11-12 跟著留言、照片拿掉了 | `/shift` 開著那一班的人；`/cats/[id]` 聽進行中的班（今天的，最多兩班），收到就重抓那一天 |
+| `shift:<shifts.id>` | `ops`（`/api/shift/update` 回傳處理過的 ops）、`typing`（`{ tab, uid, name, stop? }`：回報正在編輯）。原本還有 `comment`、`photo`，2026-11-12 跟著留言、照片拿掉了 | `/shift` 開著那一班的人；`/cats/[id]` 聽進行中的班（今天的，最多兩班），收到就重抓那一天 |
 | `cat:<cat_id>` | `changed`（`{ shiftId, next }`：值班表存到這隻貓的格子；`next` 是改了放風，下一班也要重抓） | `/cats/[id]`：過去的班改了也看得到，收到就重抓那一天 |
 | `comments:<cat_id>:<tab>` | `message`（upsert／delete） | 2026-11-12 起沒人在聽（值班表的留言拿掉了），只剩 `ShiftCommentDrawer` 還會發 |
 

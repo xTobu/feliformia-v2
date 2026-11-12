@@ -413,19 +413,19 @@
 
                 </div>
 
-                <!-- ========== 回報：每個分頁、每個人各一段（用登入身分）。下一班在同一個分頁的這裡看得到 ========== -->
-                <div class="W100 mb20 report">
+                <!-- ========== 回報：每個分頁一段大家共編，下一班在同一個分頁的這裡看得到。
+                     備餐沒有回報（2026-11-12 起，連 LINE 發送一起拿掉；以前的備餐回報資料留著） ========== -->
+                <div v-if="REPORT_TABS.includes(tab)" class="W100 mb20 report">
                     <!-- 跟上面的貓咪、項目分開：小標題＋細線 -->
                     <div class="section-title report-title">回報</div>
                     <!-- 前一班同一個分頁的回報，放在寫自己的回報之前（2026-11-12 起分頁最上面不再放前班區塊與未完成） -->
                     <ShiftReportBlock v-bind="prevBlock(tab)" />
-                    <ShiftReportBlock
-                        :title="`其他人的${tabLabel}回報`"
-                        :entries="othersEntries"
-                        :storage-key="`now:${tab}`"
-                    />
-                    <!-- 我的回報：輸入框、儲存列收在同一張卡片 -->
+                    <!-- 這一班、這個分頁的回報：大家共編一段（2026-11-12 起，以前是一人一段）。後存的蓋過先存的，
+                         所以別人正在打字時上面提示「○○ 正在編輯…」。輸入框、儲存列收在同一張卡片 -->
                     <div class="my-report">
+                        <div v-if="editingNames.length" class="mr-editing">
+                            <span class="mr-editing-dot"></span>{{ editingNames.join('、') }} 正在編輯…
+                        </div>
                         <el-input
                             type="textarea"
                             v-model="drafts[tab]"
@@ -433,6 +433,7 @@
                             :autosize="{ minRows: 3, maxRows: 12 }"
                             placeholder="寫給下一班…"
                             @input="saveReport(tab)"
+                            @blur="stopTyping(tab)"
                         />
                         <!-- 改完會自動儲存；按鈕讓人確定有存到，失敗時也在這裡重試 -->
                         <div class="mr-foot">
@@ -590,7 +591,7 @@
 // 兩個人同時改不同的貓或項目不會互相覆蓋
 import { ElMessage } from 'element-plus';
 import { Icon } from '@iconify/vue';
-import { debounce } from 'lodash-es';
+import { debounce, throttle } from 'lodash-es';
 import Swal from 'sweetalert2';
 
 // 網址：分頁在路徑（飲食如廁 /shift、醫療照護 /shift/care、備餐 /shift/meal；收尾 /shift/required 已拿掉，會導回 /shift），
@@ -628,19 +629,27 @@ const formData = ref({
     shift: '',
     cats: [], // [{ cat_id, name, location, sort, intake, released, medical: [], diet: [], observe: [] }]
     tasks: [], // [{ key, kind, id, location, ... }]，kind：medical / diet / observe（以前的班可能還有 required 收尾，不顯示）
-    reports: {}, // { 分頁: { user_id: { name, text, at } } }：每個分頁、每個人一段
+    reports: {}, // { 分頁: { _shared: { name, text, at } } }：每個分頁一段共編（以前的班是 { user_id: { name, text, at } } 一人一段）
 });
 
-// 我在每個分頁的回報（輸入框綁這份）
+// 每個分頁的回報（輸入框綁這份，大家共編同一段）
 const drafts = ref({});
 const me = computed(() => getUserId() || null);
 
-// 一個分頁的回報清單：只留有內容的，照時間排（舊資料沒有時間，排最前面）
-function entriesOf(reports, key) {
-    return Object.entries(reports?.[key] || {})
-        .map(([uid, r]) => ({ key: uid, name: r?.name, text: r?.text || '', at: r?.at || null }))
-        .filter((r) => r.text.trim())
-        .sort((a, b) => (a.at || '').localeCompare(b.at || ''));
+// 回報 2026-11-12 起每個分頁一段大家共編，存在 reports.<分頁>._shared（server/api/shift/update.post.js）
+const SHARED_REPORT = '_shared';
+
+// 一個分頁的回報文字：有共編的那段就用它；還沒有的（以前一人一段），照時間合併成一段，
+// 兩段以上每段前面寫名字（舊格式沒有名字的寫「舊資料」），大家再自己整理
+function reportTextOf(reports, key) {
+    const byKey = reports?.[key] || {};
+    if (byKey[SHARED_REPORT]) return byKey[SHARED_REPORT].text || '';
+    const entries = Object.entries(byKey)
+        .map(([, r]) => ({ name: r?.name, text: (r?.text || '').trim(), at: r?.at || '' }))
+        .filter((r) => r.text)
+        .sort((a, b) => a.at.localeCompare(b.at));
+    if (entries.length <= 1) return entries[0]?.text || '';
+    return entries.map((e) => `${e.name || '舊資料'}：\n${e.text}`).join('\n\n');
 }
 
 // ---- 資料轉換：資料庫存的是以 id 為 key 的物件，畫面用排好順序的陣列 ----
@@ -774,15 +783,15 @@ function saveTask(task) {
     queue([{ column: 'tasks', path: [key], value }]);
 }
 
-// 回報只送內容；名字與時間由 server 填（只能改自己那一段）。
-// 本地也先更新，發送到 LINE 才拿得到最新的
+// 回報只送內容；最後編輯者與時間由 server 填。整段送出，後存的蓋過先存的。
+// 本地也先更新，發送到 LINE 才拿得到最新的；同時告訴開著這一班的人「我正在編輯」
 function saveReport(key) {
     if (!me.value) return;
     const text = drafts.value[key] || '';
     const reports = formData.value.reports;
-    reports[key] = { ...(reports[key] || {}) };
-    reports[key][me.value] = { name: nickname.value, text, at: new Date().toISOString() };
-    queue([{ column: 'reports', path: [key, me.value], value: { text } }]);
+    reports[key] = { ...(reports[key] || {}), [SHARED_REPORT]: { name: nickname.value, text, at: new Date().toISOString() } };
+    queue([{ column: 'reports', path: [key, SHARED_REPORT], value: { text } }]);
+    sendTyping(key);
 }
 
 // 儲存按鈕：馬上送出還沒送的改動
@@ -840,12 +849,12 @@ function mergeRemote(row) {
         else if ('done' in rt) Object.assign(lt, pickDone(rt));
     }
 
-    for (const [key, byUser] of Object.entries(row.reports || {})) {
-        for (const [uid, entry] of Object.entries(byUser || {})) {
-            if (busy('reports', [key, uid])) continue;
-            local.reports[key] = { ...(local.reports[key] || {}), [uid]: entry };
-            if (uid === me.value) drafts.value[key] = entry?.text || '';
-        }
+    // 共編的回報：自己還沒送出的改動優先（busy），其他時候別人存的直接換上
+    for (const [key, byKey] of Object.entries(row.reports || {})) {
+        const entry = byKey?.[SHARED_REPORT];
+        if (!entry || busy('reports', [key, SHARED_REPORT])) continue;
+        local.reports[key] = { ...(local.reports[key] || {}), [SHARED_REPORT]: entry };
+        drafts.value[key] = entry.text || '';
     }
 }
 
@@ -856,9 +865,10 @@ const pickDone = ({ done, done_by, done_at }) => ({
 });
 
 const TABS = ['arrive', 'care', 'meal'];
+// 有回報的分頁：備餐 2026-11-12 起不用回報
+const REPORT_TABS = ['arrive', 'care'];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
 const TAB_LABELS = { arrive: '飲食如廁', care: '醫療照護', meal: '備餐' };
-const tabLabel = computed(() => TAB_LABELS[tab.value]);
 
 // 以前的班（2026-11-12 之前）沒有觀察的打勾，照舊看那一班飲食如廁、備餐分頁有沒有拍對應的照片。
 // 值班表的留言、照片 2026-11-12 拿掉了，這裡只讀判斷要的欄位
@@ -1025,16 +1035,12 @@ function prevBlock(key) {
         // 標題「前班回報（10/20 晚）」；不顯示幾則
         title: date ? `前班回報（${$dayjs(date).format('MM/DD')} ${SHIFT_LABELS[shift].slice(0, 1)}）` : '前班回報',
         countLabel: '',
-        entries: entriesOf(reports, key),
+        // 共編的一段（以前的班一人一段的合併成一段），不寫名字與時間
+        entries: reportTextOf(reports, key).trim() ? [{ key: 'shared', text: reportTextOf(reports, key) }] : [],
         // 前班每次打開頁面都收起，展開不記住（不給 storageKey）
         defaultCollapsed: true,
     };
 }
-
-// 這一班、這個分頁，其他人寫的回報（自己的在輸入框裡）
-const othersEntries = computed(() =>
-    entriesOf(formData.value.reports, tab.value).filter((r) => r.key !== me.value)
-);
 
 // 分頁上的紅色數字：只有醫療分頁顯示（醫療一定要做完），其他分頁不顯示
 const tabList = computed(() => {
@@ -1228,9 +1234,8 @@ async function InitShift() {
     formData.value.cats = cats;
     formData.value.tasks = tasks;
     formData.value.reports = { ...data.reports };
-    drafts.value = Object.fromEntries(
-        TABS.map((key) => [key, data.reports?.[key]?.[me.value]?.text || ''])
-    );
+    drafts.value = Object.fromEntries(REPORT_TABS.map((key) => [key, reportTextOf(data.reports, key)]));
+    typingOthers.value = {};
     prev.value = {
         date: prevData?.date || null,
         shift: prevData?.shift || null,
@@ -1303,6 +1308,46 @@ function notifyCats(shiftId, catIds, next = false) {
     }
 }
 
+// ---- 回報「正在編輯」：共編的回報後存的會蓋過先存的，所以打字時在這一班的頻道發 typing
+// （最多 2 秒一次），別人收到就在輸入框上面顯示「○○ 正在編輯…」；離開輸入框發 stop，
+// 漏收 stop（關掉分頁、斷線）的話 6 秒沒再收到就自己消失。只是提示，不鎖住輸入框 ----
+const TYPING_TTL_MS = 6000;
+const typingOthers = ref({}); // { 分頁: { user_id: { name, until } } }
+
+const editingNames = computed(() =>
+    Object.values(typingOthers.value[tab.value] || {}).map((t) => t.name || '有人')
+);
+
+const sendTyping = throttle(
+    (key) => broadcastShift('typing', { tab: key, uid: me.value, name: nickname.value || '' }),
+    2000,
+    { trailing: false }
+);
+
+function stopTyping(key) {
+    sendTyping.cancel();
+    broadcastShift('typing', { tab: key, uid: me.value, stop: true });
+}
+
+function onRemoteTyping({ tab: key, uid, name, stop }) {
+    if (!key || !uid || uid === me.value) return;
+    const byTab = { ...(typingOthers.value[key] || {}) };
+    if (stop) delete byTab[uid];
+    else byTab[uid] = { name, until: Date.now() + TYPING_TTL_MS };
+    typingOthers.value = { ...typingOthers.value, [key]: byTab };
+    if (!stop) setTimeout(pruneTyping, TYPING_TTL_MS + 100);
+}
+
+function pruneTyping() {
+    const now = Date.now();
+    typingOthers.value = Object.fromEntries(
+        Object.entries(typingOthers.value).map(([key, byTab]) => [
+            key,
+            Object.fromEntries(Object.entries(byTab).filter(([, t]) => t.until > now)),
+        ])
+    );
+}
+
 // 存好的格子是哪幾隻貓的：貓的格子看路徑第一段；事項看那一項記的是哪隻貓（全員、位置的不用）
 function notifyCatsOfOps(shiftId, ops) {
     const catIds = ops.map((op) =>
@@ -1336,13 +1381,14 @@ function subscribeToShift(recordId) {
                 mergeOps(ops);
                 lastUpdatedAt.value = new Date();
             },
+            typing: onRemoteTyping,
         },
         { onResync: resyncShift }
     );
 }
 
-// 「LINE 發送至群組」：這一班、這個分頁的回報（一人一段）。
-// 跟 /regular、/medicine 一樣先跳確認視窗，按「發送」才送。沒有人回報就擋下
+// 「LINE 發送至群組」：這一班、這個分頁的回報（共編的一段）。
+// 跟 /regular、/medicine 一樣先跳確認視窗，按「發送」才送。沒有回報就擋下
 // （留言、照片 2026-11-12 拿掉了，不再一起發）
 async function sendTabToLine() {
     const key = tab.value;
@@ -1353,15 +1399,15 @@ async function sendTabToLine() {
         // 先把還沒存的回報存掉，發出去的才跟資料庫一致
         await saveNow();
 
-        const entries = entriesOf(formData.value.reports, key);
-        if (!entries.length) {
+        const report = reportTextOf(formData.value.reports, key).trim();
+        if (!report) {
             ElMessage.warning(`這一班還沒有${label}回報`);
             return;
         }
 
         const textSite =
             config.public.deploySite === 'feliformia' ? '' : `[${config.public.deploySite || 'Local'}]\n`;
-        const text = textSite + buildLineText(label, entries);
+        const text = textSite + buildLineText(label, report);
         if (!(await confirmLinePush(text))) return;
 
         try {
@@ -1382,8 +1428,8 @@ async function sendTabToLine() {
     }
 }
 
-// 發到 LINE 的文字：標題、日期班別，再來【回報】一人一段（「・名字 時間」，內容在下一行縮兩格）
-function buildLineText(label, entries) {
+// 發到 LINE 的文字：標題、日期班別，再來【回報】（共編的那一段，不寫名字與時間）
+function buildLineText(label, report) {
     const d = $dayjs(formData.value.date);
     const lines = [
         `值班記錄｜${label}`,
@@ -1392,11 +1438,8 @@ function buildLineText(label, entries) {
         `班別： ${SHIFT_LABELS[formData.value.shift]}`,
         '---------------',
         '【回報】',
+        report,
     ];
-    for (const e of entries) {
-        lines.push(`・${e.name || '（舊資料）'}${e.at ? ` ${$dayjs(e.at).format('HH:mm')}` : ''}`);
-        lines.push(...e.text.trim().split('\n').map((l) => `  ${l}`));
-    }
     return lines.join('\n');
 }
 
@@ -1508,6 +1551,28 @@ watch(
         border-radius: 6px;
         background: #fff;
         text-align: left;
+
+        // 別人正在打字：輸入框上面一條淡橘提示（共編後存的會蓋過先存的，看到就先等一下）
+        .mr-editing {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 10px;
+            border-bottom: 1px solid #f3e3cf;
+            background: #fdf6ec;
+            color: #b36b00;
+            font-size: 13px;
+            line-height: 1.4;
+        }
+
+        .mr-editing-dot {
+            flex-shrink: 0;
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #e6a23c;
+            animation: mr-pulse 1.2s ease-in-out infinite;
+        }
 
         // 輸入框在卡片裡不要自己的框線；全域把 textarea 設成至少 100px，這裡交給 autosize
         :deep(.el-textarea__inner) {
@@ -2304,6 +2369,17 @@ watch(
         color: #fff;
         font-size: 15px;
         cursor: pointer;
+    }
+}
+
+@keyframes mr-pulse {
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.3;
     }
 }
 </style>

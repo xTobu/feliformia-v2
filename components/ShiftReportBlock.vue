@@ -20,7 +20,8 @@
         <div v-show="open" class="rb-body">
             <div v-if="entriesLabel && entries.length" class="rb-section">{{ entriesLabel }}</div>
             <div v-for="entry in entries" :key="entry.key" class="rb-card">
-                <div class="rb-name">
+                <!-- 共編的回報（2026-11-12 起）不帶名字與時間，就不顯示這一行 -->
+                <div v-if="entry.name || entry.at" class="rb-name">
                     <span class="rb-who">{{ entry.name || '（舊資料）' }}</span>
                     <span v-if="entry.at" class="rb-time">{{ formatTime(entry.at) }}</span>
                 </div>
@@ -49,7 +50,7 @@ const props = defineProps({
     title: { type: String, required: true },
     // 標題列後面的小字，例如「10/18 晚班」；會自動接上人數與未完成數
     meta: { type: String, default: '' },
-    // [{ key, name, text, at }]，只放有內容的
+    // [{ key, name, text, at }]，只放有內容的；name、at 都沒有就只顯示內容
     entries: { type: Array, default: () => [] },
     // 上一班這個分頁沒勾完的項目 [{ key, target, content, tag }]（tag：醫療分頁的類別）
     unfinished: { type: Array, default: () => [] },

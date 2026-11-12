@@ -6,8 +6,12 @@ import { nextShiftOf } from '~/server/utils/shift'
 // ops 格式見 supabase/migrations/*_care_system.sql
 const COLUMNS = ['cats', 'tasks', 'reports']
 // 收尾分頁 2026-11-12 拿掉了，不再收收尾的回報
-const TABS = ['arrive', 'care', 'meal']
+// 備餐 2026-11-12 起沒有回報
+const TABS = ['arrive', 'care']
 const MAX_REPORT_LENGTH = 5000
+// 回報 2026-11-12 起每個分頁一段，大家共編：存在 reports.<分頁>._shared（後存的蓋過先存的）。
+// 以前一人一段的 reports.<分頁>.<user_id> 留著，畫面上合併顯示，不再寫入
+const SHARED_REPORT = '_shared'
 
 export default defineEventHandler(async (event) => {
     const userId = await requireUser(event)
@@ -25,19 +29,16 @@ export default defineEventHandler(async (event) => {
         if (!COLUMNS.includes(op?.column) || !pathOk) {
             throw createError({ statusCode: 400, message: '資料格式錯誤' })
         }
-        // 回報只能寫自己那一段：路徑一定是 [分頁, 自己的 user id]
+        // 回報只能寫共用的那一段：路徑一定是 [分頁, '_shared']
         if (op.column === 'reports') {
-            const [tab, owner, ...rest] = op.path
-            if (!TABS.includes(tab) || rest.length > 0) {
+            const [tab, key, ...rest] = op.path
+            if (!TABS.includes(tab) || key !== SHARED_REPORT || rest.length > 0) {
                 throw createError({ statusCode: 400, message: '資料格式錯誤' })
-            }
-            if (owner !== userId) {
-                throw createError({ statusCode: 403, message: '只能修改自己的回報' })
             }
         }
     }
 
-    // 回報的名字與時間由 server 填，前端只送內容
+    // 回報的最後編輯者與時間由 server 填，前端只送內容
     const reportOps = ops.filter((op) => op.column === 'reports')
     if (reportOps.length) {
         const { data: profile } = await supabase
@@ -56,7 +57,7 @@ export default defineEventHandler(async (event) => {
         }
     }
 
-    // 有人按了放風：記下「放風是人決定的」，之後就不再照飲食的「放風」項目自動套用（見 syncWithSettings）
+    // 有人按了放風：記下「放風是人決定的」，之後就不再照觀察管理的「放風」項目自動套用（見 syncWithSettings）
     const releasedOps = ops.filter((op) => op.column === 'cats' && op.path.length === 2 && op.path[1] === 'released')
     for (const op of releasedOps) {
         ops.push({ column: 'cats', path: [op.path[0], 'released_set'], value: true })
