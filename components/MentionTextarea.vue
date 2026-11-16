@@ -29,8 +29,7 @@
                 :class="{ on: i === active }"
                 @mousedown.prevent="choose(opt)"
             >
-                <span class="mt-opt-name">{{ opt.name }}</span>
-                <span class="mt-opt-kind">{{ opt.kind }}</span>
+                {{ opt.name }}
             </button>
         </div>
         </Teleport>
@@ -38,7 +37,8 @@
 </template>
 
 <script setup>
-// 回報輸入框的名字自動完成。打 @ 或全形 ＠ 跳出清單，選了直接貼上名字。
+// 回報輸入框的貓名自動完成。打 @ 或全形 ＠ 跳出清單，選了直接貼上貓名。
+// 只列貓，不列志工 —— 回報是寫給下一班看貓的狀況，不是點名。
 //
 // @ 純粹是喚出清單的按鍵，不留在文字裡，也不包任何符號 —— 回報就是一般的話，
 // 只是不用自己打字、也不會打錯名字。
@@ -64,18 +64,6 @@ const open = ref(false);
 const active = ref(0);
 const query = ref('');
 const at = ref(-1); // 觸發的那個 @ 在字串裡的位置
-
-// 志工名單等第一次打 @ 才抓 —— 多數情況用不到
-const volunteers = ref(null);
-async function ensureVolunteers() {
-    if (volunteers.value) return;
-    try {
-        volunteers.value = await $fetch('/api/volunteer/list');
-    } catch (e) {
-        console.error('load volunteers error:', e);
-        volunteers.value = [];
-    }
-}
 
 const textareaEl = () => inputRef.value?.textarea || null;
 
@@ -129,10 +117,7 @@ function place() {
     pos.top = rect.top + borderTop + top - el.scrollTop + lineHeight + 4;
 }
 
-const candidates = computed(() => [
-    ...props.cats.map((c) => ({ key: `cat-${c.cat_id}`, name: c.name, kind: '貓咪' })),
-    ...(volunteers.value || []).map((v) => ({ key: `vol-${v.recordId}`, name: v.name, kind: '志工' })),
-]);
+const candidates = computed(() => props.cats.map((c) => ({ key: c.cat_id, name: c.name })));
 
 const options = computed(() => {
     const q = query.value.toLowerCase();
@@ -162,7 +147,6 @@ function detect() {
         active.value = 0;
         place();
         open.value = true;
-        ensureVolunteers();
         return;
     }
     close();
@@ -281,8 +265,6 @@ $row: 38px;
 .mt-opt {
     display: flex;
     align-items: center;
-    justify-content: space-between;
-    gap: 10px;
     width: 100%;
     height: $row;
     padding: 0 12px;
@@ -298,14 +280,8 @@ $row: 38px;
     }
 }
 
-.mt-opt-name {
+.mt-opt {
     color: #303133;
     font-size: 14px;
-}
-
-.mt-opt-kind {
-    flex-shrink: 0;
-    color: #a8a29e;
-    font-size: 11px;
 }
 </style>
