@@ -1,102 +1,26 @@
 <template>
     <ClientOnly>
-        <div id="regular">
+        <div id="weekly">
             <h1>卯咪健康週表</h1>
-            <form @submit.prevent>
-                <div class="d_flex">
-                    <div class="W100 arrow">
-                        <el-select
-                            style="width: 100%"
-                            v-model="selectedCat"
-                            placeholder="請選擇卯咪"
-                        >
-                            <el-option
-                                v-for="cat in optionsCats"
-                                :label="cat.name.split(/[：:]/)[0]"
-                                :value="cat.id"
-                                :key="cat.id"
-                            />
-                        </el-select>
-                    </div>
-                </div>
-            </form>
 
-            <el-table
-                class="weekly-table"
-                :data="computedTableData"
-                header-cell-class-name="weekly-head"
-                cell-class-name="weekly-cell"
-                border
-                stripe
-                style="width: 100%"
-                empty-text="尚未選擇卯咪"
-            >
-                <el-table-column
-                    align="center"
-                    fixed
-                    label="班別"
-                    min-width="25%"
-                >
-                    <template #default="scope">
-                        {{ scope.row.date }} {{ scope.row.shift }}
-                    </template>
-                </el-table-column>
-                <el-table-column align="center" label="乾" min-width="18.75%">
-                    <template #default="scope">
-                        <span
-                            :class="{ warning: isWarningCell(scope.row.feed) }"
-                        >
-                            {{ scope.row.feed }}
-                        </span>
-                    </template>
-                </el-table-column>
-                <el-table-column align="center" label="罐" min-width="18.75%">
-                    <template #default="scope">
-                        <span
-                            :class="{ warning: isWarningCell(scope.row.can) }"
-                        >
-                            {{ scope.row.can }}
-                        </span>
-                    </template>
-                </el-table-column>
-                <el-table-column align="center" label="尿" min-width="18.75%">
-                    <template #default="scope">
-                        <el-icon
-                            v-if="scope.row.urine"
-                            style="color: #0071b0; font-size: 20px"
-                        >
-                            <Check />
-                        </el-icon>
-                        <el-icon v-else style="color: #740a00; font-size: 20px">
-                            <Close />
-                        </el-icon>
-                    </template>
-                </el-table-column>
-                <el-table-column align="center" label="屎" min-width="18.75%">
-                    <template #default="scope">
-                        <el-icon
-                            v-if="scope.row.feces === '正常'"
-                            style="color: #0071b0; font-size: 20px"
-                        >
-                            <Check />
-                        </el-icon>
-                        <el-icon
-                            v-else-if="scope.row.feces === false"
-                            style="color: #740a00; font-size: 20px"
-                        >
-                            <Close />
-                        </el-icon>
-                        <span
-                            v-else
-                            :class="{ warning: isWarningCell(scope.row.feces) }"
-                        >
-                            {{ scope.row.feces }}
-                        </span>
-                    </template>
-                </el-table-column>
-            </el-table>
+            <div class="weekly-pick">
+                <el-select v-model="selectedCat" placeholder="請選擇卯咪" filterable>
+                    <el-option
+                        v-for="cat in cats"
+                        :key="cat.id"
+                        :label="cat.name"
+                        :value="cat.id"
+                    />
+                </el-select>
+                <CatHealthColumns />
+            </div>
+
+            <p v-if="!selectedCat" class="weekly-state">尚未選擇卯咪</p>
+            <p v-else-if="loading" class="weekly-state">載入中...</p>
+            <p v-else-if="!entries.length" class="weekly-state">這七天沒有這隻貓的紀錄</p>
+            <!-- 由舊到新，看得出變化；貓咪檔案的健康紀錄是新的在前（配合往下翻） -->
+            <CatHealthTable v-else :entries="entries" :highlight-names="catNames" />
         </div>
-
         <template #fallback>
             <div style="text-align: center; padding: 50px">載入中...</div>
         </template>
@@ -104,8 +28,11 @@
 </template>
 
 <script setup>
-import { Check, Close } from '@element-plus/icons-vue';
-
+// 一隻貓最近七天的飲食排泄。
+//
+// 2026-11-16：資料從舊的 regulars 改讀新的 shifts（走 /api/cats/timeline），
+// 表格與貓咪檔案的「健康紀錄」分頁共用 components/CatHealthTable.vue。
+// ⚠️ 新制上線前（2026-10-18 以前）的紀錄只存在舊的 regulars 表，這頁看不到了。
 definePageMeta({
     middleware: 'auth',
 });
@@ -114,176 +41,96 @@ useHead({
     title: '卯咪健康週表',
 });
 
+const DAYS = 7;
+
 const { $dayjs } = useNuxtApp();
 const route = useRoute();
+const supabase = useSupabaseClient();
 
-// State
+const cats = ref([]);
 const selectedCat = ref('');
-const optionsCats = ref([]);
-const dataWeekly = ref([]);
+const entries = ref([]);
+const loading = ref(false);
 
-// Computed
-const computedTableData = computed(() => {
-    if (!selectedCat.value) {
-        return [];
-    }
-
-    const arrCatWeek = dataWeekly.value.reduce(
-        (accumulator, { id, date, shift, cats }) => {
-            const cat = cats.find(
-                (item) => item.cat.recordId == selectedCat.value
-            );
-            if (!cat) {
-                return accumulator;
-            }
-
-            const {
-                feed,
-                feed_detail,
-                can,
-                can_detail,
-                feces,
-                feces_warning,
-                urine,
-            } = cat;
-
-            // 映射表
-            const shiftMap = {
-                morning: '早',
-                night: '晚',
-            };
-            const markMap = {
-                0: '沒吃',
-                25: '吃1/3',
-                50: '吃1/2',
-                75: '吃2/3',
-                100: '吃光',
-            };
-
-            // 班別 - 日期
-            const newDate = $dayjs(date).format('MM/DD');
-
-            // 班別 - 早晚班
-            const newShift = shiftMap[shift];
-
-            // 乾
-            let newFeed = '';
-            if (feed) {
-                newFeed = markMap[feed_detail];
-            }
-
-            // 罐
-            let newCan = '';
-            if (can) {
-                newCan = markMap[can_detail];
-            }
-
-            // 尿
-            let newUrine = urine;
-
-            // 便
-            let newFeces = false;
-            if (feces) {
-                newFeces = feces_warning;
-            }
-
-            return [
-                ...accumulator,
-                {
-                    id,
-                    date: newDate,
-                    shift: newShift,
-                    feed: newFeed,
-                    can: newCan,
-                    feces: newFeces,
-                    urine: newUrine,
-                },
-            ];
-        },
-        []
-    );
-
-    return arrCatWeek;
+// 回報彈窗裡要標起來的名字：選到的那隻貓與牠的暱稱
+const catNames = computed(() => {
+    const cat = cats.value.find((c) => c.id === selectedCat.value);
+    return cat ? [cat.name, ...(cat.nicknames || [])].filter(Boolean) : [];
 });
 
-// Methods
-async function InitWeekly() {
+let generation = 0; // 換貓換很快時，舊的請求回來不要蓋掉新的
+
+async function loadEntries() {
+    entries.value = [];
+    if (!selectedCat.value) return;
+
+    const run = ++generation;
+    loading.value = true;
     try {
-        const data = await $fetch('/api/regular/between', {
-            method: 'POST',
-            body: {
-                dateStart: $dayjs().subtract(7, 'day').format('YYYY-MM-DD'),
-                dateEnd: $dayjs().format('YYYY-MM-DD'),
+        const res = await $fetch('/api/cats/timeline', {
+            query: {
+                catId: selectedCat.value,
+                from: $dayjs().subtract(DAYS - 1, 'day').format('YYYY-MM-DD'),
             },
         });
-        dataWeekly.value = data;
+        if (run !== generation) return;
+        // API 是新的在前，這頁由舊到新排
+        entries.value = [...res.entries].reverse();
     } catch (e) {
-        console.error('InitWeekly error:', e);
+        console.error('load weekly error:', e);
+    } finally {
+        if (run === generation) loading.value = false;
     }
 }
 
-async function InitCatList() {
-    const queryCat = route.query.cat;
+watch(selectedCat, loadEntries);
 
-    const objCats = dataWeekly.value.reduce((accumulator, currentValue) => {
-        let cats = {};
-        currentValue.cats.forEach((dataCat) => {
-            cats[dataCat.cat.recordId] = dataCat.cat.name;
-            if (queryCat && queryCat == dataCat.cat.recordId) {
-                selectedCat.value = dataCat.cat.recordId;
-            }
-        });
-        return { ...accumulator, ...cats };
-    }, {});
-
-    const arrCats = Object.keys(objCats).map((key) => ({
-        id: key,
-        name: objCats[key],
-    }));
-
-    optionsCats.value = arrCats;
-}
-
-function isWarningCell(status) {
-    return ~['沒吃', '軟便', '拉稀'].indexOf(status);
-}
-
-// Lifecycle
 onMounted(async () => {
-    await InitWeekly();
-    await InitCatList();
+    const { data, error } = await supabase
+        .from('cat_profiles')
+        .select('id, name, nicknames')
+        .order('sort_order');
+
+    if (error) {
+        console.error('load cats error:', error);
+        return;
+    }
+
+    cats.value = data || [];
+
+    // /weekly?cat=<id> 可以直接開到某一隻（值班表、貓咪檔案連過來用）
+    const fromQuery = Number(route.query.cat);
+    if (fromQuery && cats.value.some((c) => c.id === fromQuery)) selectedCat.value = fromQuery;
 });
 </script>
 
-<style lang="scss">
-.el-table {
-    &.weekly-table {
-        margin: 0 0 48px 0;
-    }
-    .weekly-head {
-        height: 36px;
-        background: #8e8783 !important;
-        color: #fff;
-        font-size: 16px;
-        line-height: 16px;
-        font-weight: 400;
-        padding: 4px 0;
-    }
-    .weekly-cell {
-        > .cell {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-        }
-    }
-    span.warning {
-        color: #b7282e;
+<style lang="scss" scoped>
+#weekly {
+    max-width: 600px;
+    margin: 0 auto;
+    padding-bottom: 80px;
+}
+
+.weekly-pick {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+
+    // 選單吃掉剩下的寬，欄位鈕固定在右邊
+    .el-select {
+        flex: 1;
+        min-width: 0;
     }
 }
 
-#regular {
-    a {
-        display: block;
-    }
+.weekly-state {
+    margin: 0;
+    padding: 40px 20px;
+    border-radius: 8px;
+    background: #f9f9f9;
+    color: #909399;
+    font-size: 14px;
+    text-align: center;
 }
 </style>

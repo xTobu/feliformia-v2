@@ -428,11 +428,11 @@
                         <div v-if="editingNames.length" class="mr-editing">
                             <span class="mr-editing-dot"></span>{{ editingNames.join('、') }} 正在編輯…
                         </div>
-                        <el-input
-                            type="textarea"
+                        <!-- 打 @ 可以標這一班的貓或志工，插入純文字「@名字 」 -->
+                        <MentionTextarea
                             v-model="drafts[tab]"
                             :disabled="isDisabled"
-                            :autosize="{ minRows: 3, maxRows: 12 }"
+                            :cats="formData.cats"
                             placeholder="寫給下一班…"
                             @input="saveReport(tab)"
                             @blur="stopTyping(tab)"
@@ -1161,7 +1161,11 @@ const tabOfPath = (value) => (TABS.includes(value) ? value : 'arrive');
 
 function setTab(value) {
     tab.value = value;
-    router.replace({ path: tabPath(value), query: route.query });
+    const path = tabPath(value);
+    // 已經在這個分頁就不要再推一筆，不然連點同一個分頁會塞滿瀏覽紀錄
+    if (route.path === path) return;
+    // push 不是 replace —— 要讓上一頁能回到前一個分頁（2026-11-16）
+    router.push({ path, query: route.query });
 }
 
 // 上一頁、下一頁或點連結換了路徑上的分頁

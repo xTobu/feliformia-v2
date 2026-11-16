@@ -67,8 +67,10 @@
                     </button>
                 </div>
 
-                <!-- ========== 日常：一班一段，新的在前，往下滑載入更早的 ========== -->
-                <div v-show="view === 'timeline'">
+                <!-- ========== 健康紀錄／日常：共用同一份資料（/api/cats/timeline）與同一組日期篩選、下滑載入。
+                     差別只在怎麼呈現：健康紀錄排成表、日常一班一張卡。
+                     日常 2026-11-16 起不在分頁列上，但 /cats/<id>/timeline 還進得去 ========== -->
+                <div v-show="view !== 'profile'">
                     <!-- 日期鈕（點開有快選與自訂日期）。
                          原本右邊還有篩選鈕（值班、未完成、留言、照片），2026-11-12 留言照片與未完成都拿掉了，只剩值班，篩選也拿掉 -->
                     <div class="tl-filters">
@@ -87,6 +89,8 @@
                                     <Icon icon="mdi:close" width="13" />
                                 </button>
                             </span>
+                            <!-- 欄位選擇：跟日期鈕同一列，靠右（.tl-filter-row 是 space-between） -->
+                            <CatHealthColumns v-if="view === 'health'" />
                         </div>
                         <div v-if="dateOpen" class="tl-date-panel">
                             <div class="tl-quick">
@@ -127,7 +131,18 @@
                         </div>
                     </div>
 
-                    <section v-for="entry in visibleEntries" :key="entry.shift_id" class="tl-entry">
+                    <!-- 健康紀錄：一班一列的表。與 /weekly 共用同一個元件 -->
+                    <CatHealthTable
+                        v-if="view === 'health'"
+                        :entries="visibleEntries"
+                        :highlight-names="catNames"
+                    />
+
+                    <section
+                        v-for="entry in (view === 'timeline' ? visibleEntries : [])"
+                        :key="entry.shift_id"
+                        class="tl-entry"
+                    >
                         <!-- 一班一區：值班（飲食如廁、放風、未完成）。留言、照片 2026-11-12 拿掉了 -->
                         <div class="tl-card">
                             <!-- 卡片頭（淡底色）：日期、班別（早班太陽、晚班月亮）、進行中；點了到值班記錄表的那一班 -->
@@ -431,9 +446,11 @@ const { $dayjs } = useNuxtApp();
 const { avatarUrl } = useAvatar();
 const { isAdmin } = useProfile();
 
+// 2026-11-16：分頁只剩小檔案與健康紀錄，小檔案排第一（bare URL 也是它）。
+// 「日常」從分頁列拿掉但功能留著 —— /cats/<id>/timeline 直接開還看得到。
 const VIEW_TABS = [
-    { key: 'timeline', label: '日常' },
     { key: 'profile', label: '小檔案' },
+    { key: 'health', label: '健康紀錄' },
 ];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
 const WEEKDAYS = '日一二三四五六';
@@ -441,13 +458,16 @@ const WEEKDAYS = '日一二三四五六';
 const catId = computed(() => Number(route.params.id));
 const cat = ref(null);
 const loadingCat = ref(true);
-// 日常／小檔案記在網址路徑（/cats/<id>、/cats/<id>/profile），重新整理或分享連結都停在同一個分頁；
-// 上一頁、下一頁也會跟著切。不認得的路徑當成日常
+// 分頁記在網址路徑：/cats/<id> 是小檔案、/cats/<id>/health 是健康紀錄、
+// /cats/<id>/timeline 是（已從分頁列拿掉的）日常。重新整理或分享連結都停在同一個分頁，
+// 上一頁、下一頁也會跟著切。不認得的路徑當成小檔案
 const router = useRouter();
-const viewOf = (tab) => (tab === 'profile' ? 'profile' : 'timeline');
+const VIEW_PATHS = { health: 'health', timeline: 'timeline' };
+const viewOf = (tab) => (tab === 'health' ? 'health' : tab === 'timeline' ? 'timeline' : 'profile');
 const view = ref(viewOf(route.params.tab));
 watch(view, (v) => {
-    const path = v === 'profile' ? `/cats/${route.params.id}/profile` : `/cats/${route.params.id}`;
+    const suffix = VIEW_PATHS[v] ? `/${VIEW_PATHS[v]}` : '';
+    const path = `/cats/${route.params.id}${suffix}`;
     if (route.path !== path) router.push(path);
 });
 watch(
@@ -481,6 +501,9 @@ const stayLine = computed(() => {
 });
 
 const fullDate = (date) => $dayjs(date).format('YYYY/MM/DD');
+// 回報彈窗裡要標起來的名字：這隻貓的正式名稱與暱稱
+const catNames = computed(() => [cat.value?.name, ...(cat.value?.nicknames || [])].filter(Boolean));
+
 const dateLabel = (date) => {
     const d = $dayjs(date);
     const year = d.year() === $dayjs().year() ? '' : `${d.year()}/`;
@@ -587,7 +610,7 @@ async function loadMore() {
 // 載完畫面還沒滿，底部那行還看得到就再往前載
 function fillViewport() {
     const el = sentinel.value;
-    if (!el || !hasMore.value || loadError.value || view.value !== 'timeline') return;
+    if (!el || !hasMore.value || loadError.value || view.value === 'profile') return;
     if (el.getBoundingClientRect().top < window.innerHeight + 200) loadMore();
 }
 
