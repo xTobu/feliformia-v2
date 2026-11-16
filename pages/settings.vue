@@ -64,6 +64,35 @@
             <p v-if="profileError" class="error">{{ profileError }}</p>
         </section>
 
+        <!-- 顯示偏好。有志工反映「還沒做」的標示會造成壓力，讓每個人自己決定要不要看 -->
+        <section class="settings-section">
+            <h2>偏好設定</h2>
+
+            <div class="pref-row">
+                <div class="pref-text">
+                    <p class="pref-name">檢核提示</p>
+                    <p class="pref-desc">拍照確認的按鈕與醫療的打勾框。關掉之後看不到，也就不能打勾。</p>
+                </div>
+                <el-switch
+                    :model-value="showCheckHint"
+                    :loading="prefSaving === 'show_check_hint'"
+                    @change="savePref('show_check_hint', $event)"
+                />
+            </div>
+
+            <div class="pref-row">
+                <div class="pref-text">
+                    <p class="pref-name">待辦提示</p>
+                    <p class="pref-desc">分頁名稱後面，還沒完成幾項的橘色圈圈。</p>
+                </div>
+                <el-switch
+                    :model-value="showTodoBadge"
+                    :loading="prefSaving === 'show_todo_badge'"
+                    @change="savePref('show_todo_badge', $event)"
+                />
+            </div>
+        </section>
+
         <!-- LINE 提醒 -->
         <section class="settings-section">
             <h2>LINE 提醒</h2>
@@ -176,6 +205,8 @@ const {
     avatarPath,
     loadProfile: reloadProfile,
     getUserId,
+    showCheckHint,
+    showTodoBadge,
 } = useProfile();
 const { avatarUrl, uploadAvatar, removeAvatar } = useAvatar();
 
@@ -355,6 +386,34 @@ async function unbindLine() {
 
 onMounted(loadLineStatus);
 
+// 顯示偏好。兩個開關共用一個存檔函式，欄位名稱直接當參數。
+// 先改畫面再寫資料庫 —— 開關要立刻有反應，失敗才轉回去。
+const prefSaving = ref(null);
+const PREF_STATE = { show_check_hint: showCheckHint, show_todo_badge: showTodoBadge };
+
+async function savePref(column, value) {
+    const userId = getUserId();
+    if (!userId) return;
+
+    const state = PREF_STATE[column];
+    const before = state.value;
+    state.value = value;
+    prefSaving.value = column;
+
+    const { error } = await supabase
+        .from('profiles')
+        .update({ [column]: value, updated_at: new Date().toISOString() })
+        .eq('id', userId);
+
+    prefSaving.value = null;
+
+    if (error) {
+        state.value = before;
+        console.error('儲存偏好失敗:', error);
+        ElMessage.error('儲存失敗，請再試一次');
+    }
+}
+
 async function saveProfile() {
     if (!isNicknameValid.value) {
         profileError.value = '請輸入名稱';
@@ -448,6 +507,47 @@ async function updatePassword() {
 
 <style scoped lang="scss">
 // 說明文字，比內文小一級的灰字
+.pref-row {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 12px 0;
+    border-bottom: 1px solid #f0f0f0;
+
+    &:first-of-type {
+        padding-top: 0;
+    }
+
+    &:last-of-type {
+        padding-bottom: 0;
+        border-bottom: none;
+    }
+
+    // el-switch 預設會被全域的 button 樣式拉寬
+    :deep(.el-switch) {
+        flex-shrink: 0;
+        margin-top: 2px;
+    }
+}
+
+.pref-text {
+    text-align: left;
+}
+
+.pref-name {
+    margin: 0;
+    color: #303133;
+    font-size: 14px;
+}
+
+.pref-desc {
+    margin: 2px 0 0;
+    color: #909399;
+    font-size: 12px;
+    line-height: 1.6;
+}
+
 .hint {
     margin: 0 0 12px;
     color: #909399;

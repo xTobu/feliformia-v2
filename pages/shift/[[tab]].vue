@@ -245,6 +245,7 @@
                                         </div>
                                         <div class="done">
                                             <el-checkbox
+                                                v-if="showCheckHint"
                                                 class="task-check"
                                                 v-model="item.done"
                                                 :disabled="isDisabled"
@@ -286,6 +287,7 @@
                                         </div>
                                         <div class="done">
                                             <el-checkbox
+                                                v-if="showCheckHint"
                                                 class="task-check"
                                                 v-model="item.done"
                                                 :disabled="isDisabled"
@@ -382,7 +384,7 @@
                                                     it.source
                                                 }}</span>
                                                 <el-checkbox
-                                                    v-if="isMealMed(it.item)"
+                                                    v-if="showCheckHint && isMealMed(it.item)"
                                                     v-model="it.item.done"
                                                     class="task-check diet-done"
                                                     :disabled="isDisabled"
@@ -610,7 +612,7 @@ const route = useRoute();
 const router = useRouter();
 const config = useRuntimeConfig();
 const supabase = useSupabaseClient();
-const { nickname, getUserId, isAdmin } = useProfile();
+const { nickname, getUserId, isAdmin, showCheckHint, showTodoBadge } = useProfile();
 
 // State
 const loading = ref(true);
@@ -961,7 +963,10 @@ const observeRows = computed(() => {
     }
     return map;
 });
-const observeRowsOf = (cat, tab = 'arrive') => (observeRows.value.get(cat.cat_id) || []).filter((r) => r.tab === tab);
+// 關掉「檢核提示」就回空陣列。膠囊的 v-for 與外層 v-if 的判斷都走這個函式，
+// 所以一個地方關掉，飲食如廁與備餐兩個分頁、接在貓名後與另起一列的四種情況全都不顯示。
+const observeRowsOf = (cat, tab = 'arrive') =>
+    showCheckHint.value ? (observeRows.value.get(cat.cat_id) || []).filter((r) => r.tab === tab) : [];
 // 飲食如廁分頁：膠囊接在貓名後面；上一班放風的卡片右邊有放風標籤，只有一個膠囊才擠得下
 const observeInline = (cat) => !cat.prev_released || observeRowsOf(cat).length <= 1;
 // ---- 照護項目的附圖（後台飲食、醫療管理加的）：值班表的快照只記項目 id，附圖直接讀項目表，
@@ -1042,7 +1047,8 @@ function prevBlock(key) {
     };
 }
 
-// 分頁上的紅色數字：只有醫療分頁顯示（醫療一定要做完），其他分頁不顯示
+// 分頁上的紅色數字：只有醫療分頁顯示（醫療一定要做完），其他分頁不顯示。
+// 關掉「待辦提示」就不給 remaining，template 的 v-if 自然不渲染（2026-11-16）
 const tabList = computed(() => {
     const undone = (list) => list.filter((i) => !i.done).length;
     const care = medicalSections.value.find((s) => s.tab === 'care');
@@ -1051,9 +1057,10 @@ const tabList = computed(() => {
         {
             value: 'care',
             label: TAB_LABELS.care,
-            remaining:
-                care.cats.reduce((sum, e) => sum + undone(e.items), 0) +
-                care.taskGroups.reduce((sum, g) => sum + undone(g.items), 0),
+            remaining: showTodoBadge.value
+                ? care.cats.reduce((sum, e) => sum + undone(e.items), 0) +
+                  care.taskGroups.reduce((sum, g) => sum + undone(g.items), 0)
+                : 0,
         },
         { value: 'meal', label: TAB_LABELS.meal },
     ];
@@ -1803,11 +1810,16 @@ watch(
         height: 16px;
         margin-left: 3px;
         padding: 0 4px;
+        border: 1px solid #edbb85;
         border-radius: 8px;
-        background: #b33a39;
-        color: #fff;
+        box-sizing: border-box;
+        // 跟膠囊、打勾框完全同一組色（淡橘底、深橘字、淡橘框）。
+        // 2026-11-16 從全站紅 #b33a39 改橘 —— 紅色的強制感太重。
+        background: #fdf4e9;
+        color: #a8682d;
         font-size: 11px;
-        line-height: 16px;
+        // 外框佔掉 2px，扣掉才跟原本一樣高
+        line-height: 14px;
         vertical-align: 1px;
     }
 }
@@ -1877,7 +1889,7 @@ watch(
     }
 
 
-    // 打勾的事項（醫療、隨餐藥）：沒勾的框淡紅色（還沒做）。誰、幾點勾的只存不顯示（2026-11-12 起）
+    // 打勾的事項（醫療、隨餐藥）：沒勾的框淡橘色（還沒做）。誰、幾點勾的只存不顯示（2026-11-12 起）
     // 框在卡片最右邊，字比框寬：跟框靠右對齊，才不會超出卡片
     .task-check {
         display: inline-flex;
@@ -1897,8 +1909,8 @@ watch(
         }
 
         &:not(.is-checked) :deep(.el-checkbox__inner) {
-            border-color: #e9a3a3;
-            background: #fdf0f0;
+            border-color: #edbb85;
+            background: #fdf4e9;
         }
     }
 
@@ -2265,7 +2277,9 @@ watch(
 
 // ---- 觀察管理（拍剩食、拍貓砂、拍留餐）----
 // 觀察管理的膠囊（剛到要拍、離開要拍）：前面一個圖示（沒拍是相機、拍了是勾），
-// 沒拍的淡紅色（還沒做，跟沒勾的框同一個顏色）、拍了藍色。
+// 沒拍的淡橘色（還沒做，跟沒勾的框同一個顏色）、拍了藍色。
+// 橘色是從照片類型膠囊的暖橘 #e08a3c 壓暗來的，同一件事兩個地方同色系。
+// 2026-11-16 從紅色改橘 —— 紅色的強制感太重，志工反映不舒服。
 // 點了就打勾、再點取消（2026-11-12 起拿掉照片）。在貓名那列時跟貓名標籤垂直置中（標題列 align-items: center）
 .observe-chip {
     display: inline-flex;
@@ -2276,11 +2290,11 @@ watch(
     height: 24px;
     margin: 0 0 0 2px;
     padding: 0 10px 0 8px;
-    border: 1px solid #e9a3a3;
+    border: 1px solid #edbb85;
     border-radius: 12px;
-    background: #fdf0f0;
+    background: #fdf4e9;
     box-sizing: border-box;
-    color: #c0504d;
+    color: #a8682d;
     font-size: 13px;
     line-height: 22px;
     white-space: nowrap;

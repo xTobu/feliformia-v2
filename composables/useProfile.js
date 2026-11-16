@@ -10,6 +10,12 @@ export const useProfile = () => {
     // 預設 true：查不到或查詢失敗時放行，跟 server 端的 requireUser() 一致。
     // 這裡 fail-open 是刻意的 —— 一次查詢打嗝就把全體志工鎖在門外太危險。
     const isActive = useState('isActive', () => true)
+    // 顯示偏好（2026-11-16）。預設 true —— 讀不到就維持現狀，
+    // 不要因為一次查詢失敗就把全體志工的提示關掉。
+    //   showCheckHint：拍照確認的膠囊與醫療的打勾框
+    //   showTodoBadge：分頁上未完成數量的紅色數字
+    const showCheckHint = useState('showCheckHint', () => true)
+    const showTodoBadge = useState('showTodoBadge', () => true)
 
     // 取得 user id（相容不同版本）
     const getUserId = () => user.value?.id || user.value?.sub
@@ -29,7 +35,7 @@ export const useProfile = () => {
         try {
             const { data, error } = await supabase
                 .from('profiles')
-                .select('nickname, is_admin, is_active, avatar_path')
+                .select('nickname, is_admin, is_active, avatar_path, show_check_hint, show_todo_badge')
                 .eq('id', userId)
                 .single()
 
@@ -37,6 +43,9 @@ export const useProfile = () => {
                 nickname.value = data.nickname
                 avatarPath.value = data.avatar_path || null
                 isAdmin.value = data.is_admin || false
+                // 只有明確 false 才關，null／欄位還沒建好都當開著
+                showCheckHint.value = data.show_check_hint !== false
+                showTodoBadge.value = data.show_todo_badge !== false
                 // 只有明確被標成 false 才算停用
                 isActive.value = data.is_active !== false
             }
@@ -53,6 +62,8 @@ export const useProfile = () => {
         avatarPath.value = null
         isAdmin.value = false
         isActive.value = true
+        showCheckHint.value = true
+        showTodoBadge.value = true
         profileLoaded.value = false
     }
 
@@ -76,6 +87,8 @@ export const useProfile = () => {
         isAdmin,
         avatarPath,
         isActive,
+        showCheckHint,
+        showTodoBadge,
         displayName,
         loadProfile,
         clearProfile,
