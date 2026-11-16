@@ -1,5 +1,6 @@
 import { requireUser } from '~/server/utils/auth'
-import { loadUserEvents, todayInTaipei } from '~/server/utils/calendar-today'
+import { loadUserEvents } from '~/server/utils/calendar-today'
+import { todayInTaipei } from '~/server/utils/shift'
 import { CalendarTypeLabel } from '~/server/utils/constant'
 
 // 登入者今天的活動，給 SiteMenu（全站選單）的「今日活動提醒」彈窗用。

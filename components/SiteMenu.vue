@@ -235,6 +235,10 @@ async function GetNotice() {
 </script>
 
 <style lang="scss" scoped>
+// sass:list 要寫在最前面（@use 必須是樣式表的第一個規則）。
+// 全域的 nth() 在 Dart Sass 3.0 會被移除，改用 list.nth()
+@use 'sass:list';
+
 .drawer__content {
     width: 100%;
     margin: 0 auto;
@@ -368,8 +372,8 @@ $todo-type-colors: (
 );
 
 @each $name, $pair in $todo-type-colors {
-    $fg: nth($pair, 1);
-    $bg: nth($pair, 2);
+    $fg: list.nth($pair, 1);
+    $bg: list.nth($pair, 2);
 
     .todo-list li.type-#{$name} {
         border-left-color: $fg;

@@ -1,11 +1,5 @@
-import dayjs from 'dayjs'
-import utc from 'dayjs/plugin/utc.js'
-import timezone from 'dayjs/plugin/timezone.js'
 import { supabase } from '~/server/utils/supabase'
 import { loadRosterSource, eventPeopleIds } from '~/server/utils/roster'
-
-dayjs.extend(utc)
-dayjs.extend(timezone)
 
 // 「某個人某一天有份的活動」。
 //
@@ -15,11 +9,10 @@ dayjs.extend(timezone)
 //
 // 回傳的是 calendar_events 的原始 row，呼叫端自己決定怎麼呈現：
 // 端點轉成 JSON 給前端，webhook 丟給 buildDigest() 組 LINE 訊息。
-
-// 伺服器跑在 UTC，要換算成台灣時間才會是「今天」
-export function todayInTaipei() {
-    return dayjs().tz('Asia/Taipei').format('YYYY-MM-DD')
-}
+//
+// 「今天」用 server/utils/shift.js 的 todayInTaipei()。這裡本來也有一份同名的，
+// 行為一樣但 Nitro 的 auto-import 會抱怨重複、而且只會留其中一份 ——
+// 哪天兩邊改得不一樣就會變成很難查的 bug，所以收斂成一份。
 
 export async function loadUserEvents(userId, date) {
     const { data: events, error } = await supabase

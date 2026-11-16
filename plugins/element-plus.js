@@ -1,10 +1,16 @@
-import ElementPlus from 'element-plus'
+import ElementPlus, { ID_INJECTION_KEY, ZINDEX_INJECTION_KEY } from 'element-plus'
 import zhTw from 'element-plus/es/locale/lang/zh-tw'
 
 export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.vueApp.use(ElementPlus, {
     locale: zhTw,
   })
+
+  // SSR 必備。沒有這兩個 provider 的話，Element Plus 的元件 id 與 z-index
+  // 在伺服器和瀏覽器會各自從頭算起，對不起來就是 hydration mismatch。
+  // 官方建議的做法，見 element-plus 的 SSR 說明。
+  nuxtApp.vueApp.provide(ID_INJECTION_KEY, { prefix: 1024, current: 0 })
+  nuxtApp.vueApp.provide(ZINDEX_INJECTION_KEY, { current: 0 })
 
   if (import.meta.client) placeViewerCloseOnImage()
 })
