@@ -13,9 +13,9 @@
                         # 注意事項
                     </li> -->
 
-                    <!-- 新版（先行版）：值班表與貓咪列表，跟下面的舊版並行 -->
+                    <!-- 新版（先行版）：值班紀錄（2026-11-17 起改名，跟首頁一致）與貓咪列表，跟下面的舊版並行 -->
                     <li class="red" @click="goto('/shift')">
-                        <Icon icon="mdi:clipboard-check-outline" width="17" /> <span>值班表</span>
+                        <Icon icon="mdi:clipboard-check-outline" width="17" /> <span>值班紀錄</span>
                         <span class="beta">先行版</span>
                     </li>
                     <li class="red" @click="goto('/cats')">

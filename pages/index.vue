@@ -4,16 +4,13 @@
         <NuxtLink v-if="isAdmin" to="/admin" class="admin-link">
             管理後台
         </NuxtLink>
-        <!-- 先行版：新版值班表與貓咪列表（跟下面的舊版並行，名稱同右上選單） -->
-        <div class="or">先行版</div>
-        <NuxtLink class="btn" to="/shift">值班表</NuxtLink>
-        <NuxtLink class="btn" to="/cats">貓咪列表</NuxtLink>
-        <div class="or">今日照護</div>
-        <NuxtLink class="btn" to="/regular">飲食與如廁紀錄</NuxtLink>
-        <NuxtLink class="btn" to="/medicine">餵藥及特殊飲食紀錄</NuxtLink>
-        <div class="or">協作與安排</div>
-        <NuxtLink class="btn" to="/vote">值班投票</NuxtLink>
-        <NuxtLink class="btn" to="/calendar">行事曆</NuxtLink>
+        <!-- 2026-11-17 起首頁只放三個入口，不分區：新版值班記錄表、值班投票、行事曆。
+             貓咪列表、舊版的飲食與如廁紀錄、餵藥及特殊飲食紀錄從首頁拿掉（右上選單還在） -->
+        <div class="entries">
+            <NuxtLink class="btn" to="/shift">值班紀錄</NuxtLink>
+            <NuxtLink class="btn" to="/vote">值班投票</NuxtLink>
+            <NuxtLink class="btn" to="/calendar">行事曆</NuxtLink>
+        </div>
         <!-- <a
             href="/weekly"
             target="_blank"
@@ -60,14 +57,27 @@ const { isAdmin } = useProfile();
         display: block;
     }
 
+    // 管理後台：標題下的淡藍小膠囊（只有管理員看得到）。蓋掉全域 a 的 display: block、底線、下邊距
     .admin-link {
+        display: inline-block;
         margin: 0;
+        padding: 2px 12px;
+        border: 1px solid #b9d3e3;
+        border-radius: 999px;
+        background: #eef5f9;
+        color: #4a7fa0;
         font-size: 13px;
-        color: #6da2c2;
+        line-height: 20px;
+        text-decoration: none;
     }
 
     .link {
         color: #b33a39; 
+    }
+
+    // 三個入口跟標題（管理後台連結）之間留白，原本由分區小標題撐開
+    .entries {
+        margin-top: 30px;
     }
     .or {
         font-size: 13px;
