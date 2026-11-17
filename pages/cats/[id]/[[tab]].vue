@@ -131,11 +131,14 @@
                         </div>
                     </div>
 
-                    <!-- 健康紀錄：一班一列的表。與 /weekly 共用同一個元件 -->
+                    <!-- 每日紀錄：一班一列的表。與 /weekly 共用同一個元件。
+                         限制高度、表頭固定，表格自己捲；捲到表格底部才載入更早的班（near-end），不看整頁的 sentinel -->
                     <CatHealthTable
                         v-if="view === 'health'"
                         :entries="healthEntries"
                         :highlight-names="catNames"
+                        :max-height="HEALTH_TABLE_HEIGHT"
+                        @near-end="loadMore"
                     />
 
                     <section
@@ -617,9 +620,13 @@ async function loadMore() {
 }
 
 // 載完畫面還沒滿，底部那行還看得到就再往前載
+// 每日紀錄的表格高度：畫面高度扣掉上面的頁首、分頁、日期列，至少 360px
+const HEALTH_TABLE_HEIGHT = 'max(360px, calc(100dvh - 200px))';
+
+// 每日紀錄的表格自己捲（near-end 才載入），這裡只管日常的卡片
 function fillViewport() {
     const el = sentinel.value;
-    if (!el || !hasMore.value || loadError.value || view.value === 'profile') return;
+    if (!el || !hasMore.value || loadError.value || view.value !== 'timeline') return;
     if (el.getBoundingClientRect().top < window.innerHeight + 200) loadMore();
 }
 
@@ -667,7 +674,9 @@ let observer = null;
 watch(sentinel, (el) => {
     observer?.disconnect();
     if (!el) return;
-    observer = new IntersectionObserver((list) => list[0].isIntersecting && loadMore(), { rootMargin: '200px' });
+    observer = new IntersectionObserver((list) => list[0].isIntersecting && view.value === 'timeline' && loadMore(), {
+        rootMargin: '200px',
+    });
     observer.observe(el);
 });
 onBeforeUnmount(() => observer?.disconnect());

@@ -20,7 +20,13 @@
             <!-- 沒人打開過的班 API 也會回（missing），所以看的是有沒有任何一班真的有資料 -->
             <p v-else-if="!entries.some((e) => e.in_shift)" class="weekly-state">這七天沒有這隻貓的紀錄</p>
             <!-- 由舊到新，看得出變化；貓咪檔案的健康紀錄是新的在前（配合往下翻） -->
-            <CatHealthTable v-else :entries="entries" :highlight-names="catNames" />
+            <!-- 限制高度、表頭固定（七天最多 14 列，大多一頁就放得下） -->
+            <CatHealthTable
+                v-else
+                :entries="entries"
+                :highlight-names="catNames"
+                max-height="max(360px, calc(100dvh - 200px))"
+            />
         </div>
         <template #fallback>
             <div style="text-align: center; padding: 50px">載入中...</div>

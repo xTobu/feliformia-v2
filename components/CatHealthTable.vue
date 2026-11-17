@@ -1,6 +1,14 @@
 <template>
     <div class="hr-wrap">
-        <div ref="scrollEl" class="hr-scroll" :class="{ stuck }" @scroll.passive="onScroll">
+        <!-- maxHeight：限制高度，表格自己上下捲、表頭固定在上面（左邊班別兩欄本來就固定）；
+             捲到接近底部發 near-end，頁面拿來載入更早的班 -->
+        <div
+            ref="scrollEl"
+            class="hr-scroll"
+            :class="{ stuck, limited: !!maxHeight }"
+            :style="maxHeight ? { maxHeight } : null"
+            @scroll.passive="onScroll"
+        >
             <table class="hr-table">
             <!-- 欄寬寫在 colgroup：班別是兩欄（日期、早晚），表頭合成一格「班別」 -->
             <colgroup>
@@ -11,7 +19,7 @@
             <thead>
                 <tr>
                     <th class="hr-shift-col" colspan="2">班別</th>
-                    <th v-for="col in visibleCols" :key="col.key">
+                    <th v-for="col in visibleCols" :key="col.key" :class="col.group ? `hr-g-${col.group}` : null">
                         {{ col.label }}
                     </th>
                 </tr>
@@ -98,7 +106,10 @@ const props = defineProps({
     linkShift: { type: Boolean, default: true },
     // 回報彈窗裡要標藍底的名字（現在看的這隻貓與牠的暱稱）
     highlightNames: { type: Array, default: () => [] },
+    // 表格最高多高（CSS 長度）；給了就表格自己捲、表頭固定，沒給就整張攤開
+    maxHeight: { type: String, default: '' },
 });
+const emit = defineEmits(['near-end']);
 
 const { $dayjs } = useNuxtApp();
 
@@ -107,8 +118,23 @@ const { $dayjs } = useNuxtApp();
 const scrollEl = ref(null);
 const stuck = ref(false);
 const onScroll = () => {
-    stuck.value = (scrollEl.value?.scrollLeft || 0) > 0;
+    const el = scrollEl.value;
+    stuck.value = (el?.scrollLeft || 0) > 0;
+    checkNearEnd();
 };
+
+// 限制高度時：捲到離底部 120px 內、或內容還沒填滿框（沒有捲軸），就請頁面再載入更早的班
+function checkNearEnd() {
+    const el = scrollEl.value;
+    if (!props.maxHeight || !el) return;
+    if (el.scrollTop + el.clientHeight >= el.scrollHeight - 120) emit('near-end');
+}
+watch(
+    () => props.entries.length,
+    () => nextTick(checkNearEnd)
+);
+// 從別的分頁切過來時資料可能已經在了，掛上去時也檢查一次
+onMounted(() => nextTick(checkNearEnd));
 
 // from：對應 intakeCells() 回傳的 label（表頭用短的，格子裡的 label 是長的）。
 // 放風不在 intake 裡，另外從 entry.released 取
@@ -212,15 +238,19 @@ function rowCells(entry) {
 </script>
 
 <style lang="scss" scoped>
-// 欄位可以自選，開滿時手機放不下，所以整張表可以左右捲
+// 欄位可以自選，開滿時手機放不下，所以整張表可以左右捲；限制高度時也上下捲（表頭固定）
 .hr-scroll {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+
+    &.limited {
+        overflow-y: auto;
+    }
 }
 
 .hr-table {
     width: 100%;
-    // 欄位全開時至少要這麼寬（班別 92 ＋ 四個 52 ＋ 兩個 80 ＋ 68 ＋ 值班 120），
+    // 欄位全開時至少要這麼寬（班別 92 ＋ 四個 52 ＋ 兩個放風 80 ＋ 被提及 68 ＋ 值班 120），
     // 不夠就讓它捲，不要把欄位擠扁
     min-width: 650px;
     // ⚠️ 一定要 separate 不能 collapse。collapse 時邊框由表格統一畫，
@@ -253,15 +283,37 @@ function rowCells(entry) {
         border-left: 1px solid #e4e2e0;
     }
 
+    // 表頭：照分組上色（飲食橘、排泄藍、放風綠，其他灰），往右捲也認得出在看哪一組。
+    // 限制高度時固定在框的頂端（sticky top），左上角的「班別」同時黏左、黏上，要壓在最上層
     th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
         padding: 8px 4px;
-        background: #f5f7f8;
-        color: #657181;
+        // 表頭底下一條深一點、粗一點的線，跟內容分開（固定在上面時也跟著）
+        border-bottom: 2px solid #b8b1ab;
+        background: #f0eeec;
+        color: #4a4542;
         font-weight: 600;
         // 表頭不折行 —— 放不下就左右捲，折行會讓表頭高度跟著欄位數跳動
         white-space: nowrap;
         // 全站的 body 是 text-align: center，但表格這邊會被其他規則蓋掉，寫明確一點
         text-align: center;
+
+        &.hr-g-food {
+            background: #fbeedc;
+            color: #8a5a12;
+        }
+
+        &.hr-g-excretion {
+            background: #e3eef6;
+            color: #2f5f80;
+        }
+
+        &.hr-g-release {
+            background: #e6f2e8;
+            color: #3f7a50;
+        }
     }
 
     td {
@@ -294,11 +346,18 @@ function rowCells(entry) {
 
     // 左右捲的時候班別要黏在左邊，不然捲到右邊就不知道在看哪一班。
     // sticky 的格子一定要有底色，否則會透出捲過去的內容
-    .hr-shift-col,
     .hr-date {
         position: sticky;
         left: 0;
         z-index: 1;
+    }
+
+    // 左上角：黏左也黏上；底色比其他灰色欄深一點，一眼看得出是班別
+    th.hr-shift-col {
+        left: 0;
+        z-index: 3;
+        background: #ddd6cf;
+        color: #3f3a37;
     }
 
     .hr-shift {
