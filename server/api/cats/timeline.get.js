@@ -40,9 +40,26 @@ function check(result) {
 //   值班：這隻貓的飲食如廁（intake）、前班放風（prev_released）、這班放風（released）、
 //         那一班的值班回報有沒有提到牠（mentioned，只回布林值）；
 //         那一班的值班志工暱稱（volunteers，排班投票算的，健康紀錄的「值班」欄）；
+//         那一班這隻貓的醫療項目與有沒有勾（medical，貓咪醫療追蹤用）；
 //         值班表那班沒有這隻貓就沒有這些（in_shift: false）。還在進行的班標 ongoing
 // 2026-11-12 起不再回傳：值班表的留言、照片（資料都還在 shift_comments、shift_photos）、未完成（貓咪檔案不用看）。
 // 這隻貓沒出現的班不回傳；那天那班根本沒有資料（沒人打開過）的，在這隻貓在貓屋的期間內補一筆 missing: true。cursor：這一批最舊的那天，下次從它往前；hasMore：更早還有沒有班
+// 一班裡這隻貓的醫療項目：貓自己的（cats.<貓>.medical），加上全員／牠所在位置的（tasks 的 medical:*，整班勾一次）。
+// key 用來對齊同一個項目在不同班的欄位：自己的是 cat:<項目 id>、全員／位置的是 task:<項目 id>
+function medicalOf(snapshot, tasks) {
+    const own = Object.values(snapshot.medical || {}).map((i) => ({ key: `cat:${i.id}`, source: null, ...pick(i) }))
+    const shared = Object.values(tasks || {})
+        .filter((t) => t.kind === 'medical' && (!t.location || t.location === snapshot.location))
+        .map((t) => ({ key: `task:${t.id}`, source: t.location || '全員', ...pick(t) }))
+    return [...own, ...shared]
+}
+const pick = (i) => ({
+    category: i.category,
+    treatment: i.treatment,
+    sort: i.sort ?? null,
+    done: !!i.done,
+})
+
 export default defineEventHandler(async (event) => {
     await requireUser(event)
 
@@ -74,7 +91,7 @@ export default defineEventHandler(async (event) => {
     const rows = check(
         await supabase
             .from('shifts')
-            .select(`id, date, shift, reports, snapshot:cats->"${cat}"`)
+            .select(`id, date, shift, reports, tasks, snapshot:cats->"${cat}"`)
             .gte('date', start)
             .lte('date', end)
             .order('date', { ascending: false })
@@ -136,6 +153,8 @@ export default defineEventHandler(async (event) => {
                 mentioned: mentions(r.reports, names),
                 // 值班志工暱稱（沒人排班是空陣列）
                 volunteers: rosterOf.get(r.id).map((id) => nicknameOf.get(id)).filter(Boolean),
+                // 這一班這隻貓的醫療項目（貓咪醫療追蹤用）
+                medical: snapshot ? medicalOf(snapshot, r.tasks) : [],
             }
         })
         .filter((e) => e.in_shift)
@@ -153,6 +172,7 @@ export default defineEventHandler(async (event) => {
         released: false,
         mentioned: false,
         volunteers: [],
+        medical: [],
     }))
     const order = (e) => `${e.date}-${e.shift === 'night' ? 1 : 0}`
     const all = [...entries, ...placeholders].sort((a, b) => order(b).localeCompare(order(a)))

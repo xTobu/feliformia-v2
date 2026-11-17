@@ -12,8 +12,12 @@
                         :value="cat.id"
                     />
                 </el-select>
-                <CatHealthColumns />
             </div>
+
+            <!-- 日期鈕＋右邊的欄位選擇（跟貓咪檔案每日紀錄、貓咪醫療追蹤同一列的排法） -->
+            <DateRangeFilter v-if="selectedCat" v-model:from="range.from" v-model:to="range.to">
+                <CatHealthColumns />
+            </DateRangeFilter>
 
             <p v-if="!selectedCat" class="weekly-state">尚未選擇卯咪</p>
             <p v-else-if="!entries.length && loading" class="weekly-state">載入中...</p>
@@ -68,6 +72,8 @@ const loading = ref(false);
 const loadError = ref(false);
 const cursor = ref(null); // 已載入最舊的那天，下次從它往前
 const hasMore = ref(true);
+// 日期：null＝不限（從今天一路往前）；改了就從頭重載
+const range = reactive({ from: null, to: null });
 
 // 回報彈窗裡要標起來的名字：選到的那隻貓與牠的暱稱
 const catNames = computed(() => {
@@ -96,7 +102,12 @@ async function loadMore() {
     loadError.value = false;
     try {
         const res = await $fetch('/api/cats/timeline', {
-            query: { catId: selectedCat.value, before: cursor.value || undefined },
+            query: {
+                catId: selectedCat.value,
+                before: cursor.value || undefined,
+                from: range.from || undefined,
+                to: range.to || undefined,
+            },
         });
         if (run !== generation) return;
         entries.value = [...entries.value, ...res.entries];
@@ -111,6 +122,7 @@ async function loadMore() {
 }
 
 watch(selectedCat, loadEntries);
+watch(() => [range.from, range.to], loadEntries);
 
 onMounted(async () => {
     const { data, error } = await supabase
@@ -144,7 +156,7 @@ onMounted(async () => {
     gap: 8px;
     margin-bottom: 16px;
 
-    // 選單吃掉剩下的寬，欄位鈕固定在右邊
+    // 選單佔滿整列（欄位鈕移到下面日期那一列）
     .el-select {
         flex: 1;
         min-width: 0;

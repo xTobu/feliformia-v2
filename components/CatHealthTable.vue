@@ -9,18 +9,41 @@
             :style="maxHeight ? { maxHeight } : null"
             @scroll.passive="onScroll"
         >
-            <table class="hr-table">
+            <table class="hr-table" :style="{ minWidth: tableMinWidth }">
             <!-- 欄寬寫在 colgroup：班別是兩欄（日期、早晚），表頭合成一格「班別」 -->
             <colgroup>
                 <col class="hr-date-w" />
                 <col class="hr-shift-w" />
-                <col v-for="col in visibleCols" :key="col.key" :style="{ width: col.width }" />
+                <col v-for="col in cols" :key="col.key" :style="{ width: col.width }" />
             </colgroup>
+            <!-- 欄位有 groupLabel（貓咪醫療追蹤：醫療管理的類別）時表頭兩層：上層類別跨它的欄，下層是各欄；
+                 「班別」與沒有分組的欄（值班）跨兩層。兩層都固定在上面 -->
             <thead>
-                <tr>
-                    <th class="hr-shift-col" colspan="2">班別</th>
-                    <th v-for="col in visibleCols" :key="col.key" :class="col.group ? `hr-g-${col.group}` : null">
-                        {{ col.label }}
+                <tr v-if="hasGroups" class="hr-group-row">
+                    <th class="hr-shift-col" colspan="2" rowspan="2">班別</th>
+                    <template v-for="g in headGroups" :key="g.key">
+                        <th v-if="g.label" :colspan="g.span" :class="g.group ? `hr-g-${g.group}` : null">
+                            {{ g.label }}
+                        </th>
+                        <th v-else rowspan="2" :class="g.col.group ? `hr-g-${g.col.group}` : null">
+                            {{ g.col.label }}
+                        </th>
+                    </template>
+                </tr>
+                <tr :class="{ 'hr-sub-row': hasGroups }">
+                    <th v-if="!hasGroups" class="hr-shift-col" colspan="2">班別</th>
+                    <!-- truncate：名稱超過幾個字就顯示「前幾個字…」，點一下展開完整名稱、再點收回 -->
+                    <th
+                        v-for="col in hasGroups ? cols.filter((c) => c.groupLabel) : cols"
+                        :key="col.key"
+                        :class="[
+                            col.group ? `hr-g-${col.group}` : null,
+                            { 'hr-head-wrap': col.truncate, 'hr-head-toggle': isTruncated(col) },
+                        ]"
+                        :title="col.title || null"
+                        @click="isTruncated(col) && toggleHead(col.key)"
+                    >
+                        {{ headLabel(col) }}
                     </th>
                 </tr>
             </thead>
@@ -108,6 +131,11 @@ const props = defineProps({
     highlightNames: { type: Array, default: () => [] },
     // 表格最高多高（CSS 長度）；給了就表格自己捲、表頭固定，沒給就整張攤開
     maxHeight: { type: String, default: '' },
+    // 自訂欄位（貓咪醫療追蹤用）：[{ key, label, width, group, groupLabel, truncate, title, medical }]。
+    // groupLabel：兩層表頭的上層名稱；truncate：名稱超過幾個字就收成「…」，點了展開
+    // medical：對應 entry.medical 的 key，格子是那一項有沒有勾；key 是 volunteers 的照樣是值班欄。
+    // 沒給就用每日紀錄的欄位（可以自選，useCatHealthCols）
+    columns: { type: Array, default: null },
 });
 const emit = defineEmits(['near-end']);
 
@@ -140,6 +168,35 @@ onMounted(() => nextTick(checkNearEnd));
 // 放風不在 intake 裡，另外從 entry.released 取
 // 要顯示哪些欄位：跟選欄位的按鈕（CatHealthColumns.vue）共用同一份狀態
 const { visibleCols, restore } = useCatHealthCols();
+const cols = computed(() => props.columns || visibleCols.value);
+
+// ---- 兩層表頭：相鄰、groupLabel 一樣的欄併成上層一格；沒有 groupLabel 的欄自己跨兩層 ----
+const hasGroups = computed(() => cols.value.some((c) => c.groupLabel));
+const headGroups = computed(() => {
+    const out = [];
+    for (const col of cols.value) {
+        const last = out[out.length - 1];
+        if (col.groupLabel && last?.label === col.groupLabel) last.span += 1;
+        else if (col.groupLabel) out.push({ key: `g-${col.key}`, label: col.groupLabel, group: col.group, span: 1 });
+        else out.push({ key: col.key, col });
+    }
+    return out;
+});
+
+// ---- 表頭名稱太長：只顯示前 truncate 個字加「…」，點一下展開、再點收回（每一欄各自記） ----
+const expandedHeads = ref(new Set());
+const isTruncated = (col) => !!col.truncate && col.label.length > col.truncate;
+const headLabel = (col) =>
+    isTruncated(col) && !expandedHeads.value.has(col.key) ? `${col.label.slice(0, col.truncate)}…` : col.label;
+function toggleHead(key) {
+    const next = new Set(expandedHeads.value);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    expandedHeads.value = next;
+}
+
+// 表格至少多寬：班別兩欄 92 ＋ 各欄寬，不夠就左右捲，不要把欄位擠扁
+const tableMinWidth = computed(() => `${92 + cols.value.reduce((sum, c) => sum + (parseInt(c.width, 10) || 52), 0)}px`);
 
 onMounted(restore);
 
@@ -207,8 +264,16 @@ function rowCells(entry) {
     const cells = isIntakeTouched(entry.intake) ? intakeCells(entry.intake) : null;
     const byLabel = Object.fromEntries((cells || []).map((c) => [c.label, c]));
 
-    return visibleCols.value.map((col) => {
+    return cols.value.map((col) => {
         if (col.key === 'volunteers') return { key: col.key, mark: null, ...volunteersCell(entry) };
+
+        // 醫療項目（自訂欄位）：沒資料的班寫 —；那班沒有這一項留白；有就看勾了沒
+        if (col.medical) {
+            if (entry.missing) return { key: col.key, mark: null, text: '—', cls: 'hr-none' };
+            const item = (entry.medical || []).find((m) => m.key === col.medical);
+            if (!item) return { key: col.key, mark: null, text: '', cls: null };
+            return { key: col.key, mark: item.done ? 'ok' : 'no', text: '', cls: null };
+        }
 
         // 被提及：那一班的值班回報裡有寫到這隻貓的名字或暱稱（後端算好的）
         if (col.key === 'mentioned') {
@@ -250,9 +315,7 @@ function rowCells(entry) {
 
 .hr-table {
     width: 100%;
-    // 欄位全開時至少要這麼寬（班別 92 ＋ 四個 52 ＋ 兩個放風 80 ＋ 被提及 68 ＋ 值班 120），
-    // 不夠就讓它捲，不要把欄位擠扁
-    min-width: 650px;
+    // 最小寬度照欄位算（tableMinWidth），寫在 style 上
     // ⚠️ 一定要 separate 不能 collapse。collapse 時邊框由表格統一畫，
     // 黏住的格子（position: sticky）底色與 box-shadow 都會失效 ——
     // 捲動時右邊的內容會透到班別欄裡。代價是邊框要自己畫（見下面）
@@ -314,6 +377,58 @@ function rowCells(entry) {
             background: #e6f2e8;
             color: #3f7a50;
         }
+
+        // 貓咪醫療追蹤：醫療項目照類別上色（醫療紫、餵藥紅、外用青、隨餐藥橘，其他灰）
+        &.hr-g-medical {
+            background: #efe9f7;
+            color: #6a4a99;
+        }
+
+        &.hr-g-feeding {
+            background: #fbe6e2;
+            color: #a5442f;
+        }
+
+        &.hr-g-topical {
+            background: #e1f1f0;
+            color: #2f6f6c;
+        }
+
+        &.hr-g-mealmed {
+            background: #fbeedc;
+            color: #8a5a12;
+        }
+
+        // 項目名稱：收起時是「前幾個字…」，展開後完整名稱可以換行
+        &.hr-head-wrap {
+            padding: 6px 4px;
+            font-size: 12px;
+            line-height: 1.3;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }
+
+        // 名稱有收起來的：可以點（展開／收回）
+        &.hr-head-toggle {
+            cursor: pointer;
+            user-select: none;
+        }
+    }
+
+    // 兩層表頭：上層（類別）固定高度，下層黏在它下面；上層底下只要細線，粗線留給下層
+    .hr-group-row th {
+        height: 30px;
+        padding: 0 4px;
+        box-sizing: border-box;
+        font-size: 13px;
+
+        &[colspan]:not(.hr-shift-col) {
+            border-bottom: 1px solid #e4e2e0;
+        }
+    }
+
+    .hr-sub-row th {
+        top: 30px;
     }
 
     td {
