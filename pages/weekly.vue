@@ -16,17 +16,27 @@
             </div>
 
             <p v-if="!selectedCat" class="weekly-state">尚未選擇卯咪</p>
-            <p v-else-if="loading" class="weekly-state">載入中...</p>
-            <!-- 沒人打開過的班 API 也會回（missing），所以看的是有沒有任何一班真的有資料 -->
-            <p v-else-if="!entries.some((e) => e.in_shift)" class="weekly-state">這七天沒有這隻貓的紀錄</p>
-            <!-- 由舊到新，看得出變化；貓咪檔案的健康紀錄是新的在前（配合往下翻） -->
-            <!-- 限制高度、表頭固定（七天最多 14 列，大多一頁就放得下） -->
-            <CatHealthTable
-                v-else
-                :entries="entries"
-                :highlight-names="catNames"
-                max-height="max(360px, calc(100dvh - 200px))"
-            />
+            <p v-else-if="!entries.length && loading" class="weekly-state">載入中...</p>
+            <p v-else-if="!entries.length && loadError" class="weekly-state">
+                載入失敗<button type="button" class="weekly-retry" @click="loadMore">再試一次</button>
+            </p>
+            <p v-else-if="!entries.length" class="weekly-state">這隻貓還沒有紀錄</p>
+            <!-- 跟貓咪檔案的每日紀錄一樣：新的在前，限制高度、表頭固定，捲到表格底部就再往前載 7 天 -->
+            <template v-else>
+                <CatHealthTable
+                    :entries="entries"
+                    :highlight-names="catNames"
+                    max-height="max(360px, calc(100dvh - 220px))"
+                    @near-end="loadMore"
+                />
+                <p class="weekly-state small">
+                    <template v-if="loadError">
+                        載入失敗<button type="button" class="weekly-retry" @click="loadMore">再試一次</button>
+                    </template>
+                    <template v-else-if="loading">載入中...</template>
+                    <template v-else-if="!hasMore">沒有更早的紀錄了</template>
+                </p>
+            </template>
         </div>
         <template #fallback>
             <div style="text-align: center; padding: 50px">載入中...</div>
@@ -35,7 +45,7 @@
 </template>
 
 <script setup>
-// 一隻貓最近七天的飲食排泄。
+// 一隻貓的飲食排泄，新的在前，捲到表格底部再往前載（一次 7 天，同貓咪檔案的每日紀錄）。
 //
 // 2026-11-16：資料從舊的 regulars 改讀新的 shifts（走 /api/cats/timeline），
 // 表格與貓咪檔案的「每日紀錄」分頁共用 components/CatHealthTable.vue。
@@ -48,9 +58,6 @@ useHead({
     title: '貓咪每日紀錄',
 });
 
-const DAYS = 7;
-
-const { $dayjs } = useNuxtApp();
 const route = useRoute();
 const supabase = useSupabaseClient();
 
@@ -58,6 +65,9 @@ const cats = ref([]);
 const selectedCat = ref('');
 const entries = ref([]);
 const loading = ref(false);
+const loadError = ref(false);
+const cursor = ref(null); // 已載入最舊的那天，下次從它往前
+const hasMore = ref(true);
 
 // 回報彈窗裡要標起來的名字：選到的那隻貓與牠的暱稱
 const catNames = computed(() => {
@@ -67,24 +77,34 @@ const catNames = computed(() => {
 
 let generation = 0; // 換貓換很快時，舊的請求回來不要蓋掉新的
 
-async function loadEntries() {
+// 換貓：從今天重新開始
+function loadEntries() {
+    generation += 1;
     entries.value = [];
-    if (!selectedCat.value) return;
+    cursor.value = null;
+    hasMore.value = true;
+    loading.value = false;
+    loadError.value = false;
+    if (selectedCat.value) loadMore();
+}
 
-    const run = ++generation;
+// 再往前載一批（/api/cats/timeline 一次 7 天，新的在前）
+async function loadMore() {
+    if (!selectedCat.value || loading.value || !hasMore.value) return;
+    const run = generation;
     loading.value = true;
+    loadError.value = false;
     try {
         const res = await $fetch('/api/cats/timeline', {
-            query: {
-                catId: selectedCat.value,
-                from: $dayjs().subtract(DAYS - 1, 'day').format('YYYY-MM-DD'),
-            },
+            query: { catId: selectedCat.value, before: cursor.value || undefined },
         });
         if (run !== generation) return;
-        // API 是新的在前，這頁由舊到新排
-        entries.value = [...res.entries].reverse();
+        entries.value = [...entries.value, ...res.entries];
+        cursor.value = res.cursor;
+        hasMore.value = res.hasMore;
     } catch (e) {
         console.error('load weekly error:', e);
+        if (run === generation) loadError.value = true;
     } finally {
         if (run === generation) loading.value = false;
     }
@@ -139,5 +159,26 @@ onMounted(async () => {
     color: #909399;
     font-size: 14px;
     text-align: center;
+}
+
+// 表格下面的一行狀態（載入中、沒有更早的紀錄了）：不要底色、小一點
+.weekly-state.small {
+    padding: 10px 0 0;
+    background: none;
+    font-size: 13px;
+}
+
+// 「再試一次」：全域 button 樣式蓋回文字按鈕
+.weekly-retry {
+    width: auto;
+    height: auto;
+    margin: 0 0 0 8px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: #6da2c2;
+    font-size: inherit;
+    text-decoration: underline;
+    cursor: pointer;
 }
 </style>
