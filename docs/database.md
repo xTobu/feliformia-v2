@@ -154,7 +154,7 @@ votes.data
 
 | 表 | 頁面 | 說明 |
 |---|---|---|
-| `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`；原圖 `avatar_source_path` 與框的範圍 `avatar_crop` 留著，點頭像可以重新調整位置），花色 `coats`（可多選，預設清單之外可以「＋ 其他」自己打）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、生日 `birthday`（預估，可以選到日）、領養 `adopted`＋到新家日期 `adopted_on`（已領養但不知道哪天就是 null；沒領養不能有日期）、`notes`；選項在 `composables/catTraits.js` |
+| `cat_profiles` | `/admin/cat-profiles` | 貓咪。`id` 沿用舊 `cats` 的 id（一次性複製）；`location` 只能是客廳／房間／倉庫／隔離區；排序 `sort_order`。頭像 `avatar_path`（Storage 公開 bucket `avatars`；原圖 `avatar_source_path` 與框的範圍 `avatar_crop` 留著，點頭像可以重新調整位置），花色 `coats`（可多選，預設清單之外可以「＋ 其他」自己打）、`sex`、`neutered`（null＝不確定）、`coat_length`、入住日期 `arrived_on`、生日 `birthday`（可以選到日）＋`birthday_estimated`（是不是估的，預設是：勾著寫「約 X 歲」，取消寫「X 歲」）、領養 `adopted`＋到新家日期 `adopted_on`（已領養但不知道哪天就是 null；沒領養不能有日期）、`notes`；選項在 `composables/catTraits.js` |
 | `diet_items` | `/admin/diet` | 飲食。`category` 乾乾／罐罐／補充品／其他，`content`，備餐分頁只看不勾。2026-11-12：隨餐藥搬到 `medical_items`、放風搬到 `observe_items`（以前的班快照裡飲食的隨餐藥、放風照舊在備餐分頁顯示） |
 | `medical_items` | `/admin/medical` | 醫療。`category` 醫療／餵藥／外用／隨餐藥／其他，`treatment`、`reason`；都在醫療照護分頁打勾。隨餐藥（拌進飯裡、放碗就可以走，2026-11-12 從飲食搬過來）備餐分頁也列，兩個分頁是同一項，勾哪邊都一樣 |
 | `required_items` | `/admin/required`（後台選單已拿掉） | 值班收尾：這一班離開前一定要勾完的清單。`content`；對象可選貓、全員、**貓屋**或位置，每項都整班勾一次。**2026-11-12 停用**：值班表拿掉收尾分頁，新的班不再放收尾、未完成不算收尾、貓咪檔案不顯示；表、設定與以前的班留著的收尾紀錄（`shifts.tasks` 的 `required:*`、收尾分頁的回報、留言、照片）都沒刪，要恢復就把分頁與 `buildSnapshot` 加回來 |

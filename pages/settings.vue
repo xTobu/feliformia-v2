@@ -1,6 +1,6 @@
 <template>
     <div class="settings-page">
-        <h1>設定</h1>
+        <h1>帳號管理</h1>
 
         <!-- 名稱設定 -->
         <section class="settings-section">
@@ -196,7 +196,7 @@ definePageMeta({
 });
 
 useHead({
-    title: '設定',
+    title: '帳號管理',
 });
 
 const supabase = useSupabaseClient();

@@ -1,7 +1,7 @@
 <template>
     <ClientOnly>
         <div id="medicine">
-            <h1>卯咪餵藥週表</h1>
+            <h1>貓咪醫療追蹤</h1>
             <form @submit.prevent>
                 <div class="d_flex">
                     <div class="W100 arrow">
@@ -86,7 +86,7 @@ definePageMeta({
 });
 
 useHead({
-    title: '卯咪餵藥週表',
+    title: '貓咪醫療追蹤',
 });
 
 const { $dayjs } = useNuxtApp();

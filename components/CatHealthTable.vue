@@ -2,26 +2,48 @@
     <div class="hr-wrap">
         <div ref="scrollEl" class="hr-scroll" :class="{ stuck }" @scroll.passive="onScroll">
             <table class="hr-table">
+            <!-- 欄寬寫在 colgroup：班別是兩欄（日期、早晚），表頭合成一格「班別」 -->
+            <colgroup>
+                <col class="hr-date-w" />
+                <col class="hr-shift-w" />
+                <col v-for="col in visibleCols" :key="col.key" :style="{ width: col.width }" />
+            </colgroup>
             <thead>
                 <tr>
-                    <th class="hr-shift-col">班別</th>
-                    <th v-for="col in visibleCols" :key="col.key" :style="{ width: col.width }">
+                    <th class="hr-shift-col" colspan="2">班別</th>
+                    <th v-for="col in visibleCols" :key="col.key">
                         {{ col.label }}
                     </th>
                 </tr>
             </thead>
             <tbody>
-                <tr v-for="entry in entries" :key="entry.shift_id">
+                <!-- 一天兩班：日期（含週幾）合併成一格跨當天的列，旁邊一欄是早班太陽、晚班月亮（同貓咪檔案日常，點了到值班紀錄那一班）。
+                     天與天之間一條深一點的線，隔天交替底色 -->
+                <tr
+                    v-for="row in rows"
+                    :key="row.entry.shift_id"
+                    :class="{ alt: row.alt, 'day-end': row.last }"
+                >
+                    <td v-if="row.first" class="hr-date" :rowspan="row.span">
+                        {{ dateLabel(row.entry.date) }}<span class="hr-weekday">{{ weekdayLabel(row.entry.date) }}</span>
+                    </td>
                     <td class="hr-shift">
+                        <!-- 沒有紀錄的班不連過去：打開值班紀錄會順手建立那一班 -->
                         <component
-                            :is="linkShift ? 'NuxtLink' : 'span'"
-                            :to="linkShift ? `/shift?date=${entry.date}&shift=${entry.shift}` : undefined"
+                            :is="linkShift && !row.entry.missing ? 'NuxtLink' : 'span'"
+                            :to="linkShift && !row.entry.missing ? `/shift?date=${row.entry.date}&shift=${row.entry.shift}` : undefined"
+                            :class="['hr-shift-icon', row.entry.shift]"
+                            :aria-label="row.entry.shift === 'night' ? '晚班' : '早班'"
                         >
-                            {{ dateLabel(entry.date) }}{{ entry.shift === 'night' ? '晚' : '早' }}
+                            <Icon
+                                :icon="row.entry.shift === 'night' ? 'mdi:weather-night' : 'mdi:white-balance-sunny'"
+                                width="17"
+                            />
                         </component>
                     </td>
 
-                    <td v-for="cell in rowCells(entry)" :key="cell.key" :class="cell.cls">
+                    <!-- 沒人打開過的班（missing）：跟沒登記一樣，飲食如廁是 —、放風是叉叉，值班欄寫「沒有紀錄」 -->
+                    <td v-for="cell in rowCells(row.entry)" :key="cell.key" :class="cell.cls">
                         <!-- 尿、便、放風是二選一，用勾勾叉叉比文字好掃；
                              軟便、拉稀這種還是要寫出來，所以 mark 是 null 時印文字 -->
                         <Icon v-if="cell.mark === 'ok'" icon="mdi:check" width="19" class="hr-ok" />
@@ -33,7 +55,7 @@
                             type="button"
                             class="hr-note"
                             aria-label="看這一班的回報"
-                            @click="openReport(entry)"
+                            @click="openReport(row.entry)"
                         >
                             <Icon icon="mdi:exclamation-thick" width="17" />
                         </button>
@@ -69,7 +91,7 @@
 import { Icon } from '@iconify/vue';
 import { intakeCells, isIntakeTouched } from '~/composables/intake';
 
-defineProps({
+const props = defineProps({
     // /api/cats/timeline 回傳的 entries（已過濾 in_shift）
     entries: { type: Array, default: () => [] },
     // 班別那格要不要連到值班記錄表的那一班
@@ -95,13 +117,28 @@ const { visibleCols, restore } = useCatHealthCols();
 
 onMounted(restore);
 
-// 「11/16晚」。不寫星期 —— 這是一列一班的表，橫著比的是數值不是日子，
-// 星期只會把班別欄撐寬、擠掉右邊的欄位
-const dateLabel = (date) => {
+// 日期那格：上面「11/16」，下面小字「週日」；不是今年的，小字前面加年份（「2025・週日」），日期欄才不會撐寬
+const WEEKDAYS = '日一二三四五六';
+const dateLabel = (date) => $dayjs(date).format('MM/DD');
+const weekdayLabel = (date) => {
     const d = $dayjs(date);
-    const year = d.year() === $dayjs().year() ? '' : `${d.year()}/`;
-    return `${year}${d.format('MM/DD')}`;
+    const year = d.year() === $dayjs().year() ? '' : `${d.year()}・`;
+    return `${year}週${WEEKDAYS[d.day()]}`;
 };
+
+// 同一天的班併成一組（entries 照日期新到舊、同一天晚班在前）：
+// first＝當天第一列（放日期格，rowspan＝當天幾班）、last＝當天最後一列（下面畫分隔線）、alt＝隔天交替底色
+const rows = computed(() => {
+    const list = props.entries;
+    let day = -1;
+    return list.map((entry, i) => {
+        const first = i === 0 || list[i - 1].date !== entry.date;
+        if (first) day += 1;
+        let span = 1;
+        while (first && list[i + span]?.date === entry.date) span += 1;
+        return { entry, first, span, last: list[i + 1]?.date !== entry.date, alt: day % 2 === 1 };
+    });
+});
 
 // ---- 被提及的彈窗 ----
 const reportOpen = ref(false);
@@ -111,7 +148,7 @@ const reportSections = ref([]);
 const reportTitle = ref('');
 
 async function openReport(entry) {
-    reportTitle.value = `${dateLabel(entry.date)} ${entry.shift === 'night' ? '晚班' : '早班'} 回報`;
+    reportTitle.value = `${$dayjs(entry.date).format('YYYY/MM/DD')} ${entry.shift === 'night' ? '晚班' : '早班'} 回報`;
     reportSections.value = [];
     reportError.value = false;
     reportOpen.value = true;
@@ -128,6 +165,14 @@ async function openReport(entry) {
     }
 }
 
+// 值班：那一班的值班志工，沒人排班寫「無人值班」（跟行事曆、LINE 發送同一個說法）；
+// 那一班沒人打開過（missing）寫「沒有紀錄」
+function volunteersCell(entry) {
+    if (entry.missing) return { text: '沒有紀錄', cls: 'hr-none' };
+    const names = entry.volunteers || [];
+    return { text: names.length ? names.join('、') : '無人值班', cls: names.length ? 'hr-names' : 'hr-none' };
+}
+
 const OK = new Set(['有', '正常']);
 const NO = new Set(['沒有']);
 
@@ -137,6 +182,8 @@ function rowCells(entry) {
     const byLabel = Object.fromEntries((cells || []).map((c) => [c.label, c]));
 
     return visibleCols.value.map((col) => {
+        if (col.key === 'volunteers') return { key: col.key, mark: null, ...volunteersCell(entry) };
+
         // 被提及：那一班的值班回報裡有寫到這隻貓的名字或暱稱（後端算好的）
         if (col.key === 'mentioned') {
             return { key: col.key, mark: entry.mentioned ? 'note' : null, text: '', cls: null };
@@ -173,9 +220,9 @@ function rowCells(entry) {
 
 .hr-table {
     width: 100%;
-    // 欄位全開時至少要這麼寬（班別 92 ＋ 四個 52 ＋ 兩個 80 ＋ 68），
+    // 欄位全開時至少要這麼寬（班別 92 ＋ 四個 52 ＋ 兩個 80 ＋ 68 ＋ 值班 120），
     // 不夠就讓它捲，不要把欄位擠扁
-    min-width: 530px;
+    min-width: 650px;
     // ⚠️ 一定要 separate 不能 collapse。collapse 時邊框由表格統一畫，
     // 黏住的格子（position: sticky）底色與 box-shadow 都會失效 ——
     // 捲動時右邊的內容會透到班別欄裡。代價是邊框要自己畫（見下面）
@@ -200,8 +247,9 @@ function rowCells(entry) {
         border-bottom-color: #e4e2e0;
     }
 
+    // 最左邊補框線：表頭第一格與日期格（沒有日期格的列，左邊被上一列的日期格蓋住）
     th:first-child,
-    td:first-child {
+    td.hr-date {
         border-left: 1px solid #e4e2e0;
     }
 
@@ -224,25 +272,42 @@ function rowCells(entry) {
         vertical-align: middle;
     }
 
-    tbody tr:nth-child(even) td {
+    // 隔天交替底色（一天的兩班同一個底色，看得出是一組）
+    tbody tr.alt td {
         background: #fafafa;
     }
 
-    // 只指定班別欄（固定像素，不用 %，才不會隨欄位數縮水），其餘平分剩下的
-    .hr-shift-col {
-        width: 92px;
+    // 天與天之間：深一點的線（日期格跨到當天最後一列，底線也一起）
+    tbody tr.day-end td,
+    tbody td.hr-date {
+        border-bottom-color: #d8d4d1;
+    }
+
+    // 只指定班別兩欄（固定像素，不用 %，才不會隨欄位數縮水），其餘平分剩下的
+    .hr-date-w {
+        width: 58px;
+    }
+
+    .hr-shift-w {
+        width: 34px;
     }
 
     // 左右捲的時候班別要黏在左邊，不然捲到右邊就不知道在看哪一班。
     // sticky 的格子一定要有底色，否則會透出捲過去的內容
     .hr-shift-col,
-    .hr-shift {
+    .hr-date {
         position: sticky;
         left: 0;
         z-index: 1;
     }
 
-    // 捲動時才加陰影，標出班別欄是黏住的。
+    .hr-shift {
+        position: sticky;
+        left: 58px;
+        z-index: 1;
+    }
+
+    // 捲動時才加陰影，標出班別欄是黏住的（陰影在早晚那欄的右邊）。
     // 用右側的 box-shadow（負的擴散值把上下收掉），看起來像一道邊界而不是整欄浮起來
     .hr-scroll.stuck & {
         .hr-shift-col,
@@ -251,10 +316,40 @@ function rowCells(entry) {
         }
     }
 
-    .hr-shift {
+    .hr-date {
         background: #fff;
         white-space: nowrap;
         font-weight: 600;
+        line-height: 1.3;
+    }
+
+    .hr-weekday {
+        display: block;
+        color: #8e8783;
+        font-size: 11px;
+        font-weight: 400;
+    }
+
+    .hr-shift {
+        background: #fff;
+        white-space: nowrap;
+        color: #606266;
+        font-weight: 500;
+
+        // 早班太陽、晚班月亮，顏色同貓咪檔案日常卡片的班別標籤
+        :deep(.hr-shift-icon) {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            &.morning {
+                color: #c98a1e;
+            }
+
+            &.night {
+                color: #4a5687;
+            }
+        }
 
         :deep(a),
         :deep(span) {
@@ -279,6 +374,13 @@ function rowCells(entry) {
     // 整班沒人登記
     td.hr-none {
         color: #dcdad8;
+    }
+
+    // 值班志工：人名多的時候換行，字小一點
+    td.hr-names {
+        font-size: 12px;
+        line-height: 1.4;
+        overflow-wrap: anywhere;
     }
 
     // 勾勾叉叉沿用 /weekly 原本的顏色。

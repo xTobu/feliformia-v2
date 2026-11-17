@@ -22,10 +22,11 @@ const monthsText = (months) => {
 };
 
 // 生日（預估）→ 大約幾歲：「約 1 歲 3 個月」，不滿 1 歲「約 8 個月」。沒填或在未來回空字串
-export function catAgeText(birthMonth, today = todayText()) {
+// estimated：生日是估的（cat_profiles.birthday_estimated，預設是）就加「約」
+export function catAgeText(birthMonth, { estimated = true, today = todayText() } = {}) {
     if (!birthMonth) return '';
     const months = fullMonths(birthMonth, today);
-    return months < 0 ? '' : `約 ${monthsText(months)}`;
+    return months < 0 ? '' : `${estimated ? '約 ' : ''}${monthsText(months)}`;
 }
 
 // 入住多久：不滿 2 個月寫天數，之後寫「1 年 3 個月」／「5 個月」

@@ -4,7 +4,7 @@
             <form @submit.prevent="saveNow">
                 <!-- 標題靠左；右邊是「‹ 10/19 週日 早班 ›」：箭頭跳前後一班，點中間從下方滑出選擇面板 -->
                 <div class="shift-header">
-                    <h1>值班記錄表</h1>
+                    <h1>值班紀錄</h1>
                     <div class="shift-nav">
                         <button
                             type="button"
@@ -604,7 +604,7 @@ definePageMeta({
 });
 
 useHead({
-    title: '值班記錄表',
+    title: '值班紀錄',
 });
 
 const { $dayjs } = useNuxtApp();

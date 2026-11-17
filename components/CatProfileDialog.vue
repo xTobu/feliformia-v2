@@ -158,8 +158,23 @@
                             :editable="false"
                         />
                     </el-form-item>
-                    <!-- 生日多半是估的，選到日就好（不確定的日子隨便選那個月一天） -->
-                    <el-form-item label="生日（預估）" data-field="birthday">
+                    <!-- 生日多半是估的，選到日就好（不確定的日子隨便選那個月一天）。
+                         標題右邊的「預估」小膠囊（預設打開，點一下切換）：打開顯示「約 X 歲」，確定的生日就關掉 -->
+                    <el-form-item data-field="birthday" class="birthday-item">
+                        <template #label>
+                            <span class="birthday-label">
+                                生日
+                                <button
+                                    type="button"
+                                    class="birthday-est"
+                                    :class="{ on: form.birthday_estimated }"
+                                    :aria-pressed="form.birthday_estimated"
+                                    @click.prevent="form.birthday_estimated = !form.birthday_estimated"
+                                >
+                                    預估
+                                </button>
+                            </span>
+                        </template>
                         <el-date-picker
                             v-model="form.birthday"
                             type="date"
@@ -291,6 +306,7 @@ function emptyForm() {
         coat_length: '',
         arrived_on: null,
         birthday: null,
+        birthday_estimated: true,
     };
 }
 
@@ -306,6 +322,7 @@ function formOf(cat) {
         coat_length: cat.coat_length || '',
         arrived_on: cat.arrived_on ?? null,
         birthday: cat.birthday ?? null,
+        birthday_estimated: cat.birthday_estimated ?? true,
     };
 }
 
@@ -363,8 +380,8 @@ function addCoat() {
     cancelAddCoat();
 }
 
-// 生日（預估）→ 大約幾歲（滿 1 歲顯示幾歲幾個月，不滿 1 歲顯示幾個月）
-const ageText = computed(() => catAgeText(form.value.birthday));
+// 生日 → 幾歲（滿 1 歲顯示幾歲幾個月，不滿 1 歲顯示幾個月）；預估的前面加「約」
+const ageText = computed(() => catAgeText(form.value.birthday, { estimated: form.value.birthday_estimated }));
 
 // 領養：有日期就是已領養。舊資料已領養但沒日期的，沒填日期就維持已領養
 const adoptedNoDate = computed(() => !!editingCat.value?.adopted && !editingCat.value?.adopted_on);
@@ -505,6 +522,7 @@ async function saveCat() {
         coat_length: form.value.coat_length || null,
         arrived_on: form.value.arrived_on || null,
         birthday: form.value.birthday || null,
+        birthday_estimated: form.value.birthday_estimated,
         notes: aboutItems.value.map((i) => i.text.trim()).filter(Boolean).join('\n') || null,
     };
 
@@ -785,6 +803,36 @@ watch(
             border-color: #d9809f;
             background: #fbeef3;
             color: #b24f74;
+        }
+    }
+}
+
+// 生日標題：「生日」右邊一個小的「預估」膠囊，打開是淡藍底、關掉是灰框。
+// 全域 button 有 width: 100%、邊框、底色、padding，這裡每一項都要蓋回來
+.birthday-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+
+    .birthday-est {
+        width: auto;
+        height: 20px;
+        margin: 0;
+        padding: 0 8px;
+        border: 1px solid #d8d4d1;
+        border-radius: 10px;
+        background: #fff;
+        box-sizing: border-box;
+        color: #a8a29e;
+        font-size: 12px;
+        font-weight: 400;
+        line-height: 18px;
+        cursor: pointer;
+
+        &.on {
+            border-color: #9cc3d9;
+            background: #eef5f9;
+            color: #4a85a8;
         }
     }
 }

@@ -134,7 +134,7 @@
                     <!-- 健康紀錄：一班一列的表。與 /weekly 共用同一個元件 -->
                     <CatHealthTable
                         v-if="view === 'health'"
-                        :entries="visibleEntries"
+                        :entries="healthEntries"
                         :highlight-names="catNames"
                     />
 
@@ -220,12 +220,19 @@
                         </div>
                         <div class="pf-card" :class="{ editable: isAdmin }" @click="isAdmin && editCat('birthday')">
                             <div class="pf-label">
-                                <Icon icon="mdi:cake-variant-outline" width="15" />估計年齡
+                                <!-- 生日是預估的（birthday_estimated，預設是）寫「估計年齡」「約 X 歲」，確定的寫「年齡」 -->
+                                <Icon icon="mdi:cake-variant-outline" width="15" />{{
+                                    cat.birthday && cat.birthday_estimated === false ? '年齡' : '估計年齡'
+                                }}
                                 <Icon v-if="isAdmin" icon="mdi:pencil-outline" width="14" class="pf-action" />
                             </div>
                             <template v-if="cat.birthday">
-                                <div class="pf-value">{{ catAgeText(cat.birthday) || '—' }}</div>
-                                <div class="pf-sub">生日（預估）{{ fullDate(cat.birthday) }}</div>
+                                <div class="pf-value">
+                                    {{ catAgeText(cat.birthday, { estimated: cat.birthday_estimated !== false }) || '—' }}
+                                </div>
+                                <div class="pf-sub">
+                                    {{ cat.birthday_estimated === false ? '生日' : '生日（預估）' }} {{ fullDate(cat.birthday) }}
+                                </div>
                             </template>
                             <div v-else class="pf-empty">未填</div>
                         </div>
@@ -450,7 +457,7 @@ const { isAdmin } = useProfile();
 // 「日常」從分頁列拿掉但功能留著 —— /cats/<id>/timeline 直接開還看得到。
 const VIEW_TABS = [
     { key: 'profile', label: '小檔案' },
-    { key: 'health', label: '健康紀錄' },
+    { key: 'health', label: '每日紀錄' }, // 2026-11-17 從「健康紀錄」改名（網址還是 /health）
 ];
 const SHIFT_LABELS = { morning: '早班', night: '晚班' };
 const WEEKDAYS = '日一二三四五六';
@@ -577,6 +584,8 @@ let generation = 0; // 改了日期就重來，舊的請求回來不要用
 
 // 時間軸 API 只回傳值班表上有這隻貓的班
 const visibleEntries = computed(() => entries.value.filter((e) => e.in_shift));
+// 健康紀錄另外列沒人打開過的班（missing，值班欄寫「沒有紀錄」），日期才連續
+const healthEntries = computed(() => entries.value.filter((e) => e.in_shift || e.missing));
 
 async function loadMore() {
     if (loadingMore.value || !hasMore.value) return;

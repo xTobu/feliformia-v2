@@ -1,7 +1,7 @@
 <template>
     <ClientOnly>
         <div id="weekly">
-            <h1>卯咪健康週表</h1>
+            <h1>貓咪每日紀錄</h1>
 
             <div class="weekly-pick">
                 <el-select v-model="selectedCat" placeholder="請選擇卯咪" filterable>
@@ -17,7 +17,8 @@
 
             <p v-if="!selectedCat" class="weekly-state">尚未選擇卯咪</p>
             <p v-else-if="loading" class="weekly-state">載入中...</p>
-            <p v-else-if="!entries.length" class="weekly-state">這七天沒有這隻貓的紀錄</p>
+            <!-- 沒人打開過的班 API 也會回（missing），所以看的是有沒有任何一班真的有資料 -->
+            <p v-else-if="!entries.some((e) => e.in_shift)" class="weekly-state">這七天沒有這隻貓的紀錄</p>
             <!-- 由舊到新，看得出變化；貓咪檔案的健康紀錄是新的在前（配合往下翻） -->
             <CatHealthTable v-else :entries="entries" :highlight-names="catNames" />
         </div>
@@ -31,14 +32,14 @@
 // 一隻貓最近七天的飲食排泄。
 //
 // 2026-11-16：資料從舊的 regulars 改讀新的 shifts（走 /api/cats/timeline），
-// 表格與貓咪檔案的「健康紀錄」分頁共用 components/CatHealthTable.vue。
+// 表格與貓咪檔案的「每日紀錄」分頁共用 components/CatHealthTable.vue。
 // ⚠️ 新制上線前（2026-10-18 以前）的紀錄只存在舊的 regulars 表，這頁看不到了。
 definePageMeta({
     middleware: 'auth',
 });
 
 useHead({
-    title: '卯咪健康週表',
+    title: '貓咪每日紀錄',
 });
 
 const DAYS = 7;

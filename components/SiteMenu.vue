@@ -13,25 +13,22 @@
                         # 注意事項
                     </li> -->
 
-                    <!-- 新版（先行版）：值班紀錄（2026-11-17 起改名，跟首頁一致）與貓咪列表，跟下面的舊版並行 -->
+                    <!-- 2026-11-17 起跟首頁一致：新版與協作在最上面（拿掉「先行版」標籤）、
+                         再來是查詢用的頁面（週表改名貓咪每日紀錄、貓咪醫療追蹤），最後帳號管理、首頁、登出。
+                         舊版的飲食與如廁紀錄、用藥與特殊照護從選單拿掉了（/regular、/medicine 頁面還在） -->
                     <li class="red" @click="goto('/shift')">
                         <Icon icon="mdi:clipboard-check-outline" width="17" /> <span>值班紀錄</span>
-                        <span class="beta">先行版</span>
                     </li>
                     <li class="red" @click="goto('/cats')">
                         <Icon icon="mdi:cat" width="17" /> <span>貓咪列表</span>
-                        <span class="beta">先行版</span>
-                    </li>
-                    <li class="red" @click="open('/regular')">
-                        <Icon icon="mdi:silverware-fork-knife" width="17" /> <span>飲食與如廁紀錄</span>
-                    </li>
-                    <li class="red" @click="open('/medicine')">
-                        <Icon icon="fa-solid:syringe" width="17" /> <span>用藥與特殊照護</span>
                     </li>
                     <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
+                    <li class="red" @click="goto('/calendar')">
+                        <Icon icon="mdi:calendar-month-outline" width="17" /> <span>行事曆</span>
+                    </li>
                     <li class="red" @click="openTodo"><Icon icon="mdi:bell-ring" width="17" /> <span>今日活動提醒</span></li>
-                    <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>
-                    <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>卯咪餵藥週表</span></li>
+                    <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>貓咪每日紀錄</span></li>
+                    <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>貓咪醫療追蹤</span></li>
                     <li
                         @click="
                             open(
@@ -41,8 +38,8 @@
                     >
                         <Icon icon="mdi:information" width="17" /> <span>貓咪簡介 / 飲食 / 習慣需知</span>
                     </li>
+                    <li class="grey" @click="goto('/settings')"><Icon icon="mdi:account-cog" width="17" /> <span>帳號管理</span></li>
                     <li class="blue" @click="goto('/')"><Icon icon="mdi:home" width="17" /> <span>首頁</span></li>
-                    <li class="grey" @click="goto('/settings')"><Icon icon="mdi:cog" width="17" /> <span>設定</span></li>
                     <li class="grey" @click="signOut"><Icon icon="mdi:logout" width="17" /> <span>登出</span></li>
                 </ul>
             </div>
@@ -276,15 +273,6 @@ async function GetNotice() {
             color: #657181;
         }
 
-        // 新版功能的小標籤
-        .beta {
-            padding: 0 6px;
-            border: 1px solid #e8b9b8;
-            border-radius: 9px;
-            color: #b43a39;
-            font-size: 11px;
-            line-height: 16px;
-        }
     }
 }
 

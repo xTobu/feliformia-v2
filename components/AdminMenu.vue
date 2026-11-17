@@ -10,9 +10,10 @@
                     <span>{{ link.title }}</span>
                 </li>
             </template>
+            <!-- 回到 /admin（跟首頁的「管理後台」膠囊同一個名稱） -->
             <li class="home" @click="goto('/admin')">
-                <span class="icon">🛠️</span>
-                <span>後台首頁</span>
+                <span class="icon">🏠</span>
+                <span>管理後台</span>
             </li>
         </ul>
     </el-drawer>
