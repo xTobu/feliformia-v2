@@ -144,22 +144,25 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item v-if="categories.length" label="類別">
-                    <el-select v-model="form.category">
-                        <!-- 有分組（觀察管理的剛到／離開）就分組列出 -->
-                        <template v-if="categoryGroups.length">
-                            <el-option-group v-for="g in categoryGroups" :key="g.label" :label="g.label">
-                                <el-option v-for="c in g.categories" :key="c" :label="c" :value="c" />
-                            </el-option-group>
-                        </template>
-                        <template v-else>
-                            <el-option
-                                v-for="c in categories"
-                                :key="c"
-                                :label="c"
-                                :value="c"
-                            />
-                        </template>
+                    <!-- categoryFree（觀察管理）：categories 只是建議，打字就能新增別的 -->
+                    <el-select
+                        v-model="form.category"
+                        :filterable="categoryFree"
+                        :allow-create="categoryFree"
+                        :reserve-keyword="false"
+                        :placeholder="categoryFree ? '選一個，或直接打新的' : ''"
+                    >
+                        <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
                     </el-select>
+                </el-form-item>
+                <!-- 分頁（只有觀察管理用）：這一項出現在值班表的哪個分頁。
+                     放風之類鎖定分頁的類別不顯示，它只能放固定的那一個 -->
+                <el-form-item v-if="tabField && !lockedTab" :label="tabField.label">
+                    <el-radio-group v-model="form.tab">
+                        <el-radio v-for="o in tabField.options" :key="o.value" :value="o.value">
+                            {{ o.label }}
+                        </el-radio>
+                    </el-radio-group>
                 </el-form-item>
                 <el-form-item :label="mainOptional ? `${mainField.label}（選填）` : mainField.label">
                     <el-input
@@ -263,10 +266,16 @@ import { compressPhoto } from '~/composables/useImageCompress';
 const props = defineProps({
     title: { type: String, required: true },
     table: { type: String, required: true },
-    // 類別清單（資料庫 check 擋的那幾個），第一個是新增時的預設值；空陣列 = 這張表沒有類別
+    // 類別清單，第一個是新增時的預設值；空陣列 = 這張表沒有類別。
+    // categoryFree 時這只是下拉的建議，不是白名單
     categories: { type: Array, default: () => [] },
-    // 類別分組（選填）：[{ label, categories }]，下拉選單與清單都分組顯示（觀察管理：剛到／離開）
-    categoryGroups: { type: Array, default: () => [] },
+    // 類別可以自己打新的（觀察管理，2026-11-18 起）
+    categoryFree: { type: Boolean, default: false },
+    // 分頁欄位（選填，只有觀察管理用）：這一項出現在值班表的哪個分頁。
+    //   { key, label, options: [{ value, label }], lockedFor: { '放風': 'meal' } }
+    //   lockedFor 的類別不給選，一律存成指定的值（放風只能在備餐）。
+    //   有這個 prop 時，清單也照分頁分區（小標題「飲食如廁 [早班]」）
+    tabField: { type: Object, default: null },
     // 清單每一項的標題用類別（觀察管理：拍剩食），說明放到下面那行小字；預設標題是主要內容
     titleIsCategory: { type: Boolean, default: false },
     // 主要內容欄位：{ key, label, placeholder[, optionalFor, optionalPlaceholder] }
@@ -306,6 +315,7 @@ function emptyForm(target = '') {
     return {
         target,
         category: props.categories[0] || null,
+        tab: props.tabField?.options?.[0]?.value || null,
         main: '',
         reason: '',
         shift: 'both',
@@ -473,16 +483,18 @@ function buildGroups(list) {
         .map(({ items: groupItems, ...g }) => ({ ...g, sections: sectionsOf(groupItems) }));
 }
 
-// 一張卡片裡的項目分區：早班、晚班、早晚班各一區（有類別分組的再分，小標題是「剛到 [早班]」），
-// 空的區不顯示；每一區自己拖，拖曳只會在同一區
+// 一張卡片裡的項目分區：早班、晚班、早晚班各一區（有分頁欄位的再照分頁分，
+// 小標題是「飲食如廁 [早班]」），空的區不顯示；每一區自己拖，拖曳只會在同一區
 const SHIFTS = [
     { value: 'morning', label: '早班' },
     { value: 'night', label: '晚班' },
     { value: 'both', label: '早晚班' },
 ];
 function sectionsOf(list) {
-    const categoryGroups = props.categoryGroups.length ? props.categoryGroups : [{ label: '', categories: null }];
-    return categoryGroups
+    const tabGroups = props.tabField
+        ? props.tabField.options.map((o) => ({ label: o.label, value: o.value }))
+        : [{ label: '', value: null }];
+    return tabGroups
         .flatMap((g) =>
             SHIFTS.map((shift) => ({
                 key: `${g.label}-${shift.value}`,
@@ -490,7 +502,7 @@ function sectionsOf(list) {
                 shift: shift.value,
                 shiftLabel: shift.label,
                 items: list.filter(
-                    (i) => i.shift === shift.value && (!g.categories || g.categories.includes(i.category))
+                    (i) => i.shift === shift.value && (g.value === null || i[props.tabField.key] === g.value)
                 ),
             }))
         )
@@ -538,6 +550,7 @@ function openDialog(item = null, target = '') {
         ? {
               target: targetOf(item),
               category: item.category || props.categories[0] || null,
+              tab: props.tabField ? item[props.tabField.key] || props.tabField.options[0].value : null,
               main: item[props.mainField.key] || '',
               reason: props.reasonField ? item[props.reasonField.key] || '' : '',
               shift: item.shift || 'both',
@@ -550,15 +563,24 @@ function openDialog(item = null, target = '') {
     dialogVisible.value = true;
 }
 
+// 這個類別鎖定在某個分頁（觀察管理的放風只能放備餐），有值就不給選、存檔時用它
+const lockedTab = computed(() => props.tabField?.lockedFor?.[form.value.category] || null);
+
 // 儲存
-// 這個類別的內容可以不填（mainField.optionalFor）
+// 這個類別的內容可以不填（mainField.optionalFor：true = 一律選填，陣列 = 這幾個類別選填）
 const mainOptional = computed(() =>
+    props.mainField.optionalFor === true ||
     (props.mainField.optionalFor || []).includes(form.value.category)
 );
 
 async function saveItem() {
     if (!form.value.target) {
         Swal.fire({ text: '請選擇對象' });
+        return;
+    }
+
+    if (props.categories.length && !(form.value.category || '').trim()) {
+        Swal.fire({ text: '請選擇或輸入類別' });
         return;
     }
 
@@ -577,7 +599,9 @@ async function saveItem() {
         start_date: form.value.start_date || null,
         end_date: form.value.end_date || null,
     };
-    if (props.categories.length) payload.category = form.value.category;
+    if (props.categories.length) payload.category = (form.value.category || '').trim();
+    // 分頁：鎖定的類別（放風）用鎖定的值，其他用選的
+    if (props.tabField) payload[props.tabField.key] = lockedTab.value || form.value.tab;
     if (props.reasonField) {
         payload[props.reasonField.key] = form.value.reason.trim() || null;
     }

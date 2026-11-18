@@ -948,7 +948,7 @@ const observeRows = computed(() => {
         map.set(
             cat.cat_id,
             items.map(({ key, item }) => {
-                const tab = observeTabOf(item.category);
+                const tab = observeTabOf(item);
                 const other = isObserveOther(item.category);
                 return {
                     key,
