@@ -126,7 +126,8 @@ export function isValidShiftQuery(date, shift) {
 export const MEAL_MED = '隨餐藥'
 
 // 長期固定放風：期間內新開的班，備餐的放風按鈕預設打開。
-// 2026-11-12 起是觀察管理（observe_items）「離開」組的類別（以前在飲食管理）；不放進班的快照、不是要點的膠囊
+// 2026-11-12 起是觀察管理（observe_items）的一個類別（以前在飲食管理）；不放進班的快照、不是要點的膠囊。
+// 2026-11-18 起類別可以自由輸入，但這個名字仍是保留字（後台選到它時分頁鎖在備餐）
 export const RELEASE = '放風'
 
 // 到班時還沒填的樣子（欄位與 /regular 相同）
@@ -239,10 +240,12 @@ export async function buildSnapshot(date, shift) {
             sort: i.sort_order ?? MAX,
             ...(i.category === MEAL_MED ? { done: false, done_by: null, done_at: null } : {}),
         }),
-        // 觀察：沒有 done，有沒有拍是看這一班的照片（composables/observeItems.js）
+        // 觀察：沒有 done，勾了記在 observe_done（composables/observeItems.js）。
+        // tab 決定膠囊出現在哪個分頁，2026-11-18 起是項目自己的欄位（以前是從類別推的）
         observe: (i) => ({
             id: i.id,
             category: i.category,
+            tab: i.tab || observeTabOf(i.category),
             content: i.content || '',
             end_date: i.end_date || null,
             sort: i.sort_order ?? MAX,
@@ -428,7 +431,7 @@ export function unfinishedOf(record, photos = []) {
     const dietRow = (i) => ({ content: i.content })
 
     // 觀察管理：貓自己的，加上全員／位置的（併進適用的每一隻貓，每隻各勾各的）；沒勾、也沒拍對應的照片就算沒完成。
-    // 剛到的列在飲食如廁分頁，離開的（拍留餐）列在備餐分頁
+    // 每一項列在它自己的 tab 那個分頁（快照裡沒有 tab 的舊項目退回用類別推，見 observeTabOf）
     const observeTasks = tasks.filter((t) => t.kind === 'observe')
     const observeUndone = (tab) => cats.flatMap((cat) => {
         const catPhotos = photos.filter((p) => p.cat_id === cat.cat_id && (p.tab ?? 'arrive') === tab)
@@ -436,7 +439,7 @@ export function unfinishedOf(record, photos = []) {
             ...Object.values(cat.observe || {}).sort(bySort),
             ...observeTasks.filter((t) => !t.location || t.location === cat.location).sort(bySort),
         ]
-            .filter((i) => observeTabOf(i.category) === tab && !isObserveDone(i.category, catPhotos, cat.observe_done?.[i.id]))
+            .filter((i) => observeTabOf(i) === tab && !isObserveDone(i.category, catPhotos, cat.observe_done?.[i.id]))
             // 有說明就寫說明、類別當小標籤；沒說明就直接寫類別（「拍貓砂」）
             .map((i) => ({
                 key: `observe:${cat.cat_id}:${i.id}`,
