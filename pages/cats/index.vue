@@ -1,0 +1,181 @@
+<template>
+    <ClientOnly>
+        <div id="cats-index">
+            <!-- 標題靠左、右邊搜尋（同後台貓咪管理，components/CatSearch.vue） -->
+            <div class="page-header">
+                <h1>貓咪列表</h1>
+                <CatSearch v-model:filter="filter" :cats="cats" />
+            </div>
+            <CatFilterBar v-model:filter="filter" :count="shownCount" />
+
+            <div v-if="loading" class="state">載入中...</div>
+            <template v-else>
+                <!-- 照位置分區（客廳、房間、倉庫、隔離區，沒填位置的放最後），已領養的另外一區 -->
+                <section v-for="group in groups" :key="group.label" class="group">
+                    <div class="group-label">
+                        {{ group.label }}<span class="group-count">{{ group.cats.length }}</span>
+                    </div>
+                    <div class="cat-grid">
+                        <NuxtLink v-for="cat in group.cats" :key="cat.id" :to="`/cats/${cat.id}`" class="cat-card">
+                            <span class="avatar">
+                                <img v-if="cat.avatar_path" :src="avatarUrl(cat.avatar_path)" alt="" />
+                                <template v-else>{{ cat.name.charAt(0) }}</template>
+                            </span>
+                            <span class="cat-name">{{ cat.name }}</span>
+                        </NuxtLink>
+                    </div>
+                </section>
+                <div v-if="!groups.length" class="state">{{ cats.length ? '沒有符合的貓咪' : '尚無貓咪資料' }}</div>
+            </template>
+        </div>
+    </ClientOnly>
+</template>
+
+<script setup>
+// 新版貓咪檔案（cat_profiles）的清單：志工都能看，點進去是 /cats/[id]
+import { emptyCatFilter, matchesCatFilter } from '~/composables/catSearch';
+
+definePageMeta({
+    middleware: 'auth',
+    ssr: false,
+});
+
+useHead({
+    title: '貓咪列表',
+});
+
+const supabase = useSupabaseClient();
+const { avatarUrl } = useAvatar();
+
+const cats = ref([]);
+const loading = ref(true);
+// 搜尋：名稱、暱稱與領養狀態（composables/catSearch.js）
+const filter = ref(emptyCatFilter());
+const matches = (cat) => matchesCatFilter(cat, filter.value);
+const shownCount = computed(() => cats.value.filter(matches).length);
+
+// 已領養：照領養日期，最近領養的排最後；不知道哪天的排最前面（多半是舊資料）
+const adoptedOrder = (list) =>
+    [...list].sort((a, b) => (a.adopted_on || '').localeCompare(b.adopted_on || ''));
+
+// 名字跟位置一樣的（例如「房間」）不是真的貓，是記那個位置的公共飯碗、貓砂用的：另外一區，不跟那個位置的貓放一起
+const isPlaceCat = (cat) => LOCATIONS.includes(cat.name);
+
+const groups = computed(() => {
+    const list = cats.value.filter(matches);
+    const living = list.filter((c) => !c.adopted && !isPlaceCat(c));
+    return [
+        ...LOCATIONS.map((location) => ({ label: location, cats: living.filter((c) => c.location === location) })),
+        { label: '未填位置', cats: living.filter((c) => !LOCATIONS.includes(c.location)) },
+        { label: '公共飯碗、貓砂', cats: list.filter((c) => !c.adopted && isPlaceCat(c)) },
+        { label: '已領養', cats: adoptedOrder(list.filter((c) => c.adopted)) },
+    ].filter((g) => g.cats.length);
+});
+
+onMounted(async () => {
+    const { data } = await supabase
+        .from('cat_profiles')
+        .select('id, name, nicknames, location, adopted, adopted_on, avatar_path')
+        .order('sort_order');
+    cats.value = data || [];
+    loading.value = false;
+});
+</script>
+
+<style lang="scss" scoped>
+#cats-index {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 16px;
+    padding-bottom: 80px;
+}
+
+// 標題靠左、右邊搜尋鈕（同後台貓咪管理）
+.page-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 12px;
+
+    h1 {
+        // 全域 h1 有 margin-bottom: 10px !important（element-variables.css）
+        margin: 0 !important;
+        font-size: 22px;
+        text-align: left;
+    }
+}
+
+.state {
+    padding: 40px 0;
+    color: #999;
+    text-align: center;
+}
+
+.group-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 20px 0 10px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #4a4542;
+
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #e4e0dd;
+    }
+}
+
+.group-count {
+    font-size: 12px;
+    font-weight: 400;
+    color: #a8a29e;
+}
+
+.cat-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+    gap: 12px 8px;
+}
+
+.cat-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+    padding: 4px 0;
+    color: inherit;
+    text-decoration: none;
+}
+
+.avatar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #f0eeec;
+    color: #8a7f78;
+    font-size: 22px;
+    font-weight: 500;
+
+    img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+    }
+}
+
+.cat-name {
+    max-width: 100%;
+    overflow: hidden;
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+</style>

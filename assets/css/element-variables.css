@@ -64,6 +64,46 @@ form {
   padding-bottom: 24px;
 }
 
+/* 標題置中＋✕ 與標題同一條水平線（原本只有 /calendar 有，改成全站）。
+   Element Plus 預設 header 只在右邊留 ✕ 的空間，左右不對稱 → 標題偏左；
+   改成 flex：[左邊留跟 ✕ 一樣寬的空白][標題][✕] */
+.el-dialog .el-dialog__header.show-close {
+  display: flex;
+  align-items: center;
+  padding-left: 32px;
+  padding-right: 0;
+}
+
+.el-dialog .el-dialog__title {
+  flex: 1;
+  min-width: 0;
+  /* 自己置中，不靠外層繼承：視窗放在 text-align: left 的頁面裡（例如貓咪檔案）也一樣置中 */
+  text-align: center;
+}
+
+.el-dialog .el-dialog__headerbtn {
+  position: static;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  /* 點擊區比行高大，用負 margin 避免把 header 撐高 */
+  margin: calc((var(--el-dialog-font-line-height) - 32px) * 0.5) 0;
+}
+
+/* 中文字的墨水中心比 line box 低一點，✕ 也往下挪 1px 才看起來齊 */
+.el-dialog .el-dialog__headerbtn .el-icon {
+  transform: translateY(1px);
+}
+
+/* 抽屜之間直接切換（值班記錄表的留言頻道 ↔ 照片庫）：那一下不要滑下滑上的動畫。
+   el-drawer 的滑動、遮罩淡入淡出都用 --el-transition-duration，設成 0 就是瞬間 */
+.drawer-instant {
+  --el-transition-duration: 0s;
+}
+
 .el-select__wrapper {
   height: 45px;
 }
@@ -88,4 +128,9 @@ form {
 
 .el-input__inner, .el-textarea__inner {
   opacity: 1 !important;
+}
+
+/* 全域的 button { width: 100% } 會讓標籤上的 × 撐到 44px，把標籤文字擠成 0 寬（el-input-tag 的暱稱看不到字） */
+.el-tag .el-tag__close {
+  width: auto;
 }

@@ -211,7 +211,6 @@ async function saveOption() {
     if (!form.value.name.trim()) {
         Swal.fire({
             text: '請輸入選項名稱',
-            confirmButtonColor: '#b33a39',
         });
         return;
     }
@@ -232,7 +231,6 @@ async function saveOption() {
         if (error) {
             Swal.fire({
                 text: '更新失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }
@@ -256,7 +254,6 @@ async function saveOption() {
         if (error) {
             Swal.fire({
                 text: '新增失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }
@@ -285,7 +282,6 @@ async function confirmDelete(option) {
         if (error) {
             Swal.fire({
                 text: '刪除失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }

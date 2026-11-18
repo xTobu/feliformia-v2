@@ -801,7 +801,6 @@ async function copyWeekLink() {
     } catch {
         Swal.fire({
             text: '複製失敗',
-            confirmButtonColor: '#b33a39',
         });
     }
 }
@@ -969,7 +968,6 @@ async function saveVote() {
     if (!currentUserId.value) {
         Swal.fire({
             html: '請先登入',
-            confirmButtonColor: '#b33a39',
         });
         return;
     }
@@ -991,7 +989,6 @@ async function saveVote() {
             console.error('Save error:', error);
             Swal.fire({
                 html: '投票失敗。<br>請確認網路狀態，或者聯繫群組。',
-                confirmButtonColor: '#b33a39',
             });
         } else {
             // 更新本地 allVotes 中自己的那筆
@@ -1011,7 +1008,6 @@ async function saveVote() {
         console.error('Save error:', err);
         Swal.fire({
             html: '儲存失敗。<br>請確認網路狀態後重試。',
-            confirmButtonColor: '#b33a39',
         });
     }
 }

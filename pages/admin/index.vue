@@ -3,47 +3,20 @@
         <div id="admin-index">
             <h1>管理後台</h1>
 
-            <div class="menu-list">
-                <NuxtLink to="/admin/cats" class="menu-item">
-                    <div class="menu-icon">🐱</div>
-                    <div class="menu-content">
-                        <div class="menu-title">貓咪管理</div>
-                        <div class="menu-desc">新增、編輯、排序貓咪資料</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/notices" class="menu-item">
-                    <div class="menu-icon">📋</div>
-                    <div class="menu-content">
-                        <div class="menu-title">餵藥及特殊飲食管理</div>
-                        <div class="menu-desc">
-                            新增、編輯、排序特殊照護事項
+            <!-- 頁面清單在 composables/adminLinks.js（header「後台」選單也用同一份） -->
+            <template v-for="section in ADMIN_SECTIONS" :key="section.title">
+                <div v-if="section.title" class="section-label">{{ section.title }}</div>
+                <div class="menu-list">
+                    <NuxtLink v-for="link in section.links" :key="link.to" :to="link.to" class="menu-item">
+                        <div class="menu-icon">{{ link.icon }}</div>
+                        <div class="menu-content">
+                            <div class="menu-title">{{ link.title }}</div>
+                            <div class="menu-desc">{{ link.desc }}</div>
                         </div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/vote-options" class="menu-item">
-                    <div class="menu-icon">🗳️</div>
-                    <div class="menu-content">
-                        <div class="menu-title">投票選項管理</div>
-                        <div class="menu-desc">新增、編輯、排序投票選項</div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-
-                <NuxtLink to="/admin/profiles" class="menu-item">
-                    <div class="menu-icon">👥</div>
-                    <div class="menu-content">
-                        <div class="menu-title">志工一覽</div>
-                        <div class="menu-desc">
-                            查看志工名單、編輯名稱與權限
-                        </div>
-                    </div>
-                    <div class="menu-arrow">→</div>
-                </NuxtLink>
-            </div>
+                        <div class="menu-arrow">→</div>
+                    </NuxtLink>
+                </div>
+            </template>
 
             <NuxtLink to="/" class="back-link">← 返回首頁</NuxtLink>
         </div>
@@ -73,6 +46,24 @@ useHead({
     display: flex;
     flex-direction: column;
     gap: 12px;
+}
+
+// 新版區塊的小標題：標題後面拉一條細線，跟上面的舊版分開
+.section-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 28px 0 12px;
+    font-size: 15px;
+    font-weight: 500;
+    color: #4a4542;
+    text-align: left;
+
+    &::after {
+        content: '';
+        flex: 1;
+        border-top: 1px solid #d8d4d1;
+    }
 }
 
 .menu-item {

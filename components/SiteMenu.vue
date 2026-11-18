@@ -1,12 +1,9 @@
 <template>
-        <button class="btn__float" @click="drawer = !drawer">
-            <img v-if="!drawer" src="~/assets/img/ic-menu.svg" alt="" />
-            <img v-else src="~/assets/img/ic-close.svg" alt="" />
-        </button>
-
+        <!-- 全站選單：由 header 右上角的選單鈕打開（layouts/default.vue），從下方滑出 -->
         <el-drawer
             v-model="drawer"
-            size="450px"
+            size="auto"
+            class="site-menu-drawer"
             :with-header="false"
             direction="btt"
         >
@@ -15,17 +12,23 @@
                     <!-- <li class="red" @click="toggleDialogNotice()">
                         # 注意事項
                     </li> -->
- 
-                    <li class="red" @click="open('/regular')">
-                        <Icon icon="mdi:silverware-fork-knife" width="17" /> <span>飲食與如廁紀錄</span>
+
+                    <!-- 2026-11-17 起跟首頁一致：新版與協作在最上面（拿掉「先行版」標籤）、
+                         再來是查詢用的頁面（週表改名貓咪每日紀錄、貓咪醫療追蹤），最後帳號管理、首頁、登出。
+                         舊版的飲食與如廁紀錄、用藥與特殊照護從選單拿掉了（/regular、/medicine 頁面還在） -->
+                    <li class="red" @click="goto('/shift')">
+                        <Icon icon="mdi:clipboard-check-outline" width="17" /> <span>值班紀錄</span>
                     </li>
-                    <li class="red" @click="open('/medicine')">
-                        <Icon icon="fa-solid:syringe" width="17" /> <span>用藥與特殊照護</span>
+                    <li class="red" @click="goto('/cats')">
+                        <Icon icon="mdi:cat" width="17" /> <span>貓咪列表</span>
                     </li>
                     <li class="red" @click="goto('/vote')"><Icon icon="mdi:vote" width="17" /> <span>值班投票</span></li>
+                    <li class="red" @click="goto('/calendar')">
+                        <Icon icon="mdi:calendar-month-outline" width="17" /> <span>行事曆</span>
+                    </li>
                     <li class="red" @click="openTodo"><Icon icon="mdi:bell-ring" width="17" /> <span>今日活動提醒</span></li>
-                    <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>卯咪飲食週表</span></li>
-                    <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>卯咪餵藥週表</span></li>
+                    <li @click="open('/weekly')"><img src="~/assets/img/calendar_02.svg" alt="" /> <span>貓咪每日紀錄</span></li>
+                    <li @click="open('/weekly-medicine')"><img src="~/assets/img/calendar_01.svg" alt="" /> <span>貓咪醫療追蹤</span></li>
                     <li
                         @click="
                             open(
@@ -35,7 +38,9 @@
                     >
                         <Icon icon="mdi:information" width="17" /> <span>貓咪簡介 / 飲食 / 習慣需知</span>
                     </li>
+                    <li class="grey" @click="goto('/settings')"><Icon icon="mdi:account-cog" width="17" /> <span>帳號管理</span></li>
                     <li class="blue" @click="goto('/')"><Icon icon="mdi:home" width="17" /> <span>首頁</span></li>
+                    <li class="grey" @click="signOut"><Icon icon="mdi:logout" width="17" /> <span>登出</span></li>
                 </ul>
             </div>
         </el-drawer>
@@ -105,7 +110,10 @@ const route = useRoute();
 
 const { $dayjs } = useNuxtApp();
 
-const drawer = ref(false);
+// 開關狀態跟 header 的選單鈕共用
+const drawer = useState('site-menu-open', () => false);
+const supabase = useSupabaseClient();
+const { clearProfile } = useProfile();
 const showDialogMind = ref(false);
 const minds = ref([]);
 
@@ -132,6 +140,13 @@ const todayText = computed(() => $dayjs().format('MM/DD(dd)'));
 function open(url) {
     window.open(url, '_blank').focus();
     drawer.value = false;
+}
+
+async function signOut() {
+    drawer.value = false;
+    clearProfile();
+    await supabase.auth.signOut();
+    window.location.href = '/login';
 }
 
 function goto(path) {
@@ -217,25 +232,9 @@ async function GetNotice() {
 </script>
 
 <style lang="scss" scoped>
-.btn__float {
-    cursor: pointer;
-    position: fixed;
-    width: 40px;
-    height: 40px;
-    bottom: 25px;
-    right: 25px;
-    color: transparent;
-    border-radius: 50px;
-    text-align: center;
-    padding: 0;
-    border: 0;
-    z-index: 2099;
-    transition: bottom 0.4s;
-
-    > img {
-        width: 100%;
-    }
-}
+// sass:list 要寫在最前面（@use 必須是樣式表的第一個規則）。
+// 全域的 nth() 在 Dart Sass 3.0 會被移除，改用 list.nth()
+@use 'sass:list';
 
 .drawer__content {
     width: 100%;
@@ -270,6 +269,10 @@ async function GetNotice() {
         &.blue {
             color: #6da2c2;
         }
+        &.grey {
+            color: #657181;
+        }
+
     }
 }
 
@@ -357,8 +360,8 @@ $todo-type-colors: (
 );
 
 @each $name, $pair in $todo-type-colors {
-    $fg: nth($pair, 1);
-    $bg: nth($pair, 2);
+    $fg: list.nth($pair, 1);
+    $bg: list.nth($pair, 2);
 
     .todo-list li.type-#{$name} {
         border-left-color: $fg;
@@ -386,6 +389,11 @@ $todo-type-colors: (
 /* el-dialog 會 teleport 到 body，scoped 的樣式選不到 .el-dialog 本身，
    所以這塊不加 scoped。class 名稱夠獨特，不會影響其他 dialog。
    兩個 dialog 都是 width="90%"，手機維持滿版，桌機才封頂。 */
+
+/* 全站選單：高度跟著項目數，太多時最多佔八成五，裡面可捲 */
+.site-menu-drawer {
+    max-height: 85vh;
+}
 
 /* 短行清單，窄一點比較集中 */
 .todo-dialog {

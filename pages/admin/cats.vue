@@ -176,7 +176,6 @@ async function saveCat() {
     if (!form.value.name.trim()) {
         Swal.fire({
             text: '請輸入貓咪名稱',
-            confirmButtonColor: '#b33a39',
         });
         return;
     }
@@ -196,7 +195,6 @@ async function saveCat() {
         if (error) {
             Swal.fire({
                 text: '更新失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }
@@ -218,7 +216,6 @@ async function saveCat() {
         if (error) {
             Swal.fire({
                 text: '新增失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }
@@ -244,7 +241,6 @@ async function confirmDelete(cat) {
         if (error) {
             Swal.fire({
                 text: '刪除失敗',
-                confirmButtonColor: '#b33a39',
             });
             return;
         }

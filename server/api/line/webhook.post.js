@@ -1,6 +1,7 @@
 import { supabase } from '~/server/utils/supabase'
 import { verifyLineSignature, replyMessage } from '~/server/utils/line'
-import { loadUserEvents, todayInTaipei } from '~/server/utils/calendar-today'
+import { loadUserEvents } from '~/server/utils/calendar-today'
+import { todayInTaipei } from '~/server/utils/shift'
 import { buildDigest } from '~/server/utils/calendar-message'
 
 // LINE webhook。處理綁定、解除綁定、選單，以及查自己今天的活動。
