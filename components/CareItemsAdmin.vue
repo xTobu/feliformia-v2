@@ -144,14 +144,19 @@
                     </el-select>
                 </el-form-item>
                 <el-form-item v-if="categories.length" label="類別">
-                    <!-- categoryFree（觀察管理）：categories 只是建議，打字就能新增別的 -->
-                    <el-select
+                    <!-- categoryFree（觀察管理）：categories 只是建議，直接打就能是新的。
+                         用 el-autocomplete 而不是 el-select 的 allow-create —— 後者要用注音打完再按
+                         Enter 才生得出選項，中文輸入法下很難用（這個專案以前就踩過）。
+                         autocomplete 本身就是一個可以自由打的輸入框，點一下才列出建議 -->
+                    <el-autocomplete
+                        v-if="categoryFree"
                         v-model="form.category"
-                        :filterable="categoryFree"
-                        :allow-create="categoryFree"
-                        :reserve-keyword="false"
-                        :placeholder="categoryFree ? '選一個，或直接打新的' : ''"
-                    >
+                        :fetch-suggestions="suggestCategories"
+                        placeholder="選一個，或直接打新的（例如 拍胰島素）"
+                        clearable
+                        class="W100"
+                    />
+                    <el-select v-else v-model="form.category">
                         <el-option v-for="c in categories" :key="c" :label="c" :value="c" />
                     </el-select>
                 </el-form-item>
@@ -490,6 +495,14 @@ const SHIFTS = [
     { value: 'night', label: '晚班' },
     { value: 'both', label: '早晚班' },
 ];
+// 項目的分頁值。還沒有這個欄位的（migration 還沒跑、或舊資料）一律當第一個分頁，
+// 不然會一項都不顯示 —— 比起整個消失，掉到預設分頁好找得多
+function tabValueOf(item) {
+    const options = props.tabField.options;
+    const value = item[props.tabField.key];
+    return options.some((o) => o.value === value) ? value : options[0].value;
+}
+
 function sectionsOf(list) {
     const tabGroups = props.tabField
         ? props.tabField.options.map((o) => ({ label: o.label, value: o.value }))
@@ -502,7 +515,7 @@ function sectionsOf(list) {
                 shift: shift.value,
                 shiftLabel: shift.label,
                 items: list.filter(
-                    (i) => i.shift === shift.value && (g.value === null || i[props.tabField.key] === g.value)
+                    (i) => i.shift === shift.value && (g.value === null || tabValueOf(i) === g.value),
                 ),
             }))
         )
@@ -561,6 +574,18 @@ function openDialog(item = null, target = '') {
         : emptyForm(target);
     clearAdded();
     dialogVisible.value = true;
+}
+
+// 類別輸入框的建議（categoryFree 用）。沒打字、或打的剛好就是某個建議時列出全部，
+// 否則照輸入過濾；打的字不在清單裡就一個建議都不給，直接存成新類別
+function suggestCategories(query, cb) {
+    const q = (query || '').trim();
+    const all = props.categories.map((c) => ({ value: c }));
+    if (!q || props.categories.includes(q)) {
+        cb(all);
+        return;
+    }
+    cb(all.filter((o) => o.value.includes(q)));
 }
 
 // 這個類別鎖定在某個分頁（觀察管理的放風只能放備餐），有值就不給選、存檔時用它
