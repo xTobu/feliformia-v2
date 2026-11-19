@@ -134,3 +134,12 @@ form {
 .el-tag .el-tag__close {
   width: auto;
 }
+
+/* 全域的 button { width: 100% } 會把日期面板的上下／左右箭頭撐成滿版。
+   那些箭頭是 float 的，撐滿後各佔一整行，標題就跟星期列疊在一起。
+   面板 teleport 到 body，不帶 data-v，scoped 樣式碰不到，只能寫全域 */
+.el-picker-panel__icon-btn,
+.el-picker-panel .el-button,
+.el-date-range-picker__header button {
+  width: auto;
+}

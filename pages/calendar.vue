@@ -8,6 +8,16 @@
                         <el-icon><Filter /></el-icon>
                     </button>
                     <span class="filter-status" v-if="hasActiveFilter">篩選中</span>
+
+                    <button
+                        type="button"
+                        class="filter-btn"
+                        title="複製活動清單"
+                        v-if="canEdit"
+                        @click="openCopy"
+                    >
+                        <el-icon><DocumentCopy /></el-icon>
+                    </button>
                 </div>
 
                 <el-switch
@@ -82,6 +92,88 @@
                 <template #footer>
                     <el-button @click="clearFilterDraft">清除</el-button>
                     <el-button type="primary" @click="applyFilter">套用</el-button>
+                </template>
+            </el-dialog>
+
+            <!-- 複製活動清單：產生一段純文字，貼到 LINE 群組。
+                 範圍與類型每次都自己選，因為有時只想發體驗、有時要連出車一起 -->
+            <el-dialog v-model="copyVisible" title="複製活動清單" width="340px">
+                <div class="copy-form">
+                    <div class="field">
+                        <label>範圍</label>
+                        <el-radio-group v-model="copyRange" class="range-group">
+                            <el-radio value="two-weeks">接下來兩週</el-radio>
+                            <el-radio value="month">本月剩餘</el-radio>
+                            <el-radio value="all">所有活動</el-radio>
+                            <el-radio value="custom">自訂</el-radio>
+                        </el-radio-group>
+
+                        <el-date-picker
+                            v-if="copyRange === 'custom'"
+                            v-model="copyDates"
+                            type="daterange"
+                            value-format="YYYY-MM-DD"
+                            range-separator="→"
+                            start-placeholder="開始"
+                            end-placeholder="結束"
+                            :clearable="false"
+                            :disabled-date="disabledPastDate"
+                        />
+                    </div>
+
+                    <div class="field">
+                        <label>類型</label>
+                        <el-checkbox-group v-model="copyTypes" class="type-group">
+                            <el-checkbox
+                                v-for="item in typeList"
+                                :key="item.value"
+                                :value="item.value"
+                                :label="item.label"
+                            />
+                        </el-checkbox-group>
+                    </div>
+
+                    <div class="field">
+                        <label>排列</label>
+                        <el-radio-group v-model="copyGroupBy" class="group-by">
+                            <el-radio value="date">依日期</el-radio>
+                            <el-radio value="person">依人名</el-radio>
+                        </el-radio-group>
+                    </div>
+
+                    <div class="field">
+                        <label>
+                            預覽
+                            <span class="hint-inline" v-if="copyCount">
+                                {{ copyCount }} 筆
+                            </span>
+                        </label>
+                        <!-- 可以直接改：標題想換、某一筆想補字，貼出去前在這裡調 -->
+                        <el-input
+                            type="textarea"
+                            v-model="copyText"
+                            :rows="10"
+                            :loading="copyLoading"
+                        />
+                        <p class="hint">改了範圍或類型會重新產生，手動的修改會被蓋掉</p>
+                    </div>
+                </div>
+
+                <template #footer>
+                    <div class="dialog-actions">
+                        <span class="da-left"></span>
+                        <span class="da-right">
+                            <el-button @click="copyVisible = false">關閉</el-button>
+                            <el-button
+                                type="primary"
+                                :loading="copyLoading"
+                                :disabled="!copyText.trim()"
+                                @click="copyToClipboard"
+                            >
+                                複製
+                            </el-button>
+                        </span>
+                    </div>
                 </template>
             </el-dialog>
 
@@ -601,7 +693,7 @@
 import Swal from 'sweetalert2';
 import { ElMessage } from 'element-plus';
 import { debounce } from 'lodash-es';
-import { WarningFilled, Filter, UserFilled } from '@element-plus/icons-vue';
+import { WarningFilled, Filter, UserFilled, DocumentCopy } from '@element-plus/icons-vue';
 
 definePageMeta({
     middleware: 'auth',
@@ -657,6 +749,16 @@ const EMPTY_FILTER = { people: [], types: [], keyword: '' };
 const filter = ref({ ...EMPTY_FILTER });
 const filterDraft = ref({ ...EMPTY_FILTER });
 const filterVisible = ref(false);
+
+// 複製活動清單
+const copyVisible = ref(false);
+const copyLoading = ref(false);
+const copyRange = ref('two-weeks');
+const copyGroupBy = ref('date'); // date = 依日期、person = 依人名
+const copyDates = ref(null);
+const copyTypes = ref(typeList.map((item) => item.value));
+const copyText = ref('');
+const copyCount = ref(0);
 const isListView = ref(false); // false = 月曆、true = 列表
 // 檢視中選的那一天。跟 formData.date 刻意分開 ——
 // 前者是「我在看哪天」，後者是「我正在編輯的那筆活動是哪天」。
@@ -1052,6 +1154,190 @@ function togglePeople(recordId) {
         [recordId]: !expandedPeople.value[recordId],
     };
 }
+
+/* ============================================================
+ * 複製活動清單：產生一段可以直接貼到 LINE 群組的純文字
+ * ========================================================== */
+
+// 貼進 LINE 的第一行。使用者可以在預覽裡自己改
+const COPY_TITLE = '₍^⸝⸝o ·̫ o⸝⸝ ^₎ 值班外務：';
+
+// 這個功能是發「接下來」的行程，選到過去的日期沒有意義
+// rosterEntries 讀的是 votes.value，但那份只涵蓋月曆目前顯示的範圍。
+// 複製的範圍可能更遠，缺的那幾週要先補進來，名字才撈得到。
+// 用合併而不是取代 —— 多出來的列只是沒人查，不會影響月曆本來的顯示
+async function ensureVotesFor(start, end) {
+    const { data, error } = await supabase
+        .from('votes')
+        .select('user_id, week_start, is_pass, data')
+        .gte('week_start', $dayjs(start).subtract(7, 'day').format('YYYY-MM-DD'))
+        .lte('week_start', $dayjs(end).add(7, 'day').format('YYYY-MM-DD'));
+
+    if (error) {
+        console.error('載入投票失敗:', error);
+        return;
+    }
+
+    const merged = new Map(votes.value.map((v) => [`${v.user_id}-${v.week_start}`, v]));
+    for (const vote of data || []) {
+        merged.set(`${vote.user_id}-${vote.week_start}`, vote);
+    }
+    votes.value = [...merged.values()];
+}
+
+function disabledPastDate(date) {
+    return $dayjs(date).isBefore($dayjs(), 'day');
+}
+
+function copyRangeDates() {
+    const today = $dayjs();
+
+    if (copyRange.value === 'month') {
+        return { start: today.format('YYYY-MM-DD'), end: today.endOf('month').format('YYYY-MM-DD') };
+    }
+    if (copyRange.value === 'all') {
+        // 不含已經過去的活動 —— 貼到群組是要大家知道「接下來」要做什麼。
+        // API 的 start / end 都是必填，結束日給一個夠遠的值
+        return { start: today.format('YYYY-MM-DD'), end: today.add(2, 'year').format('YYYY-MM-DD') };
+    }
+    if (copyRange.value === 'custom' && copyDates.value?.length === 2) {
+        return { start: copyDates.value[0], end: copyDates.value[1] };
+    }
+    // 預設：從今天起兩週
+    return { start: today.format('YYYY-MM-DD'), end: today.add(13, 'day').format('YYYY-MM-DD') };
+}
+
+// 一筆活動一行：11/07 (六) 11:00 志工體驗（Debbie/初次）– 阿金
+function copyLineOf(ev, { withPeople = true } = {}) {
+    const d = $dayjs(ev.date);
+
+    const when = `${d.format('MM/DD')} (${WEEKDAY_LABELS[d.day()]})`;
+
+    // 時間是必填的，但舊資料或之後放寬了可能是空的，留一個說法
+    const time = ev.timeStart || '待確認';
+
+    // [類型] 內容 —— 跟 LINE 推播的格式一致（server/utils/calendar-message.js）
+    const type = `[${typeLabel(ev.type)}]`;
+    const what = ev.content ? `${type} ${ev.content}` : type;
+
+    // 負責人 + 當天早晚班的值班人員，跟列表卡片顯示的是同一份。
+    // 只看 owners 的話，掛「早班／晚班」的活動會整排沒有名字。
+    // 依人名排列時名字已經是分組標題，行內就不用再印一次
+    const people = withPeople ? eventPeople(ev) : [];
+    const who = people.length ? ` – ${people.join('、')}` : '';
+
+    return `${when} ${time} ${what}${who}`;
+}
+
+// 沒有指定任何人的活動歸在這一組，排最後
+const UNASSIGNED = '未指定';
+
+// 依人名分組。一筆活動掛兩個人，就在兩個人底下各出現一次 ——
+// 這正是重點，每個人掃自己那一段就好
+function copyLinesByPerson(picked) {
+    const groups = new Map();
+
+    for (const ev of picked) {
+        const people = eventPeople(ev);
+        for (const name of people.length ? people : [UNASSIGNED]) {
+            if (!groups.has(name)) groups.set(name, []);
+            groups.get(name).push(ev);
+        }
+    }
+
+    // picked 已經排序過，所以每組的第一筆就是那個人最近的一場。
+    // 人的順序照這個排，近的在前；未指定永遠墊底
+    const firstOf = (list) => `${list[0].date} ${list[0].timeStart || ''}`;
+    const sorted = [...groups.entries()].sort(([nameA, listA], [nameB, listB]) => {
+        if (nameA === UNASSIGNED) return 1;
+        if (nameB === UNASSIGNED) return -1;
+        return firstOf(listA).localeCompare(firstOf(listB));
+    });
+
+    return sorted.flatMap(([name, list], index) => [
+        // 組與組之間空一行，第一組前面不用
+        ...(index ? [''] : []),
+        `【${name}】`,
+        ...list.map((ev) => copyLineOf(ev, { withPeople: false })),
+    ]);
+}
+
+async function buildCopyText() {
+    if (!copyTypes.value.length) {
+        copyText.value = '';
+        copyCount.value = 0;
+        return;
+    }
+
+    copyLoading.value = true;
+
+    try {
+        // 月曆只載入當月前後，跨月的範圍要自己查
+        const { start, end } = copyRangeDates();
+
+        const [list] = await Promise.all([
+            $fetch('/api/calendar/list', { query: { start, end } }),
+            ensureVotesFor(start, end),
+        ]);
+
+        const picked = list
+            .filter((ev) => copyTypes.value.includes(ev.type))
+            .sort((a, b) => {
+                if (a.date !== b.date) return a.date.localeCompare(b.date);
+                return (a.timeStart || '').localeCompare(b.timeStart || '');
+            });
+
+        copyCount.value = picked.length;
+        copyText.value = picked.length
+            ? [
+                  COPY_TITLE,
+                  '',
+                  ...(copyGroupBy.value === 'person'
+                      ? copyLinesByPerson(picked)
+                      : picked.map((ev) => copyLineOf(ev))),
+              ].join('\n')
+            : '';
+    } catch (error) {
+        console.error('產生活動清單失敗:', error);
+        ElMessage.error('產生活動清單失敗');
+        copyText.value = '';
+        copyCount.value = 0;
+    } finally {
+        copyLoading.value = false;
+    }
+}
+
+function openCopy() {
+    if (!canEdit.value) return;
+
+    const saved = getStorage('calendar-copy-types', null);
+    if (Array.isArray(saved) && saved.length) copyTypes.value = saved;
+
+    const savedGroupBy = getStorage('calendar-copy-group-by', null);
+    if (savedGroupBy === 'date' || savedGroupBy === 'person') copyGroupBy.value = savedGroupBy;
+
+    copyVisible.value = true;
+    buildCopyText();
+}
+
+async function copyToClipboard() {
+    try {
+        await navigator.clipboard.writeText(copyText.value);
+        ElMessage.success('已複製，可以貼到群組了');
+        copyVisible.value = false;
+    } catch {
+        // 非 HTTPS 或瀏覽器擋了剪貼簿時會走到這裡
+        ElMessage.error('複製失敗，請手動選取上面的文字');
+    }
+}
+
+// 範圍或類型一改就重新產生。手動改過的內容會被蓋掉，預覽下方有提示
+watch([copyRange, copyDates, copyTypes, copyGroupBy], () => {
+    if (!copyVisible.value) return;
+    setStorage('calendar-copy-types', copyTypes.value);
+    setStorage('calendar-copy-group-by', copyGroupBy.value);
+    buildCopyText();
+});
 
 function openFilter() {
     // 深拷貝，不然在 modal 裡改多選會直接動到已套用的條件
@@ -2281,6 +2567,82 @@ $types: (
         margin: 0;
         align-items: center;
         display: flex;
+    }
+}
+
+// 複製活動清單的 dialog
+.copy-form {
+    text-align: left;
+
+    // Element Plus 的 radio 與 checkbox 預設 32px 高，這裡收緊一點
+    :deep(.el-radio),
+    :deep(.el-checkbox) {
+        height: 28px;
+        .el-radio__label,
+        .el-checkbox__label {
+            line-height: 18px;
+            vertical-align: top;
+        }
+    }
+
+    .field {
+        margin-bottom: 16px;
+
+        &:last-child {
+            margin-bottom: 0;
+        }
+    }
+
+    // 四個選項排成兩欄對齊，單純用 flex 會變成 2 + 1 + 1 很零散
+    .range-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6px 0;
+        margin-bottom: 8px;
+
+        :deep(.el-radio) {
+            margin: 0;
+        }
+    }
+
+    .group-by {
+        display: flex;
+        gap: 24px;
+
+        :deep(.el-radio) {
+            margin: 0;
+        }
+    }
+
+    .type-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px 14px;
+
+        :deep(.el-checkbox) {
+            margin: 0;
+        }
+    }
+
+    .hint-inline {
+        margin-left: 6px;
+        color: #c0c4cc;
+        font-size: 11px;
+        font-weight: 400;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .hint {
+        margin: 6px 0 0;
+        color: #c0c4cc;
+        font-size: 11px;
+        line-height: 1.5;
+    }
+
+    // 預覽是給人讀的，行與行要分得開
+    :deep(.el-textarea__inner) {
+        font-size: 13px;
+        line-height: 1.7;
     }
 }
 
