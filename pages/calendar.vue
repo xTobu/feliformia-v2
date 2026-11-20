@@ -13,6 +13,7 @@
                         type="button"
                         class="filter-btn"
                         title="複製活動清單"
+                        aria-label="複製活動清單"
                         v-if="canEdit"
                         @click="openCopy"
                     >
@@ -20,11 +21,29 @@
                     </button>
                 </div>
 
-                <el-switch
-                    v-model="isListView"
-                    active-text="列表"
-                    inactive-text="月曆"
-                />
+                <!-- 月曆／列表。兩格分段按鈕，不是 el-switch ——
+                     開關的語意是「把某個東西打開或關掉」，這裡是兩種並列的
+                     檢視，正在用哪一種要一眼看得出來 -->
+                <div class="view-switch" role="group" aria-label="檢視方式">
+                    <button
+                        type="button"
+                        class="vs-btn"
+                        :class="{ on: !isListView }"
+                        :aria-pressed="!isListView"
+                        @click="isListView = false"
+                    >
+                        月曆
+                    </button>
+                    <button
+                        type="button"
+                        class="vs-btn"
+                        :class="{ on: isListView }"
+                        :aria-pressed="isListView"
+                        @click="isListView = true"
+                    >
+                        列表
+                    </button>
+                </div>
             </div>
 
             <el-dialog v-model="filterVisible" title="篩選條件" width="300px">
@@ -156,6 +175,9 @@
                             :loading="copyLoading"
                         />
                         <p class="hint">改了範圍或類型會重新產生，手動的修改會被蓋掉</p>
+                        <p class="hint warn" v-if="copyTooLong">
+                            超過 LINE 一則 {{ LINE_TEXT_MAX }} 字，貼過去會被截掉
+                        </p>
                     </div>
                 </div>
 
@@ -1160,7 +1182,9 @@ function togglePeople(recordId) {
  * ========================================================== */
 
 // 貼進 LINE 的第一行。使用者可以在預覽裡自己改
-const COPY_TITLE = '₍^⸝⸝o ·̫ o⸝⸝ ^₎ 值班外務：';
+const COPY_TITLE = '(=ↀωↀ=) 值班外務：';
+
+const copyTooLong = computed(() => copyText.value.length > LINE_TEXT_MAX);
 
 // 這個功能是發「接下來」的行程，選到過去的日期沒有意義
 // rosterEntries 讀的是 votes.value，但那份只涵蓋月曆目前顯示的範圍。
@@ -1207,6 +1231,39 @@ function copyRangeDates() {
     return { start: today.format('YYYY-MM-DD'), end: today.add(13, 'day').format('YYYY-MM-DD') };
 }
 
+// 「志工體驗 (Debbie/汐止/初次體驗)」→「Debbie/汐止/初次體驗」。
+//
+// 類型那欄已經印了 [體驗]，開頭的「志工體驗」是重複資訊；拿掉之後整串
+// 通常只剩一對括號包著的備註，連括號一起去掉才讀得順。
+//
+// 兩個條件都要成立：類型是體驗，而且開頭真的有「志工體驗」。少了類型判斷，
+// 「物資-童先生(網片)」「梵谷小梅帶看 (米果媽媽)」這些括號外有意義的內容
+// 會被砍掉；少了前綴判斷，體驗裡剛好整串被括號包住的（例如「(某某/汐止)」）
+// 也會被剝掉括號。
+//
+// 全形半形都收，而且要能混搭：實際資料裡有「志工體驗（梁家穎，住板橋搭車30min)」
+// 這種開全形、閉半形的。
+const VOLUNTEER_PREFIX = /^志工體驗[\s　]*/;
+const WRAPPED = /^[(（]([^(（)）]*)[)）]$/;
+
+function tidyContent(content, type) {
+    // trim 不限類型：有一筆物資的內容結尾帶換行，不清掉那一筆在清單裡
+    // 會多吐一個空行，把後面的活動切開
+    const text = (content || '').trim();
+
+    if (type !== 'volunteer' || !VOLUNTEER_PREFIX.test(text)) return text;
+
+    const rest = text.replace(VOLUNTEER_PREFIX, '').trim();
+
+    // 整筆就只有「志工體驗」四個字，砍完會變空的 —— 那就留原樣
+    if (!rest) return text;
+
+    // 括號外還有字（例如「志工體驗 羅葶芸(初次/汐止)」）就不動括號，
+    // 不然會把名字丟掉
+    const wrapped = rest.match(WRAPPED);
+    return wrapped ? wrapped[1].trim() : rest;
+}
+
 // 一筆活動一行：11/07 (六) 11:00 志工體驗（Debbie/初次）– 阿金
 function copyLineOf(ev, { withPeople = true } = {}) {
     const d = $dayjs(ev.date);
@@ -1218,19 +1275,21 @@ function copyLineOf(ev, { withPeople = true } = {}) {
 
     // [類型] 內容 —— 跟 LINE 推播的格式一致（server/utils/calendar-message.js）
     const type = `[${typeLabel(ev.type)}]`;
-    const what = ev.content ? `${type} ${ev.content}` : type;
+    const content = tidyContent(ev.content, ev.type);
+    const what = content ? `${type} ${content}` : type;
 
     // 負責人 + 當天早晚班的值班人員，跟列表卡片顯示的是同一份。
     // 只看 owners 的話，掛「早班／晚班」的活動會整排沒有名字。
     // 依人名排列時名字已經是分組標題，行內就不用再印一次
     const people = withPeople ? eventPeople(ev) : [];
-    const who = people.length ? ` – ${people.join('、')}` : '';
+    const who = withPeople ? ` – ${people.length ? people.join('、') : UNASSIGNED}` : '';
 
     return `${when} ${time} ${what}${who}`;
 }
 
-// 沒有指定任何人的活動歸在這一組，排最後
-const UNASSIGNED = '未指定';
+// 沒有對應到任何人的活動。不是留白而是明講 —— 空著看不出是「漏了沒寫」
+// 還是「那天真的沒人」。依人名排列時自成一組，排最後
+const UNASSIGNED = '無值班';
 
 // 依人名分組。一筆活動掛兩個人，就在兩個人底下各出現一次 ——
 // 這正是重點，每個人掃自己那一段就好
@@ -1780,6 +1839,43 @@ $card-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
     justify-content: space-between;
     gap: 8px;
     margin-bottom: 10px;
+}
+
+// 月曆／列表的兩格分段按鈕。
+// 全域的 button 規則（width: 100%、border、border-radius、padding）
+// 會把兩格撐成兩條，所以每一項都要蓋回來
+.view-switch {
+    display: inline-flex;
+    flex-shrink: 0;
+    border: 1px solid #dcdfe6;
+    border-radius: 6px;
+    // 兩格的直角要被外框的圓角切掉，不然選中那格的底色會戳出去
+    overflow: hidden;
+
+    .vs-btn {
+        width: auto;
+        padding: 5px 14px;
+        border: none;
+        border-radius: 0;
+        background: #fff;
+        color: $grey;
+        font-size: 13px;
+        line-height: 1.4;
+        cursor: pointer;
+
+        & + .vs-btn {
+            border-left: 1px solid #dcdfe6;
+        }
+
+        &:hover:not(.on) {
+            color: $blue;
+        }
+
+        &.on {
+            background: $blue;
+            color: #fff;
+        }
+    }
 }
 
 .cal-filter {
@@ -2637,6 +2733,11 @@ $types: (
         color: #c0c4cc;
         font-size: 11px;
         line-height: 1.5;
+
+        // 超過 LINE 單則上限的提醒，要比一般說明搶眼一點
+        &.warn {
+            color: #e6a23c;
+        }
     }
 
     // 預覽是給人讀的，行與行要分得開
