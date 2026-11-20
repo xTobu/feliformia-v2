@@ -119,9 +119,13 @@
             <el-dialog v-model="copyVisible" title="複製活動清單" width="340px">
                 <div class="copy-form">
                     <div class="field">
-                        <label>範圍</label>
+                        <label>
+                            範圍
+                            <span class="hint-inline strong">{{ copyRangeHint }}</span>
+                        </label>
                         <el-radio-group v-model="copyRange" class="range-group">
-                            <el-radio value="two-weeks">接下來兩週</el-radio>
+                            <el-radio value="week">這一週</el-radio>
+                            <el-radio value="two-weeks">這週和下週</el-radio>
                             <el-radio value="month">本月剩餘</el-radio>
                             <el-radio value="all">所有活動</el-radio>
                             <el-radio value="custom">自訂</el-radio>
@@ -1216,6 +1220,18 @@ function disabledPastDate(date) {
 function copyRangeDates() {
     const today = $dayjs();
 
+    // 這兩個都對齊值班的週界（週一為一週之始，見 plugins/dayjs.js 的
+    // weekStart: 1，所以 endOf('week') 是星期日）。不用「從今天數 N 天」——
+    // 那樣終點會隨著今天星期幾漂移，貼到群組的清單會在週中切一半
+    if (copyRange.value === 'week') {
+        return { start: today.format('YYYY-MM-DD'), end: today.endOf('week').format('YYYY-MM-DD') };
+    }
+    if (copyRange.value === 'two-weeks') {
+        return {
+            start: today.format('YYYY-MM-DD'),
+            end: today.endOf('week').add(7, 'day').format('YYYY-MM-DD'),
+        };
+    }
     if (copyRange.value === 'month') {
         return { start: today.format('YYYY-MM-DD'), end: today.endOf('month').format('YYYY-MM-DD') };
     }
@@ -1227,8 +1243,11 @@ function copyRangeDates() {
     if (copyRange.value === 'custom' && copyDates.value?.length === 2) {
         return { start: copyDates.value[0], end: copyDates.value[1] };
     }
-    // 預設：從今天起兩週
-    return { start: today.format('YYYY-MM-DD'), end: today.add(13, 'day').format('YYYY-MM-DD') };
+    // 走到這裡表示自訂但還沒選完日期，先退回「這週和下週」
+    return {
+        start: today.format('YYYY-MM-DD'),
+        end: today.endOf('week').add(7, 'day').format('YYYY-MM-DD'),
+    };
 }
 
 // 「志工體驗 (Debbie/汐止/初次體驗)」→「Debbie/汐止/初次體驗」。
@@ -1263,6 +1282,25 @@ function tidyContent(content, type) {
     const wrapped = rest.match(WRAPPED);
     return wrapped ? wrapped[1].trim() : rest;
 }
+
+// 選到的範圍實際是哪幾天。光看「本月剩餘」「這一週」不知道撈到哪天 ——
+// 尤其這兩個是到週日結束（週一為一週之始），不講清楚會以為是週六
+const copyRangeHint = computed(() => {
+    if (copyRange.value === 'custom' && copyDates.value?.length !== 2) {
+        return '選一段日期';
+    }
+
+    const { start, end } = copyRangeDates();
+    const show = (date) => {
+        const d = $dayjs(date);
+        return `${d.format('M/D')} (${WEEKDAY_LABELS[d.day()]})`;
+    };
+
+    // 「所有活動」的結束日是今天 +2 年（API 的 end 必填），那個數字沒意義
+    if (copyRange.value === 'all') return `${show(start)} 起，之後全部`;
+
+    return `${show(start)} ～ ${show(end)}`;
+});
 
 // 一筆活動一行：11/07 (六) 11:00 志工體驗（Debbie/初次）– 阿金
 function copyLineOf(ev, { withPeople = true } = {}) {
@@ -2726,6 +2764,13 @@ $types: (
         font-size: 11px;
         font-weight: 400;
         font-variant-numeric: tabular-nums;
+
+        // 「選到的範圍是哪幾天」是實際資訊，不是「N 筆」那種附註，
+        // 太淡會看不到 —— 同一個位置，但用讀得到的灰
+        &.strong {
+            color: $grey;
+            font-size: 12px;
+        }
     }
 
     .hint {
